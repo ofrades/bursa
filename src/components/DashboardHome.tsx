@@ -13,17 +13,10 @@ import { generateWeeklyAnalysis } from "../server/recommend";
 import { getSession } from "../server/session";
 import type { StockAnalysis, StockMetrics } from "../lib/schema";
 import { StockSearchBar } from "./StockSearchBar";
-import { Badge } from "./ui/badge";
+import { Badge, SignalBadge, type Signal } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./ui/table";
+import { SharedAnalysisTable } from "./SharedAnalysisTable";
 
 type SharedRow = {
   symbol: string;
@@ -51,24 +44,9 @@ type Props = {
   initialShared: SharedRow[];
 };
 
-const SIGNAL_COLOR: Record<string, string> = {
-  STRONG_BUY: "var(--accent)",
-  BUY: "var(--accent)",
-  HOLD: "var(--warning)",
-  SELL: "var(--danger)",
-  STRONG_SELL: "var(--danger)",
-};
-const SIGNAL_BG: Record<string, string> = {
-  STRONG_BUY: "var(--accent-subtle)",
-  BUY: "var(--accent-subtle)",
-  HOLD: "#3f2a00",
-  SELL: "#3f0000",
-  STRONG_SELL: "#3f0000",
-};
-
 function pctColor(v: number | null | undefined) {
   if (v == null) return "var(--fg-muted)";
-  return v > 0 ? "var(--accent)" : v < 0 ? "var(--danger)" : "var(--fg-muted)";
+  return v > 0 ? "rgb(34 197 94)" : v < 0 ? "rgb(239 68 68)" : "var(--fg-muted)";
 }
 function pctStr(v: number | null | undefined) {
   if (v == null) return "—";
@@ -77,10 +55,7 @@ function pctStr(v: number | null | undefined) {
 function WeekLabel() {
   const t = new Date();
   return (
-    <span
-      suppressHydrationWarning
-      style={{ color: "var(--fg)", fontWeight: 500 }}
-    >
+    <span suppressHydrationWarning className="font-medium text-foreground">
       {format(startOfWeek(t, { weekStartsOn: 1 }), "MMM d")} –{" "}
       {format(endOfWeek(t, { weekStartsOn: 1 }), "MMM d, yyyy")}
     </span>
@@ -190,52 +165,15 @@ export function DashboardHome({
   };
 
   return (
-    <div style={{ minHeight: "100vh" }}>
-      <header
-        style={{
-          borderBottom: "1px solid var(--border)",
-          position: "sticky",
-          top: 0,
-          zIndex: 40,
-          background: "var(--bg)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1300,
-            margin: "0 auto",
-            padding: "0 24px",
-            height: 52,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <TrendingUp size={18} color="var(--accent)" />
-            <span style={{ fontWeight: 700, fontSize: 15 }}>StockTrack</span>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
+        <div className="max-w-5xl mx-auto w-full px-6 h-13 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 font-semibold text-sm">
+            <TrendingUp className="size-4" />
+            StockTrack
           </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 13,
-            }}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: "var(--accent)",
-                display: "inline-block",
-              }}
-            />
-            <span style={{ color: "var(--fg-muted)" }}>
-              Week of <WeekLabel />
-            </span>
+          <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
+            Week of <WeekLabel />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {session?.image && (
@@ -252,7 +190,7 @@ export function DashboardHome({
             {isAdmin ? (
               <Badge
                 variant="outline"
-                className="text-[var(--accent)] border-[var(--accent)]/30"
+                className="text-[var(--brand)] border-[var(--brand)]/30"
               >
                 Admin
               </Badge>
@@ -274,22 +212,12 @@ export function DashboardHome({
       {!isAdmin && (
         <div
           style={{
-            background: "color-mix(in srgb, var(--accent) 8%, transparent)",
+            background: "var(--bg-muted)",
             borderBottom: "1px solid var(--border)",
             padding: "10px 24px",
           }}
         >
-          <div
-            style={{
-              maxWidth: 1300,
-              margin: "0 auto",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 8,
-            }}
-          >
+          <div className="max-w-5xl mx-auto w-full px-6 flex items-center justify-between flex-wrap gap-2">
             <div style={{ fontSize: 13, color: "var(--fg-muted)" }}>
               <strong style={{ color: "var(--fg)" }}>Credits:</strong>{" "}
               {credits ?? 0} — add stocks and view shared analyses. Each
@@ -323,7 +251,7 @@ export function DashboardHome({
                 width: 10,
                 height: 10,
                 borderRadius: "50%",
-                background: "var(--accent)",
+                background: "var(--brand)",
                 marginTop: 4,
                 flexShrink: 0,
               }}
@@ -370,7 +298,7 @@ export function DashboardHome({
                 borderRadius: "50%",
                 background:
                   analysisToast.tone === "success"
-                    ? "var(--accent)"
+                    ? "var(--brand)"
                     : "var(--danger)",
                 marginTop: 4,
                 flexShrink: 0,
@@ -395,7 +323,7 @@ export function DashboardHome({
         </div>
       )}
 
-      <main style={{ maxWidth: 1300, margin: "0 auto", padding: "24px" }}>
+      <main className="max-w-5xl mx-auto w-full px-6 py-6">
         <div style={{ marginBottom: 24 }}>
           <StockSearchBar
             onAdded={reload}
@@ -438,13 +366,13 @@ export function DashboardHome({
 
           {watchlist.length === 0 ? (
             <Card
-              className="text-center"
+              className="p-6 text-center"
               style={{
                 padding: "48px 24px",
                 color: "var(--fg-muted)",
               }}
             >
-              <TrendingUp
+            <TrendingUp
                 size={36}
                 color="var(--fg-subtle)"
                 style={{ marginBottom: 12 }}
@@ -476,7 +404,10 @@ export function DashboardHome({
                     params={{ symbol }}
                     style={{ textDecoration: "none", color: "inherit" }}
                   >
-                    <Card style={{ cursor: "pointer", height: "100%" }}>
+                    <Card
+                      className="p-5"
+                      style={{ cursor: "pointer", height: "100%" }}
+                    >
                       <div
                         style={{
                           display: "flex",
@@ -496,8 +427,8 @@ export function DashboardHome({
                             style={{
                               width: 36,
                               height: 36,
-                              borderRadius: 10,
-                              background: "var(--accent-subtle)",
+                              borderRadius: 8,
+                              background: "var(--bg-muted)",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
@@ -508,7 +439,7 @@ export function DashboardHome({
                               style={{
                                 fontSize: 10,
                                 fontWeight: 700,
-                                color: "var(--accent)",
+                                color: "var(--fg-muted)",
                               }}
                             >
                               {symbol.slice(0, 4)}
@@ -582,21 +513,7 @@ export function DashboardHome({
                           Analysis
                         </div>
                         {analysis ? (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              padding: "3px 8px",
-                              borderRadius: 6,
-                              background:
-                                SIGNAL_BG[analysis.signal] ?? "var(--bg-muted)",
-                              color:
-                                SIGNAL_COLOR[analysis.signal] ?? "var(--fg)",
-                              fontWeight: 700,
-                              fontSize: 11,
-                            }}
-                          >
-                            {analysis.signal.replace("_", " ")}
-                          </span>
+                          <SignalBadge signal={analysis.signal as Signal} />
                         ) : (
                           <span
                             style={{ fontSize: 12, color: "var(--fg-subtle)" }}
@@ -780,159 +697,7 @@ export function DashboardHome({
                 No shared analysis yet.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow style={{ borderBottomColor: "var(--border)" }}>
-                    {[
-                      "Symbol",
-                      "Signal",
-                      "Conf.",
-                      "WTD",
-                      "MTD",
-                      "YTD",
-                      "Next Earnings",
-                      "Updated",
-                    ].map((h) => (
-                      <TableHead
-                        key={h}
-                        className={h === "Symbol" ? "text-left" : "text-center"}
-                      >
-                        {h}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {shared.map((row) => {
-                    const style = row.signal
-                      ? {
-                          color: SIGNAL_COLOR[row.signal] ?? "var(--fg)",
-                          bg: SIGNAL_BG[row.signal] ?? "var(--bg-muted)",
-                        }
-                      : null;
-                    return (
-                      <TableRow
-                        key={`${row.symbol}-${String(row.updatedAt)}`}
-                        style={{ borderBottomColor: "var(--border)" }}
-                      >
-                        <TableCell>
-                          <Link
-                            to="/$symbol"
-                            params={{ symbol: row.symbol }}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 10,
-                              textDecoration: "none",
-                              color: "inherit",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: 8,
-                                background: "var(--accent-subtle)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: 9,
-                                  fontWeight: 700,
-                                  color: "var(--accent)",
-                                }}
-                              >
-                                {row.symbol.slice(0, 4)}
-                              </span>
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 700 }}>
-                                {row.symbol}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: "var(--fg-subtle)",
-                                }}
-                              >
-                                {row.name ?? "—"}
-                              </div>
-                            </div>
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {style && (
-                            <span
-                              style={{
-                                display: "inline-block",
-                                padding: "3px 8px",
-                                borderRadius: 6,
-                                background: style.bg,
-                                color: style.color,
-                                fontWeight: 700,
-                                fontSize: 11,
-                              }}
-                            >
-                              {row.signal.replace("_", " ")}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{ color: "var(--fg-muted)" }}
-                        >
-                          {row.confidence != null ? `${row.confidence}%` : "—"}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{
-                            color: pctColor(row.perfWtd),
-                            fontWeight: 600,
-                          }}
-                        >
-                          {pctStr(row.perfWtd)}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{
-                            color: pctColor(row.perfMtd),
-                            fontWeight: 600,
-                          }}
-                        >
-                          {pctStr(row.perfMtd)}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{
-                            color: pctColor(row.perfYtd),
-                            fontWeight: 600,
-                          }}
-                        >
-                          {pctStr(row.perfYtd)}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{ color: "var(--fg-muted)" }}
-                        >
-                          {row.nextEarningsDate ?? "—"}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{ color: "var(--fg-subtle)" }}
-                        >
-                          {row.updatedAt
-                            ? new Date(row.updatedAt).toLocaleDateString()
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <SharedAnalysisTable rows={shared} />
             )}
           </Card>
         </section>

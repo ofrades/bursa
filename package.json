@@ -31,6 +31,7 @@
     "@tanstack/react-router-devtools": "latest",
     "@tanstack/react-router-ssr-query": "latest",
     "@tanstack/react-start": "latest",
+    "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-plugin": "^1.132.0",
     "better-sqlite3": "^12.9.0",
     "class-variance-authority": "^0.7.1",

@@ -149,7 +149,7 @@ export function StockSearchBar({ onAdded, watchlistSymbols }: Props) {
                       width: 36,
                       height: 36,
                       borderRadius: 8,
-                      background: "var(--accent-subtle)",
+                      background: "var(--bg-muted)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -160,7 +160,7 @@ export function StockSearchBar({ onAdded, watchlistSymbols }: Props) {
                       style={{
                         fontSize: 10,
                         fontWeight: 700,
-                        color: "var(--accent)",
+                        color: "var(--fg-muted)",
                       }}
                     >
                       {r.symbol.slice(0, 4)}

@@ -5,11 +5,18 @@ import {
   ChevronLeft,
   CircleAlert,
   Sparkles,
-  TrendingUp,
 } from "lucide-react";
-import { Badge } from "../components/ui/badge";
+import { cn } from "#/lib/utils";
+import { Badge, SignalBadge, type Signal } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card } from "../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardAction,
+} from "../components/ui/card";
 import {
   Table,
   TableBody,
@@ -47,17 +54,13 @@ function parseRecommendation(value: unknown): ParsedRecommendation | null {
   }
 }
 
-function signalStyle(signal?: string | null) {
-  if (!signal) return { color: "var(--fg-muted)", bg: "var(--bg-muted)" };
-  if (signal.includes("BUY"))
-    return { color: "var(--accent)", bg: "var(--accent-subtle)" };
-  if (signal.includes("SELL")) return { color: "var(--danger)", bg: "#3f0000" };
-  return { color: "var(--warning)", bg: "#3f2a00" };
-}
-
-function pctColor(v: number | null | undefined) {
-  if (v == null) return "var(--fg-muted)";
-  return v > 0 ? "var(--accent)" : v < 0 ? "var(--danger)" : "var(--fg-muted)";
+function pctClass(v: number | null | undefined) {
+  if (v == null) return "text-muted-foreground";
+  return v > 0
+    ? "text-emerald-600 dark:text-emerald-400"
+    : v < 0
+      ? "text-red-600 dark:text-red-400"
+      : "text-muted-foreground";
 }
 
 function pctStr(v: number | null | undefined) {
@@ -86,38 +89,35 @@ function dateStr(v: string | Date | null | undefined, withTime = false) {
   return withTime ? d.toLocaleString() : d.toLocaleDateString();
 }
 
-function metricCard(
-  label: string,
-  value: string,
-  detail?: string,
-  tone?: string,
-) {
+function MetricCard({
+  label,
+  value,
+  detail,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  valueClass?: string;
+}) {
   return (
-    <Card style={{ padding: 16 }}>
-      <div
-        style={{
-          fontSize: 11,
-          color: "var(--fg-subtle)",
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          marginBottom: 8,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 800,
-          color: tone ?? "var(--fg)",
-          marginBottom: detail ? 4 : 0,
-        }}
-      >
-        {value}
-      </div>
-      {detail ? (
-        <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>{detail}</div>
-      ) : null}
+    <Card>
+      <CardHeader>
+        <CardDescription className="text-xs uppercase tracking-wider">
+          {label}
+        </CardDescription>
+        <CardTitle
+          className={cn(
+            "text-xl font-bold tabular-nums whitespace-nowrap",
+            valueClass,
+          )}
+        >
+          {value}
+        </CardTitle>
+        {detail && (
+          <CardDescription className="text-xs">{detail}</CardDescription>
+        )}
+      </CardHeader>
     </Card>
   );
 }
@@ -132,678 +132,359 @@ function StockPage() {
   const metrics = data.metrics;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
-  const style = signalStyle(latestAnalysis?.signal);
   const bullishFactors = recommendation?.keyBullishFactors ?? [];
   const bearishFactors = recommendation?.keyBearishFactors ?? [];
 
   return (
-    <div style={{ minHeight: "100vh", padding: "28px 24px 56px" }}>
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            marginBottom: 24,
-          }}
-        >
-          <Button asChild variant="secondary" size="sm">
+    <div className="min-h-screen">
+      <div className="max-w-5xl mx-auto w-full px-6 py-8 flex flex-col gap-4">
+        {/* Top nav */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <Button asChild variant="ghost" size="sm">
             <a href="/">
-              <ChevronLeft size={14} /> Back
+              <ChevronLeft className="size-4" /> Back
             </a>
           </Button>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            {stock?.exchange ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            {stock?.exchange && (
               <Badge variant="outline">{stock.exchange}</Badge>
-            ) : null}
+            )}
             {latestAnalysis ? (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "5px 10px",
-                  borderRadius: 999,
-                  background: style.bg,
-                  color: style.color,
-                  fontSize: 12,
-                  fontWeight: 700,
-                }}
-              >
-                <Sparkles size={12} />{" "}
-                {latestAnalysis.signal.replaceAll("_", " ")}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="size-3 text-muted-foreground" />
+                <SignalBadge signal={latestAnalysis.signal as Signal} />
+              </div>
             ) : (
               <Badge variant="outline">No analysis yet</Badge>
             )}
           </div>
         </div>
 
-        <Card style={{ padding: 24, marginBottom: 18 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "start",
-              justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  marginBottom: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 14,
-                    background: "var(--accent-subtle)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 800,
-                      color: "var(--accent)",
-                    }}
-                  >
-                    {symbol.slice(0, 4)}
-                  </span>
+        {/* Stock header card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="flex size-12 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground shrink-0">
+                  {symbol.slice(0, 4)}
                 </div>
                 <div>
-                  <h1
-                    style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.05 }}
-                  >
-                    {symbol}
-                  </h1>
-                  <div style={{ color: "var(--fg-muted)", marginTop: 4 }}>
-                    {stock?.name ?? "Stock detail page"}
-                    {stock?.sector ? ` · ${stock.sector}` : ""}
-                    {stock?.industry ? ` · ${stock.industry}` : ""}
-                  </div>
+                  <CardTitle className="text-2xl font-bold">{symbol}</CardTitle>
+                  <CardDescription>
+                    {[stock?.name, stock?.sector, stock?.industry]
+                      .filter(Boolean)
+                      .join(" · ") || "Stock detail page"}
+                  </CardDescription>
                 </div>
               </div>
-              <p
-                style={{
-                  maxWidth: 760,
-                  color: "var(--fg-muted)",
-                  lineHeight: 1.6,
-                }}
-              >
-                This page now renders the actual stock detail view for{" "}
-                <strong style={{ color: "var(--fg)" }}>{symbol}</strong>,
-                including the latest shared analysis, current metrics, and
-                recent signal history.
-              </p>
-            </div>
 
-            <div style={{ minWidth: 240 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--fg-subtle)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  marginBottom: 8,
-                }}
-              >
-                Latest update
-              </div>
-              <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 6 }}>
-                {moneyStr(
-                  metrics?.currentPrice ??
-                    latestAnalysis?.priceAtAnalysis ??
-                    null,
-                )}
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gap: 6,
-                  fontSize: 13,
-                  color: "var(--fg-muted)",
-                }}
-              >
-                <div>Updated: {dateStr(latestAnalysis?.updatedAt, true)}</div>
-                <div>
-                  Confidence:{" "}
-                  {latestAnalysis?.confidence != null
-                    ? `${latestAnalysis.confidence}%`
-                    : "—"}
-                </div>
-                <div>{session ? "Signed in" : "Browsing public data"}</div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 12,
-            marginBottom: 18,
-          }}
-        >
-          {metricCard(
-            "Current price",
-            moneyStr(
-              metrics?.currentPrice ?? latestAnalysis?.priceAtAnalysis ?? null,
-            ),
-          )}
-          {metricCard(
-            "WTD",
-            pctStr(metrics?.perfWtd),
-            metrics?.momentumSignal
-              ? `Momentum ${metrics.momentumSignal}`
-              : undefined,
-            pctColor(metrics?.perfWtd),
-          )}
-          {metricCard(
-            "MTD",
-            pctStr(metrics?.perfMtd),
-            undefined,
-            pctColor(metrics?.perfMtd),
-          )}
-          {metricCard(
-            "YTD",
-            pctStr(metrics?.perfYtd),
-            undefined,
-            pctColor(metrics?.perfYtd),
-          )}
-          {metricCard("Next earnings", metrics?.nextEarningsDate ?? "—")}
-          {metricCard(
-            "P/E",
-            numberStr(metrics?.peRatio),
-            metrics?.forwardPe != null
-              ? `Forward ${numberStr(metrics?.forwardPe)}`
-              : undefined,
-          )}
-        </section>
-
-        {!latestAnalysis ? (
-          <Card style={{ padding: 22, marginBottom: 18 }}>
-            <div style={{ display: "flex", alignItems: "start", gap: 12 }}>
-              <CircleAlert
-                size={18}
-                color="var(--warning)"
-                style={{ flexShrink: 0, marginTop: 2 }}
-              />
-              <div>
-                <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>
-                  No analysis has been generated for {symbol} yet
-                </h2>
-                <p style={{ color: "var(--fg-muted)", lineHeight: 1.6 }}>
-                  The route is working correctly now, but there is no saved
-                  analysis for this stock yet. Add it to your watchlist from the
-                  home page and run an analysis to populate this view.
+              <div className="text-right shrink-0 min-w-[160px]">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                  Latest update
                 </p>
-              </div>
-            </div>
-          </Card>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-              gap: 18,
-              alignItems: "start",
-              marginBottom: 18,
-            }}
-          >
-            <Card style={{ padding: 22 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  marginBottom: 16,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--fg-subtle)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      marginBottom: 6,
-                    }}
-                  >
-                    AI analysis
-                  </div>
-                  <h2 style={{ fontSize: 24, fontWeight: 800 }}>
-                    Weekly recommendation
-                  </h2>
-                </div>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    background: style.bg,
-                    color: style.color,
-                    fontWeight: 700,
-                    fontSize: 12,
-                  }}
-                >
-                  <TrendingUp size={14} />{" "}
-                  {latestAnalysis.signal.replaceAll("_", " ")}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                  gap: 10,
-                  marginBottom: 18,
-                }}
-              >
-                <div
-                  style={{
-                    background: "var(--bg-muted)",
-                    borderRadius: 12,
-                    padding: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--fg-subtle)",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Confidence
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>
-                    {latestAnalysis.confidence != null
+                <p className="text-2xl font-bold tabular-nums mb-1.5">
+                  {moneyStr(
+                    metrics?.currentPrice ??
+                      latestAnalysis?.priceAtAnalysis ??
+                      null,
+                  )}
+                </p>
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <p>Updated: {dateStr(latestAnalysis?.updatedAt, true)}</p>
+                  <p>
+                    Confidence:{" "}
+                    {latestAnalysis?.confidence != null
                       ? `${latestAnalysis.confidence}%`
                       : "—"}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    background: "var(--bg-muted)",
-                    borderRadius: 12,
-                    padding: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--fg-subtle)",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Risk
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>
-                    {recommendation?.riskLevel ?? "—"}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    background: "var(--bg-muted)",
-                    borderRadius: 12,
-                    padding: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--fg-subtle)",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Price target
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>
-                    {moneyStr(recommendation?.priceTarget)}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    background: "var(--bg-muted)",
-                    borderRadius: 12,
-                    padding: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--fg-subtle)",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Stop loss
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>
-                    {moneyStr(recommendation?.stopLoss)}
-                  </div>
+                  </p>
+                  <p>{session ? "Signed in" : "Browsing public data"}</p>
                 </div>
               </div>
+            </div>
+          </CardHeader>
+        </Card>
 
-              <div style={{ display: "grid", gap: 18 }}>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--fg-subtle)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      marginBottom: 8,
-                    }}
-                  >
-                    Weekly outlook
-                  </div>
-                  <p style={{ lineHeight: 1.7, color: "var(--fg-muted)" }}>
-                    {recommendation?.weeklyOutlook ??
-                      "No weekly outlook saved yet."}
-                  </p>
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--fg-subtle)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      marginBottom: 8,
-                    }}
-                  >
-                    Reasoning
-                  </div>
-                  <p style={{ lineHeight: 1.7, color: "var(--fg-muted)" }}>
-                    {recommendation?.reasoning ?? "No reasoning saved yet."}
-                  </p>
-                </div>
+        {/* Metric strip */}
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+          <MetricCard
+            label="Current price"
+            value={moneyStr(
+              metrics?.currentPrice ?? latestAnalysis?.priceAtAnalysis ?? null,
+            )}
+          />
+          <MetricCard
+            label="WTD"
+            value={pctStr(metrics?.perfWtd)}
+            detail={
+              metrics?.momentumSignal
+                ? `Momentum ${metrics.momentumSignal}`
+                : undefined
+            }
+            valueClass={pctClass(metrics?.perfWtd)}
+          />
+          <MetricCard
+            label="MTD"
+            value={pctStr(metrics?.perfMtd)}
+            valueClass={pctClass(metrics?.perfMtd)}
+          />
+          <MetricCard
+            label="YTD"
+            value={pctStr(metrics?.perfYtd)}
+            valueClass={pctClass(metrics?.perfYtd)}
+          />
+          <MetricCard
+            label="Next earnings"
+            value={metrics?.nextEarningsDate ?? "—"}
+          />
+          <MetricCard
+            label="P/E"
+            value={numberStr(metrics?.peRatio)}
+            detail={
+              metrics?.forwardPe != null
+                ? `Forward ${numberStr(metrics?.forwardPe)}`
+                : undefined
+            }
+          />
+        </div>
+
+        {/* No analysis state */}
+        {!latestAnalysis && (
+          <Card>
+            <CardContent className="flex items-start gap-3 pt-5">
+              <CircleAlert className="size-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-1">
+                  No analysis generated for {symbol} yet
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Add it to your watchlist from the home page and run an
+                  analysis to populate this view.
+                </p>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Analysis + factors */}
+        {latestAnalysis && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            {/* AI analysis card */}
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
+                    AI analysis
+                  </CardDescription>
+                  <CardTitle className="text-xl">
+                    Weekly recommendation
+                  </CardTitle>
+                </div>
+                <CardAction>
+                  <SignalBadge signal={latestAnalysis.signal as Signal} />
+                </CardAction>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-5">
+                {/* Mini metric grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    {
+                      label: "Confidence",
+                      value:
+                        latestAnalysis.confidence != null
+                          ? `${latestAnalysis.confidence}%`
+                          : "—",
+                    },
+                    {
+                      label: "Risk",
+                      value: recommendation?.riskLevel ?? "—",
+                    },
+                    {
+                      label: "Price target",
+                      value: moneyStr(recommendation?.priceTarget),
+                    },
+                    {
+                      label: "Stop loss",
+                      value: moneyStr(recommendation?.stopLoss),
+                    },
+                  ].map(({ label, value }) => (
+                    <div
+                      key={label}
+                      className="rounded-lg bg-muted/60 px-3 py-3"
+                    >
+                      <p className="text-xs text-muted-foreground mb-1">
+                        {label}
+                      </p>
+                      <p className="text-base font-semibold">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {recommendation?.weeklyOutlook && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Weekly outlook
+                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {recommendation.weeklyOutlook}
+                    </p>
+                  </div>
+                )}
+
+                {recommendation?.reasoning && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Reasoning
+                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {recommendation.reasoning}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
             </Card>
 
-            <section style={{ display: "grid", gap: 18 }}>
-              <Card style={{ padding: 22 }}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--fg-subtle)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    marginBottom: 10,
-                  }}
-                >
-                  Bullish factors
-                </div>
-                {bullishFactors.length ? (
-                  <ul
-                    style={{
-                      paddingLeft: 18,
-                      display: "grid",
-                      gap: 10,
-                      color: "var(--fg-muted)",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {bullishFactors.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div style={{ color: "var(--fg-muted)" }}>
-                    No bullish factors saved.
-                  </div>
-                )}
+            {/* Bullish / Bearish */}
+            <div className="flex flex-col gap-4">
+              <Card>
+                <CardHeader>
+                  <CardDescription className="text-xs uppercase tracking-wider">
+                    Bullish factors
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {bullishFactors.length ? (
+                    <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
+                      {bullishFactors.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No bullish factors saved.
+                    </p>
+                  )}
+                </CardContent>
               </Card>
 
-              <Card style={{ padding: 22 }}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--fg-subtle)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    marginBottom: 10,
-                  }}
-                >
-                  Bearish factors
-                </div>
-                {bearishFactors.length ? (
-                  <ul
-                    style={{
-                      paddingLeft: 18,
-                      display: "grid",
-                      gap: 10,
-                      color: "var(--fg-muted)",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {bearishFactors.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div style={{ color: "var(--fg-muted)" }}>
-                    No bearish factors saved.
-                  </div>
-                )}
+              <Card>
+                <CardHeader>
+                  <CardDescription className="text-xs uppercase tracking-wider">
+                    Bearish factors
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {bearishFactors.length ? (
+                    <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
+                      {bearishFactors.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No bearish factors saved.
+                    </p>
+                  )}
+                </CardContent>
               </Card>
-            </section>
+            </div>
           </div>
         )}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: 18,
-            alignItems: "start",
-          }}
-        >
-          <Card className="overflow-hidden p-0">
-            <div
-              style={{
-                padding: "18px 20px",
-                borderBottom: "1px solid var(--border)",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <BarChart3 size={16} color="var(--accent)" />
-              <div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--fg-subtle)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                  }}
-                >
-                  History
+        {/* History + signals */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Analysis history table */}
+          <Card className="p-0 overflow-hidden gap-0">
+            <CardHeader className="border-b px-5 py-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="size-4 text-muted-foreground" />
+                <div>
+                  <CardDescription className="text-xs uppercase tracking-wider">
+                    History
+                  </CardDescription>
+                  <CardTitle className="text-base">
+                    Recent analysis runs
+                  </CardTitle>
                 </div>
-                <h3 style={{ fontSize: 18, fontWeight: 800 }}>
-                  Recent analysis runs
-                </h3>
               </div>
-            </div>
+            </CardHeader>
             {data.analysisHistory.length === 0 ? (
-              <div style={{ padding: 20, color: "var(--fg-muted)" }}>
-                No previous analysis runs yet.
-              </div>
+              <CardContent className="py-6">
+                <p className="text-sm text-muted-foreground">
+                  No previous analysis runs yet.
+                </p>
+              </CardContent>
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow style={{ borderBottomColor: "var(--border)" }}>
-                    {["Week", "Signal", "Confidence", "Price", "Updated"].map(
-                      (h) => (
-                        <TableHead
-                          key={h}
-                          className={h === "Week" ? "text-left" : "text-center"}
-                        >
-                          {h}
-                        </TableHead>
-                      ),
-                    )}
+                  <TableRow>
+                    <TableHead>Week</TableHead>
+                    <TableHead className="text-center">Signal</TableHead>
+                    <TableHead className="text-center">Confidence</TableHead>
+                    <TableHead className="text-center">Price</TableHead>
+                    <TableHead className="text-center">Updated</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.analysisHistory.map((row) => {
-                    const rowStyle = signalStyle(row.signal);
-                    return (
-                      <TableRow
-                        key={row.id}
-                        style={{ borderBottomColor: "var(--border)" }}
-                      >
-                        <TableCell style={{ fontWeight: 600 }}>
-                          {row.weekStart} → {row.weekEnd}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span
-                            style={{
-                              display: "inline-block",
-                              padding: "3px 8px",
-                              borderRadius: 999,
-                              background: rowStyle.bg,
-                              color: rowStyle.color,
-                              fontSize: 11,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {row.signal.replaceAll("_", " ")}
-                          </span>
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{ color: "var(--fg-muted)" }}
-                        >
-                          {row.confidence != null ? `${row.confidence}%` : "—"}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {moneyStr(row.priceAtAnalysis)}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          style={{ color: "var(--fg-subtle)" }}
-                        >
-                          {dateStr(row.updatedAt)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {data.analysisHistory.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-medium text-xs">
+                        {row.weekStart} → {row.weekEnd}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <SignalBadge signal={row.signal as Signal} />
+                      </TableCell>
+                      <TableCell className="text-center text-muted-foreground">
+                        {row.confidence != null ? `${row.confidence}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {moneyStr(row.priceAtAnalysis)}
+                      </TableCell>
+                      <TableCell className="text-center text-muted-foreground">
+                        {dateStr(row.updatedAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             )}
           </Card>
 
-          <Card className="overflow-hidden p-0">
-            <div
-              style={{
-                padding: "18px 20px",
-                borderBottom: "1px solid var(--border)",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <CalendarDays size={16} color="var(--accent)" />
-              <div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--fg-subtle)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                  }}
-                >
-                  Signals
+          {/* Daily signal log */}
+          <Card className="p-0 overflow-hidden gap-0">
+            <CardHeader className="border-b px-5 py-4">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="size-4 text-muted-foreground" />
+                <div>
+                  <CardDescription className="text-xs uppercase tracking-wider">
+                    Signals
+                  </CardDescription>
+                  <CardTitle className="text-base">Daily signal log</CardTitle>
                 </div>
-                <h3 style={{ fontSize: 18, fontWeight: 800 }}>
-                  Daily signal log
-                </h3>
               </div>
-            </div>
+            </CardHeader>
             {data.dailySignals.length === 0 ? (
-              <div style={{ padding: 20, color: "var(--fg-muted)" }}>
-                No daily signal updates for the latest analysis yet.
-              </div>
+              <CardContent className="py-6">
+                <p className="text-sm text-muted-foreground">
+                  No daily signal updates for the latest analysis yet.
+                </p>
+              </CardContent>
             ) : (
-              <div style={{ display: "grid" }}>
-                {data.dailySignals.map((row) => {
-                  const rowStyle = signalStyle(row.signal);
-                  return (
-                    <div
-                      key={row.id}
-                      style={{
-                        padding: "14px 20px",
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 12,
-                          marginBottom: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <div style={{ fontWeight: 700 }}>{row.date}</div>
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "3px 8px",
-                            borderRadius: 999,
-                            background: rowStyle.bg,
-                            color: rowStyle.color,
-                            fontWeight: 700,
-                            fontSize: 11,
-                          }}
-                        >
-                          {row.signal.replaceAll("_", " ")}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gap: 4,
-                          fontSize: 12,
-                          color: "var(--fg-muted)",
-                        }}
-                      >
-                        <div>Trigger: {row.trigger}</div>
-                        <div>Price: {moneyStr(row.priceAtUpdate)}</div>
-                        {row.note ? (
-                          <div style={{ lineHeight: 1.5 }}>{row.note}</div>
-                        ) : null}
-                      </div>
+              <div>
+                {data.dailySignals.map((row) => (
+                  <div key={row.id} className="px-5 py-4 border-b last:border-0">
+                    <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                      <span className="text-sm font-medium">{row.date}</span>
+                      <SignalBadge signal={row.signal as Signal} />
                     </div>
-                  );
-                })}
+                    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      <span>Trigger: {row.trigger}</span>
+                      <span>Price: {moneyStr(row.priceAtUpdate)}</span>
+                      {row.note && (
+                        <span className="leading-relaxed">{row.note}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </Card>
