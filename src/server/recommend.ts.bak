@@ -1,0 +1,331 @@
+import { createServerFn } from '@tanstack/react-start'
+import { eq, and } from 'drizzle-orm'
+import { randomUUID } from 'crypto'
+import { chat } from '@tanstack/ai'
+import { createOpenaiChat } from '@tanstack/ai-openai'
+import { format, startOfWeek, endOfWeek } from 'date-fns'
+import yahooFinance from 'yahoo-finance2'
+import { db } from '../lib/db'
+import { weeklyRecommendation, dailyUpdate } from '../lib/schema'
+import { authMiddleware } from './middleware'
+
+// OpenRouter is OpenAI-compatible — use TanStack AI's OpenAI adapter pointed at OpenRouter
+const getAdapter = () =>
+  createOpenaiChat(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    'zhipuai/glm-4-5' as any,
+    process.env.OPENROUTER_API_KEY ?? '',
+    { baseURL: 'https://openrouter.ai/api/v1' },
+  )
+
+export type Signal = 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL'
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
+
+export type RecommendationResult = {
+  id: string
+  signal: Signal
+  confidence: number
+  weeklyOutlook: string
+  keyBullishFactors: string[]
+  keyBearishFactors: string[]
+  riskLevel: RiskLevel
+  priceTarget: number | null
+  stopLoss: number | null
+  reasoning: string
+  signalChanged?: boolean
+  priceAtRecommendation: number | null
+  weekStart: string
+  weekEnd: string
+}
+
+// ─── Data gathering ───────────────────────────────────────────────────────────
+async function gatherStockData(symbol: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const quote = (await yahooFinance.quote(symbol)) as any
+
+  const period1 = new Date()
+  period1.setDate(period1.getDate() - 90)
+
+  const [historical, summary] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (yahooFinance.historical(symbol, { period1, interval: '1d' }) as Promise<any[]>).catch(
+      () => [] as any[], // eslint-disable-line @typescript-eslint/no-explicit-any
+    ),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (yahooFinance.quoteSummary(symbol, {
+      modules: ['financialData', 'defaultKeyStatistics', 'calendarEvents', 'assetProfile'],
+    }) as Promise<any>).catch(() => null), // eslint-disable-line @typescript-eslint/no-explicit-any
+  ])
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const closes = (historical as any[]).map((h: any) => h.close).filter(Boolean) as number[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const volumes = (historical as any[]).map((h: any) => h.volume).filter(Boolean) as number[]
+
+  const sma20 = closes.length >= 20 ? closes.slice(-20).reduce((a, b) => a + b, 0) / 20 : null
+  const sma50 = closes.length >= 50 ? closes.slice(-50).reduce((a, b) => a + b, 0) / 50 : null
+
+  const recentVol = volumes.length >= 5 ? volumes.slice(-5).reduce((a, b) => a + b, 0) / 5 : 0
+  const olderVol =
+    volumes.length >= 20 ? volumes.slice(-20, -5).reduce((a, b) => a + b, 0) / 15 : recentVol
+  const volumeTrend = olderVol > 0 ? ((recentVol - olderVol) / olderVol) * 100 : 0
+
+  const priceNow: number = quote.regularMarketPrice ?? 0
+  const price5d = closes[closes.length - 6] ?? priceNow
+  const price20d = closes[closes.length - 21] ?? priceNow
+  const momentum5d = price5d > 0 ? ((priceNow - price5d) / price5d) * 100 : 0
+  const momentum20d = price20d > 0 ? ((priceNow - price20d) / price20d) * 100 : 0
+
+  return {
+    symbol,
+    currentPrice: priceNow,
+    dayChange: (quote.regularMarketChangePercent ?? 0) as number,
+    marketCap: quote.marketCap as number | undefined,
+    peRatio: quote.trailingPE as number | undefined,
+    forwardPE: quote.forwardPE as number | undefined,
+    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh as number | undefined,
+    fiftyTwoWeekLow: quote.fiftyTwoWeekLow as number | undefined,
+    avgVolume: quote.averageVolume as number | undefined,
+    beta: quote.beta as number | undefined,
+    sma20,
+    sma50,
+    volumeTrend,
+    momentum5d,
+    momentum20d,
+    priceVsSMA20: sma20 ? ((priceNow - sma20) / sma20) * 100 : null,
+    priceVsSMA50: sma50 ? ((priceNow - sma50) / sma50) * 100 : null,
+    earningsDate: summary?.calendarEvents?.earnings?.earningsDate?.[0] ?? null,
+    revenueGrowth: summary?.financialData?.revenueGrowth ?? null,
+    profitMargin: summary?.financialData?.profitMargins ?? null,
+    returnOnEquity: summary?.financialData?.returnOnEquity ?? null,
+    debtToEquity: summary?.financialData?.debtToEquity ?? null,
+    freeCashflow: summary?.financialData?.freeCashflow ?? null,
+    sector: summary?.assetProfile?.sector ?? null,
+    industry: summary?.assetProfile?.industry ?? null,
+  }
+}
+
+type StockData = Awaited<ReturnType<typeof gatherStockData>>
+
+// ─── AI prompt ───────────────────────────────────────────────────────────────
+function buildPrompt(data: StockData, isDaily: boolean, weekStart: string, weekEnd: string) {
+  const fmt = (n: number | null | undefined, decimals = 2) =>
+    n != null ? n.toFixed(decimals) : 'N/A'
+
+  return `You are an expert stock analyst. Analyze the following data and provide a structured investment recommendation.
+
+STOCK: ${data.symbol}
+SECTOR: ${data.sector ?? 'Unknown'} | INDUSTRY: ${data.industry ?? 'Unknown'}
+
+PRICE & MARKET:
+- Current Price: $${fmt(data.currentPrice)}
+- Day Change: ${fmt(data.dayChange)}%
+- 52-Week High: $${fmt(data.fiftyTwoWeekHigh)} | Low: $${fmt(data.fiftyTwoWeekLow)}
+- Market Cap: ${data.marketCap ? '$' + (data.marketCap / 1e9).toFixed(1) + 'B' : 'N/A'}
+- Beta: ${fmt(data.beta)}
+
+TREND ANALYSIS:
+- vs SMA20: ${fmt(data.priceVsSMA20)}% ${data.priceVsSMA20 != null ? (data.priceVsSMA20 > 0 ? '(ABOVE — bullish)' : '(BELOW — bearish)') : ''}
+- vs SMA50: ${fmt(data.priceVsSMA50)}% ${data.priceVsSMA50 != null ? (data.priceVsSMA50 > 0 ? '(ABOVE — bullish)' : '(BELOW — bearish)') : ''}
+- 5-Day Momentum: ${fmt(data.momentum5d)}%
+- 20-Day Momentum: ${fmt(data.momentum20d)}%
+- Volume Trend: ${fmt(data.volumeTrend, 1)}% vs 15-day avg ${data.volumeTrend > 10 ? '(high conviction)' : data.volumeTrend < -10 ? '(weak signal)' : '(normal)'}
+
+VALUATION:
+- Trailing P/E: ${fmt(data.peRatio, 1)} | Forward P/E: ${fmt(data.forwardPE, 1)}
+- Revenue Growth: ${data.revenueGrowth != null ? (data.revenueGrowth * 100).toFixed(1) + '%' : 'N/A'}
+- Profit Margin: ${data.profitMargin != null ? (data.profitMargin * 100).toFixed(1) + '%' : 'N/A'}
+- Return on Equity: ${data.returnOnEquity != null ? (data.returnOnEquity * 100).toFixed(1) + '%' : 'N/A'}
+- Debt/Equity: ${fmt(data.debtToEquity, 1)}
+- Free Cash Flow: ${data.freeCashflow ? '$' + (data.freeCashflow / 1e9).toFixed(1) + 'B' : 'N/A'}
+
+UPCOMING EVENTS:
+- Next Earnings: ${data.earningsDate ? new Date(data.earningsDate).toDateString() : 'N/A'}
+
+${
+  isDaily
+    ? `CONTEXT: Daily update for week ${weekStart}–${weekEnd}. Set signalChanged=true only if fundamentals have meaningfully shifted.`
+    : `CONTEXT: Weekly recommendation for ${weekStart}–${weekEnd}. Consider macro environment, sector rotation, earnings risk, technical setup.`
+}
+
+RULES: (1) Price > SMA50 + positive momentum = bullish. (2) Price < SMA20 + negative momentum = bearish. (3) High volume breakout = strong signal. (4) Earnings within 2 weeks = reduce confidence. (5) High debt + falling revenue = cautious.
+
+Respond ONLY with valid JSON (no markdown, no extra text):
+{
+  "signal": "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL",
+  "confidence": <0-100>,
+  "weeklyOutlook": "<2-3 sentences>",
+  "keyBullishFactors": ["<factor>", "<factor>", "<factor>"],
+  "keyBearishFactors": ["<factor>", "<factor>", "<factor>"],
+  "riskLevel": "LOW" | "MEDIUM" | "HIGH",
+  "priceTarget": <number or null>,
+  "stopLoss": <number or null>,
+  "reasoning": "<3-4 sentence reasoning>",
+  "signalChanged": <boolean>
+}`
+}
+
+// ─── Call TanStack AI (non-streaming, returns full text) ──────────────────────
+async function callAI(prompt: string): Promise<string> {
+  const text = await chat({
+    adapter: getAdapter(),
+    messages: [{ role: 'user', content: prompt }],
+    stream: false,
+    maxTokens: 800,
+  })
+  return text
+}
+
+// ─── Server functions ─────────────────────────────────────────────────────────
+
+export const generateWeeklyRecommendation = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .inputValidator((data: { symbol: string }) => data)
+  .handler(async ({ data, context }): Promise<RecommendationResult> => {
+    const { session } = context
+    if (!session?.user) throw new Error('Unauthorized')
+
+    const today = new Date()
+    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+    const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+
+    const stockData = await gatherStockData(data.symbol)
+    const text = await callAI(buildPrompt(stockData, false, weekStart, weekEnd))
+
+    let parsed: Omit<RecommendationResult, 'id' | 'priceAtRecommendation' | 'weekStart' | 'weekEnd'>
+    try {
+      const match = text.match(/\{[\s\S]*\}/)
+      parsed = JSON.parse(match?.[0] ?? text)
+    } catch {
+      throw new Error(`Failed to parse AI response: ${text.slice(0, 200)}`)
+    }
+
+    const existing = await db
+      .select()
+      .from(weeklyRecommendation)
+      .where(
+        and(
+          eq(weeklyRecommendation.userId, session.user.id),
+          eq(weeklyRecommendation.symbol, data.symbol),
+          eq(weeklyRecommendation.weekStart, weekStart),
+        ),
+      )
+
+    const recId = existing[0]?.id ?? randomUUID()
+    const now = new Date()
+
+    if (existing.length > 0) {
+      await db
+        .update(weeklyRecommendation)
+        .set({
+          signal: parsed.signal,
+          confidence: parsed.confidence,
+          reasoning: JSON.stringify(parsed),
+          priceAtRecommendation: stockData.currentPrice,
+          updatedAt: now,
+        })
+        .where(eq(weeklyRecommendation.id, recId))
+    } else {
+      await db.insert(weeklyRecommendation).values({
+        id: recId,
+        userId: session.user.id,
+        symbol: data.symbol,
+        weekStart,
+        weekEnd,
+        signal: parsed.signal,
+        confidence: parsed.confidence,
+        reasoning: JSON.stringify(parsed),
+        priceAtRecommendation: stockData.currentPrice,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+
+    return { id: recId, ...parsed, priceAtRecommendation: stockData.currentPrice, weekStart, weekEnd }
+  })
+
+export const generateDailyUpdate = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .inputValidator((data: { symbol: string; weeklyRecId: string }) => data)
+  .handler(async ({ data, context }): Promise<RecommendationResult> => {
+    const { session } = context
+    if (!session?.user) throw new Error('Unauthorized')
+
+    const today = new Date()
+    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+    const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+    const todayStr = format(today, 'yyyy-MM-dd')
+
+    const [stockData, weeklyRec] = await Promise.all([
+      gatherStockData(data.symbol),
+      db.select().from(weeklyRecommendation).where(eq(weeklyRecommendation.id, data.weeklyRecId)),
+    ])
+
+    if (!weeklyRec[0]) throw new Error('Weekly recommendation not found')
+
+    const text = await callAI(buildPrompt(stockData, true, weekStart, weekEnd))
+
+    let parsed: Omit<RecommendationResult, 'id' | 'priceAtRecommendation' | 'weekStart' | 'weekEnd'>
+    try {
+      const match = text.match(/\{[\s\S]*\}/)
+      parsed = JSON.parse(match?.[0] ?? text)
+    } catch {
+      throw new Error(`Failed to parse AI response: ${text.slice(0, 200)}`)
+    }
+
+    const changed = parsed.signal !== weeklyRec[0].signal
+
+    await db.insert(dailyUpdate).values({
+      id: randomUUID(),
+      weeklyRecommendationId: data.weeklyRecId,
+      symbol: data.symbol,
+      date: todayStr,
+      signal: parsed.signal,
+      note: parsed.reasoning,
+      priceAtUpdate: stockData.currentPrice,
+      signalChanged: changed,
+      createdAt: new Date(),
+    })
+
+    return {
+      id: data.weeklyRecId,
+      ...parsed,
+      signalChanged: changed,
+      priceAtRecommendation: stockData.currentPrice,
+      weekStart,
+      weekEnd,
+    }
+  })
+
+export const getWeeklyRecommendations = createServerFn({ method: 'GET' })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { session } = context
+    if (!session?.user) throw new Error('Unauthorized')
+
+    const today = new Date()
+    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+
+    return db
+      .select()
+      .from(weeklyRecommendation)
+      .where(
+        and(
+          eq(weeklyRecommendation.userId, session.user.id),
+          eq(weeklyRecommendation.weekStart, weekStart),
+        ),
+      )
+  })
+
+export const getDailyUpdates = createServerFn({ method: 'GET' })
+  .middleware([authMiddleware])
+  .inputValidator((data: { weeklyRecId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { session } = context
+    if (!session?.user) throw new Error('Unauthorized')
+
+    return db
+      .select()
+      .from(dailyUpdate)
+      .where(eq(dailyUpdate.weeklyRecommendationId, data.weeklyRecId))
+  })

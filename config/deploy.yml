@@ -1,0 +1,45 @@
+# Kamal 2.x — StockTrack
+# Usage:
+#   kamal setup    # first time — installs Docker, creates dirs on VPS
+#   kamal deploy   # build image, push, restart container
+#   kamal logs     # tail logs
+#   kamal console  # open Rails-style console (node repl here)
+
+service: stocktrack
+image: stocktrack
+
+servers:
+  web:
+    hosts:
+      - mohshoo.tailf9eafe.ts.net
+    options:
+      volume:
+        - /var/lib/stocktrack/data:/app/data
+
+# Local Docker registry — same SSH-tunnel pattern as mohshoo
+registry:
+  server: localhost:5000
+
+builder:
+  arch: amd64
+
+proxy:
+  app_port: 3000
+  healthcheck:
+    path: /api/health
+
+env:
+  clear:
+    PORT: 3000
+    NODE_ENV: production
+    BETTER_AUTH_URL: https://stocktrack.mohshoo.tailf9eafe.ts.net
+    DB_PATH: /app/data/stocktrack.sqlite
+  secret:
+    - AUTH_SECRET
+    - GOOGLE_CLIENT_ID
+    - GOOGLE_CLIENT_SECRET
+    - OPENROUTER_API_KEY
+    - CRON_SECRET
+    - STRIPE_SECRET_KEY
+    - STRIPE_WEBHOOK_SECRET
+    - STRIPE_PRICE_CREDITS_10
