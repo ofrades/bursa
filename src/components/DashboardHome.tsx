@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Sparkles, TrendingUp, Users, X } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
+import { Bar, BarChart, Cell, ReferenceLine, XAxis } from "recharts";
 import {
   getWatchlist,
   removeFromWatchlist,
@@ -15,7 +16,12 @@ import type { StockAnalysis, StockMetrics } from "../lib/schema";
 import { StockSearchBar } from "./StockSearchBar";
 import { Badge, SignalBadge, type Signal } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+} from "./ui/card";
+import { ChartContainer, type ChartConfig } from "./ui/chart";
 import { SharedAnalysisTable } from "./SharedAnalysisTable";
 
 type SharedRow = {
@@ -45,12 +51,37 @@ type Props = {
 };
 
 function pctColor(v: number | null | undefined) {
-  if (v == null) return "var(--fg-muted)";
-  return v > 0 ? "rgb(34 197 94)" : v < 0 ? "rgb(239 68 68)" : "var(--fg-muted)";
+  if (v == null) return "hsl(var(--muted-foreground))";
+  return v > 0 ? "hsl(var(--chart-2))" : v < 0 ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))";
 }
 function pctStr(v: number | null | undefined) {
   if (v == null) return "—";
   return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
+}
+
+const perfChartConfig = {
+  value: { label: "Performance" },
+} satisfies ChartConfig;
+
+function PerfMiniChart({ wtd, mtd, ytd }: { wtd?: number | null; mtd?: number | null; ytd?: number | null }) {
+  const data = [
+    { name: "WTD", value: wtd ?? 0 },
+    { name: "MTD", value: mtd ?? 0 },
+    { name: "YTD", value: ytd ?? 0 },
+  ];
+  return (
+    <ChartContainer config={perfChartConfig} className="h-12 w-full">
+      <BarChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+        <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+        <ReferenceLine y={0} stroke="hsl(var(--border))" />
+        <Bar dataKey="value" radius={[2, 2, 0, 0]} maxBarSize={18}>
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.value > 0 ? "hsl(var(--chart-2))" : entry.value < 0 ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))"} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ChartContainer>
+  );
 }
 function WeekLabel() {
   const t = new Date();
@@ -365,31 +396,13 @@ export function DashboardHome({
           </div>
 
           {watchlist.length === 0 ? (
-            <Card
-              className="p-6 text-center"
-              style={{
-                padding: "48px 24px",
-                color: "var(--fg-muted)",
-              }}
-            >
-            <TrendingUp
-                size={36}
-                color="var(--fg-subtle)"
-                style={{ marginBottom: 12 }}
-              />
-              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
-                Your watchlist is empty
-              </div>
-              <div style={{ fontSize: 14 }}>Search above to add stocks.</div>
+            <Card className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground">
+              <TrendingUp className="size-8 text-muted-foreground/40" />
+              <p className="font-medium">Your watchlist is empty</p>
+              <p className="text-sm">Search above to add stocks.</p>
             </Card>
           ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
-                gap: 14,
-              }}
-            >
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
               {watchlist.map(({ symbol, name }) => {
                 const analysis = analyses.find((a) => a.symbol === symbol);
                 const m = metrics.find((x) => x.symbol === symbol);
@@ -402,89 +415,30 @@ export function DashboardHome({
                     key={symbol}
                     to="/$symbol"
                     params={{ symbol }}
-                    style={{ textDecoration: "none", color: "inherit" }}
+                    className="block no-underline"
                   >
-                    <Card
-                      className="p-5"
-                      style={{ cursor: "pointer", height: "100%" }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "start",
-                          justifyContent: "space-between",
-                          gap: 10,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 10,
-                            alignItems: "center",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: 36,
-                              height: 36,
-                              borderRadius: 8,
-                              background: "var(--bg-muted)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 10,
-                                fontWeight: 700,
-                                color: "var(--fg-muted)",
-                              }}
-                            >
-                              {symbol.slice(0, 4)}
-                            </span>
+                    <Card className="cursor-pointer transition-colors hover:bg-muted/40 h-full">
+                      <CardHeader className="flex flex-row items-start justify-between gap-2 p-3 pb-2">
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-sm leading-none">{symbol}</span>
+                            {analysis ? (
+                              <SignalBadge signal={analysis.signal as Signal} />
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] py-0 h-4">No analysis</Badge>
+                            )}
+                            {sharedByCommunity && (
+                              <Badge variant="outline" className="text-[10px] py-0 h-4 gap-0.5">
+                                <Users className="size-2.5" /> community
+                              </Badge>
+                            )}
                           </div>
-                          <div>
-                            <div
-                              style={{
-                                fontWeight: 700,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 6,
-                              }}
-                            >
-                              {symbol}
-                              {sharedByCommunity && (
-                                <span
-                                  style={{
-                                    fontSize: 9,
-                                    border: "1px solid var(--border)",
-                                    color: "var(--fg-subtle)",
-                                    borderRadius: 4,
-                                    padding: "1px 4px",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 3,
-                                  }}
-                                >
-                                  <Users size={9} /> community
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: "var(--fg-subtle)",
-                              }}
-                            >
-                              {name ?? "—"}
-                            </div>
-                          </div>
+                          <span className="text-xs text-muted-foreground truncate max-w-[160px]">{name ?? "—"}</span>
                         </div>
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          className="shrink-0 -mt-0.5"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -492,139 +446,37 @@ export function DashboardHome({
                           }}
                         >
                           {removing === symbol ? (
-                            <Loader2 size={12} className="spin" />
+                            <Loader2 className="spin" />
                           ) : (
-                            <X size={12} />
+                            <X />
                           )}
                         </Button>
-                      </div>
+                      </CardHeader>
 
-                      <div className="separator" style={{ margin: "12px 0" }} />
+                      <CardContent className="px-3 pb-3 pt-0 flex flex-col gap-2">
+                        {/* Mini performance chart */}
+                        <PerfMiniChart wtd={m?.perfWtd} mtd={m?.perfMtd} ytd={m?.perfYtd} />
 
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 10,
-                        }}
-                      >
-                        <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>
-                          Analysis
+                        {/* Perf values row */}
+                        <div className="grid grid-cols-3 gap-1 text-center">
+                          {(["WTD", "MTD", "YTD"] as const).map((label, i) => {
+                            const val = [m?.perfWtd, m?.perfMtd, m?.perfYtd][i];
+                            return (
+                              <div key={label} className="flex flex-col gap-0.5">
+                                <span className="text-[10px] text-muted-foreground">{label}</span>
+                                <span className="text-xs font-semibold" style={{ color: pctColor(val) }}>
+                                  {pctStr(val)}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
-                        {analysis ? (
-                          <SignalBadge signal={analysis.signal as Signal} />
-                        ) : (
-                          <span
-                            style={{ fontSize: 12, color: "var(--fg-subtle)" }}
-                          >
-                            Not analyzed yet
-                          </span>
-                        )}
-                      </div>
 
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(3, 1fr)",
-                          gap: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            background: "var(--bg-muted)",
-                            borderRadius: 8,
-                            padding: "6px 8px",
-                          }}
-                        >
-                          <div
-                            style={{ fontSize: 11, color: "var(--fg-subtle)" }}
-                          >
-                            WTD
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 700,
-                              color: pctColor(m?.perfWtd),
-                            }}
-                          >
-                            {pctStr(m?.perfWtd)}
-                          </div>
-                        </div>
-                        <div
-                          style={{
-                            background: "var(--bg-muted)",
-                            borderRadius: 8,
-                            padding: "6px 8px",
-                          }}
-                        >
-                          <div
-                            style={{ fontSize: 11, color: "var(--fg-subtle)" }}
-                          >
-                            MTD
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 700,
-                              color: pctColor(m?.perfMtd),
-                            }}
-                          >
-                            {pctStr(m?.perfMtd)}
-                          </div>
-                        </div>
-                        <div
-                          style={{
-                            background: "var(--bg-muted)",
-                            borderRadius: 8,
-                            padding: "6px 8px",
-                          }}
-                        >
-                          <div
-                            style={{ fontSize: 11, color: "var(--fg-subtle)" }}
-                          >
-                            YTD
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 700,
-                              color: pctColor(m?.perfYtd),
-                            }}
-                          >
-                            {pctStr(m?.perfYtd)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        className="separator"
-                        style={{ margin: "12px 0 10px" }}
-                      />
-
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>
-                          {analysis?.updatedAt
-                            ? `Updated ${new Date(analysis.updatedAt).toLocaleDateString()}`
-                            : "Run the first analysis for this stock"}
-                          {!isAdmin && (
-                            <span style={{ color: "var(--fg-subtle)" }}>
-                              {" "}
-                              · 1 credit
-                            </span>
-                          )}
-                        </div>
+                        {/* Analyze button */}
                         <Button
                           size="sm"
+                          variant="outline"
+                          className="w-full h-7 text-xs mt-0.5"
                           disabled={analyzing === symbol || removing === symbol}
                           onClick={(e) => {
                             e.preventDefault();
@@ -633,17 +485,26 @@ export function DashboardHome({
                           }}
                         >
                           {analyzing === symbol ? (
-                            <Loader2 size={12} className="spin" />
+                            <Loader2 data-icon="inline-start" className="spin" />
                           ) : (
-                            <Sparkles size={12} />
+                            <Sparkles data-icon="inline-start" />
                           )}
                           {analyzing === symbol
                             ? "Analyzing…"
                             : analysis
-                              ? "Refresh analysis"
+                              ? "Refresh"
                               : "Run analysis"}
+                          {!isAdmin && !analyzing && (
+                            <span className="ml-auto text-muted-foreground text-[10px]">1 cr</span>
+                          )}
                         </Button>
-                      </div>
+
+                        {analysis?.updatedAt && (
+                          <p className="text-[10px] text-muted-foreground text-center -mt-1">
+                            Updated {new Date(analysis.updatedAt).toLocaleDateString()}
+                          </p>
+                        )}
+                      </CardContent>
                     </Card>
                   </Link>
                 );
