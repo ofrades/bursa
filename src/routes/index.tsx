@@ -76,7 +76,7 @@ function HomePage() {
           {/* Logo */}
           <div className="flex items-center gap-2 font-semibold text-sm">
             <TrendingUp className="size-4" />
-            StockTrack
+            Bursa
           </div>
 
           {/* Week indicator */}

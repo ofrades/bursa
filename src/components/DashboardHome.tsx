@@ -170,7 +170,7 @@ export function DashboardHome({
         <div className="max-w-5xl mx-auto w-full px-6 h-13 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 font-semibold text-sm">
             <TrendingUp className="size-4" />
-            StockTrack
+            Bursa
           </div>
           <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
             Week of <WeekLabel />

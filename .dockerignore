@@ -1,0 +1,9 @@
+node_modules
+.output
+.git
+.gitignore
+.env
+.env.*
+data
+.vscode
+.DS_Store

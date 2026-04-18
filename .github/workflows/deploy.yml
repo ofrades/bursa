@@ -1,18 +1,48 @@
-name: Deploy to VPS via Kamal
+name: CI / Deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  check:
+    name: Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: stock-tracker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Build
+        run: vp build
+
+  deploy:
+    name: Kamal Deploy
+    runs-on: ubuntu-latest
+    needs: [check]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          cache: true
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -21,25 +51,50 @@ jobs:
       - name: Install Kamal
         run: gem install kamal
 
-      - name: Set up SSH
+      - name: Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          tags: tag:ci
+
+      - name: Configure SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add SSH known_hosts
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H mohshoo.tailf9eafe.ts.net >> ~/.ssh/known_hosts
-
-      - name: Set up local Docker registry tunnel
-        run: |
-          ssh -f -N -L 5000:localhost:5000 root@mohshoo.tailf9eafe.ts.net
 
       - name: Write Kamal secrets
         run: |
+          mkdir -p .kamal
           cat > .kamal/secrets << EOF
-          BETTER_AUTH_SECRET=${{ secrets.BETTER_AUTH_SECRET }}
+          AUTH_SECRET=${{ secrets.AUTH_SECRET }}
           GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
           OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+          CRON_SECRET=${{ secrets.CRON_SECRET }}
+          STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_CREDITS_10=${{ secrets.STRIPE_PRICE_CREDITS_10 }}
           EOF
+          chmod 600 .kamal/secrets
+
+      - name: Validate required deploy secrets
+        run: |
+          set -euo pipefail
+          source .kamal/secrets
+          for var in AUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET OPENROUTER_API_KEY CRON_SECRET; do
+            if [ -z "${!var:-}" ]; then
+              echo "Missing required deploy secret: $var" >&2
+              exit 1
+            fi
+          done
+
+      - name: Ensure VPS data directory exists
+        run: ssh root@mohshoo.tailf9eafe.ts.net 'mkdir -p /var/lib/bursa/data'
 
       - name: Deploy
         run: kamal deploy

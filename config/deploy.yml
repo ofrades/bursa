@@ -1,12 +1,12 @@
-# Kamal 2.x — StockTrack
+# Kamal 2.x — Bursa
 # Usage:
-#   kamal setup    # first time — installs Docker, creates dirs on VPS
+#   kamal setup    # first time — prepares the host and kamal-proxy
 #   kamal deploy   # build image, push, restart container
 #   kamal logs     # tail logs
-#   kamal console  # open Rails-style console (node repl here)
+#   kamal console  # open a node repl in the app container
 
-service: stocktrack
-image: stocktrack
+service: bursa
+image: bursa
 
 servers:
   web:
@@ -14,9 +14,9 @@ servers:
       - mohshoo.tailf9eafe.ts.net
     options:
       volume:
-        - /var/lib/stocktrack/data:/app/data
+        - /var/lib/bursa/data:/app/data
 
-# Local Docker registry — same SSH-tunnel pattern as mohshoo
+# Local Docker registry accessed over an SSH tunnel.
 registry:
   server: localhost:5000
 
@@ -24,6 +24,7 @@ builder:
   arch: amd64
 
 proxy:
+  host: bursa.mohshoo.com
   app_port: 3000
   healthcheck:
     path: /api/health
@@ -32,7 +33,7 @@ env:
   clear:
     PORT: 3000
     NODE_ENV: production
-    BETTER_AUTH_URL: https://stocktrack.mohshoo.tailf9eafe.ts.net
+    BETTER_AUTH_URL: https://bursa.mohshoo.com
     DB_PATH: /app/data/stocktrack.sqlite
   secret:
     - AUTH_SECRET
@@ -43,3 +44,5 @@ env:
     - STRIPE_SECRET_KEY
     - STRIPE_WEBHOOK_SECRET
     - STRIPE_PRICE_CREDITS_10
+
+# Cloudflare Tunnel should target http://kamal-proxy:80 for bursa.mohshoo.com.
