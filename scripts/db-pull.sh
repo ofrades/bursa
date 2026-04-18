@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REMOTE_HOST="root@mohshoo.tailf9eafe.ts.net"
-REMOTE_DB="/var/lib/stocktrack/data/stocktrack.sqlite"
+REMOTE_DB="/var/lib/bursa/data/stocktrack.sqlite"
 LOCAL_DB="./data/stocktrack.sqlite"
 
 mkdir -p ./data

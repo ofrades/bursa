@@ -36,6 +36,7 @@ jobs:
 
     permissions:
       contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +72,8 @@ jobs:
         run: |
           mkdir -p .kamal
           cat > .kamal/secrets << EOF
+          KAMAL_REGISTRY_USERNAME=${{ github.actor }}
+          KAMAL_REGISTRY_PASSWORD=${{ secrets.GITHUB_TOKEN }}
           AUTH_SECRET=${{ secrets.AUTH_SECRET }}
           GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}

@@ -39,6 +39,7 @@ Important variables:
 ## Production deploy
 
 Production deploys use Kamal with config in `config/deploy.yml`.
+Images are published to GitHub Container Registry (`ghcr.io/ofrades/bursa`) and then pulled on the VPS.
 
 Target:
 - app URL: `https://bursa.mohshoo.com`
@@ -55,8 +56,28 @@ Cloudflare Tunnel should send `bursa.mohshoo.com` traffic to `http://kamal-proxy
 
 ### Local manual deploy
 
-1. Create `.kamal/secrets` with the production secret values.
-2. Deploy:
+1. Create `.kamal/secrets` with the production secret values, plus GHCR credentials:
+
+```bash
+KAMAL_REGISTRY_USERNAME=your-github-username
+KAMAL_REGISTRY_PASSWORD=your-github-token-with-read:packages,write:packages
+AUTH_SECRET=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+OPENROUTER_API_KEY=...
+CRON_SECRET=...
+STRIPE_SECRET_KEY=...
+STRIPE_WEBHOOK_SECRET=...
+STRIPE_PRICE_CREDITS_10=...
+```
+
+2. First deploy on a fresh host:
+
+```bash
+kamal setup
+```
+
+3. Deploy updates:
 
 ```bash
 kamal deploy
@@ -64,7 +85,7 @@ kamal deploy
 
 ## GitHub Actions deploy
 
-`.github/workflows/deploy.yml` builds on every PR/push to `main` and deploys on pushes to `main`.
+`.github/workflows/deploy.yml` builds on every PR/push to `master` and deploys on pushes to `master`.
 
 Required GitHub secrets:
 - `TAILSCALE_AUTHKEY`
@@ -77,6 +98,8 @@ Required GitHub secrets:
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRICE_CREDITS_10`
+
+The workflow uses the built-in `GITHUB_TOKEN` for GHCR, so no extra registry secret is required in GitHub Actions.
 
 ## Current production status
 

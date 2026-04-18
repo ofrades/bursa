@@ -6,7 +6,7 @@
 #   kamal console  # open a node repl in the app container
 
 service: bursa
-image: bursa
+image: ofrades/bursa
 
 servers:
   web:
@@ -16,9 +16,14 @@ servers:
       volume:
         - /var/lib/bursa/data:/app/data
 
-# Local Docker registry accessed over an SSH tunnel.
+# Use GitHub Container Registry so CI and the VPS can pull the same image
+# without relying on an SSH-tunneled local registry.
 registry:
-  server: localhost:5000
+  server: ghcr.io
+  username:
+    - KAMAL_REGISTRY_USERNAME
+  password:
+    - KAMAL_REGISTRY_PASSWORD
 
 builder:
   arch: amd64
