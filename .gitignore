@@ -4,8 +4,8 @@ dist
 dist-ssr
 *.local
 .env
-!.env.example
 .kamal/secrets
+.kamal/secrets-common
 .nitro
 .tanstack
 .wrangler
@@ -17,5 +17,3 @@ todos.json
 data/*.sqlite
 data/*.sqlite-*
 /.pi/todos
-/.env.example
-/.env.example

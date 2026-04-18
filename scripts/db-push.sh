@@ -20,4 +20,4 @@ fi
 ssh "${REMOTE_HOST}" "mkdir -p /var/lib/bursa/data && cp '${REMOTE_DB}' '${REMOTE_DB}.bak-'\$(date +%s) 2>/dev/null || true"
 scp "${LOCAL_DB}" "${REMOTE_HOST}:${REMOTE_DB}"
 echo "Pushed ${LOCAL_DB} -> ${REMOTE_HOST}:${REMOTE_DB}"
-echo "You should restart the app after push: kamal app boot or kamal deploy"
+echo "You should restart the app after push: kamal deploy"

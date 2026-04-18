@@ -16,8 +16,8 @@ servers:
       volume:
         - /var/lib/bursa/data:/app/data
 
-# Use GitHub Container Registry so CI and the VPS can pull the same image
-# without relying on an SSH-tunneled local registry.
+# Publish images to GitHub Container Registry so local deploys do not
+# depend on an SSH-tunneled Docker registry.
 registry:
   server: ghcr.io
   username:

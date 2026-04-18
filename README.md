@@ -38,68 +38,67 @@ Important variables:
 
 ## Production deploy
 
-Production deploys use Kamal with config in `config/deploy.yml`.
-Images are published to GitHub Container Registry (`ghcr.io/ofrades/bursa`) and then pulled on the VPS.
+Production deploys use Kamal from your local machine.
+There is no GitHub Actions deploy.
 
 Target:
 - app URL: `https://bursa.mohshoo.com`
 - server: `mohshoo.tailf9eafe.ts.net`
 - persistent SQLite volume: `/var/lib/bursa/data`
 
-### First-time host setup
+### First-time setup
+
+1. Prepare the host:
 
 ```bash
-ssh root@mohshoo.tailf9eafe.ts.net 'mkdir -p /var/lib/bursa/data'
+bash scripts/setup-vps.sh
 ```
 
-Cloudflare Tunnel should send `bursa.mohshoo.com` traffic to `http://kamal-proxy:80` on the VPS.
-
-### Local manual deploy
-
-1. Create `.kamal/secrets` with the production secret values, plus GHCR credentials:
+2. Create local deploy secrets from the example:
 
 ```bash
-KAMAL_REGISTRY_USERNAME=your-github-username
-KAMAL_REGISTRY_PASSWORD=your-github-token-with-read:packages,write:packages
-AUTH_SECRET=...
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-OPENROUTER_API_KEY=...
-CRON_SECRET=...
-STRIPE_SECRET_KEY=...
-STRIPE_WEBHOOK_SECRET=...
-STRIPE_PRICE_CREDITS_10=...
+cp .kamal/secrets.example .kamal/secrets
+chmod 600 .kamal/secrets
 ```
 
-2. First deploy on a fresh host:
+3. Fill in `.kamal/secrets` with your real production values.
+
+4. If this host is new, run:
 
 ```bash
 kamal setup
 ```
 
-3. Deploy updates:
+Cloudflare Tunnel should send `bursa.mohshoo.com` traffic to `http://kamal-proxy:80` on the VPS.
+
+### Deploy
+
+Important: Kamal deploys from a git clone, so commit your changes first.
 
 ```bash
+git status
 kamal deploy
 ```
 
-## GitHub Actions deploy
+Useful commands:
 
-`.github/workflows/deploy.yml` builds on every PR/push to `master` and deploys on pushes to `master`.
+```bash
+kamal logs
+kamal app details
+kamal proxy details
+```
 
-Required GitHub secrets:
-- `TAILSCALE_AUTHKEY`
-- `DEPLOY_SSH_KEY`
-- `AUTH_SECRET`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `OPENROUTER_API_KEY`
-- `CRON_SECRET`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_CREDITS_10`
+### SSH note for Tailscale/MagicDNS
 
-The workflow uses the built-in `GITHUB_TOKEN` for GHCR, so no extra registry secret is required in GitHub Actions.
+If `kamal deploy` complains about a host key mismatch for the Tailscale hostname/IP pair, add this to `~/.ssh/config` on your machine:
+
+```sshconfig
+Host mohshoo.tailf9eafe.ts.net
+  CheckHostIP no
+  StrictHostKeyChecking yes
+```
+
+Then refresh the host key entry in `~/.ssh/known_hosts` if needed.
 
 ## Current production status
 
