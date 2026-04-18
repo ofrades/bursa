@@ -50,4 +50,5 @@ env:
     - STRIPE_WEBHOOK_SECRET
     - STRIPE_PRICE_CREDITS_10
 
-# Cloudflare Tunnel should target http://kamal-proxy:80 for bursa.mohshoo.com.
+# Cloudflare Tunnel should target http://127.0.0.1:80 on the VPS for
+# bursa.mohshoo.com. kamal-proxy is published on host port 80.
