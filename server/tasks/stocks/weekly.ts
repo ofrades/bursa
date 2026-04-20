@@ -19,12 +19,11 @@ export default defineTask({
   async run({ payload: _payload }) {
     console.log("[stocks:weekly] Starting weekly analysis…");
 
-    const [{ getDb }, { eq, sql }, { watchlist, weeklyRecommendation, user }] =
-      await Promise.all([
-        import("../../../src/lib/db"),
-        import("drizzle-orm"),
-        import("../../../src/lib/schema"),
-      ]);
+    const [{ getDb }, { eq, sql }, { watchlist, weeklyRecommendation, user }] = await Promise.all([
+      import("../../../src/lib/db"),
+      import("drizzle-orm"),
+      import("../../../src/lib/schema"),
+    ]);
 
     const db = await getDb();
 
@@ -40,10 +39,7 @@ export default defineTask({
 
     const { format, startOfWeek, endOfWeek } = await import("date-fns");
     const today = new Date();
-    const weekStart = format(
-      startOfWeek(today, { weekStartsOn: 1 }),
-      "yyyy-MM-dd",
-    );
+    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
     const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
 
     let done = 0,
@@ -68,12 +64,7 @@ export default defineTask({
           ).catch(() => []),
           (
             yf.quoteSummary(item.symbol, {
-              modules: [
-                "financialData",
-                "calendarEvents",
-                "assetProfile",
-                "defaultKeyStatistics",
-              ],
+              modules: ["financialData", "calendarEvents", "assetProfile", "defaultKeyStatistics"],
             }) as Promise<any>
           ).catch(() => null),
         ]);
@@ -83,8 +74,7 @@ export default defineTask({
 
         // Read existing memory
         const { stockMemory } = await import("../../../src/lib/schema");
-        const { buildInitialMemory } =
-          await import("../../../src/server/memory");
+        const { buildInitialMemory } = await import("../../../src/server/memory");
         const [memRow] = await db
           .select()
           .from(stockMemory)
@@ -156,21 +146,19 @@ Respond with:
             })
             .where(eq(weeklyRecommendation.id, existing[0].id));
         } else {
-          await db
-            .insert(weeklyRecommendation)
-            .values({
-              id: randomUUID(),
-              userId: item.userId,
-              symbol: item.symbol,
-              weekStart,
-              weekEnd,
-              signal: parsed.signal,
-              confidence: parsed.confidence,
-              reasoning: JSON.stringify(parsed),
-              priceAtRecommendation: price,
-              createdAt: now,
-              updatedAt: now,
-            });
+          await db.insert(weeklyRecommendation).values({
+            id: randomUUID(),
+            userId: item.userId,
+            symbol: item.symbol,
+            weekStart,
+            weekEnd,
+            signal: parsed.signal,
+            confidence: parsed.confidence,
+            reasoning: JSON.stringify(parsed),
+            priceAtRecommendation: price,
+            createdAt: now,
+            updatedAt: now,
+          });
         }
 
         if (memPart) {

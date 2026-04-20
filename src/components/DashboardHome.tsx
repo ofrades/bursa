@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Sparkles, TrendingUp, Users, X } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
-import { Bar, BarChart, Cell, ReferenceLine, XAxis } from "recharts";
 import {
   getWatchlist,
   removeFromWatchlist,
@@ -16,12 +15,7 @@ import type { StockAnalysis, StockMetrics } from "../lib/schema";
 import { StockSearchBar } from "./StockSearchBar";
 import { Badge, SignalBadge, type Signal } from "./ui/badge";
 import { Button } from "./ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "./ui/card";
-import { ChartContainer, type ChartConfig } from "./ui/chart";
+import { Card, CardContent } from "./ui/card";
 import { SharedAnalysisTable } from "./SharedAnalysisTable";
 
 type SharedRow = {
@@ -51,37 +45,12 @@ type Props = {
 };
 
 function pctColor(v: number | null | undefined) {
-  if (v == null) return "hsl(var(--muted-foreground))";
-  return v > 0 ? "hsl(var(--chart-2))" : v < 0 ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))";
+  if (v == null || v === 0) return "";
+  return v > 0 ? "text-emerald-500" : "text-red-500";
 }
 function pctStr(v: number | null | undefined) {
   if (v == null) return "—";
   return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
-
-const perfChartConfig = {
-  value: { label: "Performance" },
-} satisfies ChartConfig;
-
-function PerfMiniChart({ wtd, mtd, ytd }: { wtd?: number | null; mtd?: number | null; ytd?: number | null }) {
-  const data = [
-    { name: "WTD", value: wtd ?? 0 },
-    { name: "MTD", value: mtd ?? 0 },
-    { name: "YTD", value: ytd ?? 0 },
-  ];
-  return (
-    <ChartContainer config={perfChartConfig} className="h-12 w-full">
-      <BarChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-        <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-        <ReferenceLine y={0} stroke="hsl(var(--border))" />
-        <Bar dataKey="value" radius={[2, 2, 0, 0]} maxBarSize={18}>
-          {data.map((entry, i) => (
-            <Cell key={i} fill={entry.value > 0 ? "hsl(var(--chart-2))" : entry.value < 0 ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))"} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ChartContainer>
-  );
 }
 function WeekLabel() {
   const t = new Date();
@@ -129,13 +98,12 @@ export function DashboardHome({
   const reload = useCallback(async () => {
     const wl = await getWatchlist();
     const syms = wl.map((w) => w.symbol);
-    const [newAnalyses, newMetrics, newShared, freshSession] =
-      await Promise.all([
-        getMultipleAnalyses({ data: { symbols: syms } }),
-        getMultipleMetrics({ data: { symbols: syms } }),
-        getRecentSharedAnalyses(),
-        getSession(),
-      ]);
+    const [newAnalyses, newMetrics, newShared, freshSession] = await Promise.all([
+      getMultipleAnalyses({ data: { symbols: syms } }),
+      getMultipleMetrics({ data: { symbols: syms } }),
+      getRecentSharedAnalyses(),
+      getSession(),
+    ]);
     setWatchlist(wl);
     setAnalyses(newAnalyses);
     setMetrics(newMetrics);
@@ -175,8 +143,7 @@ export function DashboardHome({
         tone: "success",
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Analysis failed";
+      const message = error instanceof Error ? error.message : "Analysis failed";
       if (message === "CREDITS_REQUIRED") {
         setAnalysisToast({
           title: "Not enough credits",
@@ -219,10 +186,7 @@ export function DashboardHome({
               />
             )}
             {isAdmin ? (
-              <Badge
-                variant="outline"
-                className="text-[var(--brand)] border-[var(--brand)]/30"
-              >
+              <Badge variant="outline" className="text-[var(--brand)] border-[var(--brand)]/30">
                 Admin
               </Badge>
             ) : (
@@ -250,9 +214,8 @@ export function DashboardHome({
         >
           <div className="max-w-5xl mx-auto w-full px-6 flex items-center justify-between flex-wrap gap-2">
             <div style={{ fontSize: 13, color: "var(--fg-muted)" }}>
-              <strong style={{ color: "var(--fg)" }}>Credits:</strong>{" "}
-              {credits ?? 0} — add stocks and view shared analyses. Each
-              analysis costs 1 credit. Buy 10 credits for €1.
+              <strong style={{ color: "var(--fg)" }}>Credits:</strong> {credits ?? 0} — add stocks
+              and view shared analyses. Each analysis costs 1 credit. Buy 10 credits for €1.
             </div>
             <Button size="sm" onClick={startCheckout}>
               Buy credits →
@@ -288,18 +251,12 @@ export function DashboardHome({
               }}
             />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
-                Credits added
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Credits added</div>
               <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>
                 Your purchase completed. Credits are ready to use.
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setShowCreditsToast(false)}
-            >
+            <Button variant="ghost" size="icon-sm" onClick={() => setShowCreditsToast(false)}>
               <X size={12} />
             </Button>
           </div>
@@ -327,10 +284,7 @@ export function DashboardHome({
                 width: 10,
                 height: 10,
                 borderRadius: "50%",
-                background:
-                  analysisToast.tone === "success"
-                    ? "var(--brand)"
-                    : "var(--danger)",
+                background: analysisToast.tone === "success" ? "var(--brand)" : "var(--danger)",
                 marginTop: 4,
                 flexShrink: 0,
               }}
@@ -339,15 +293,9 @@ export function DashboardHome({
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
                 {analysisToast.title}
               </div>
-              <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>
-                {analysisToast.body}
-              </div>
+              <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>{analysisToast.body}</div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setAnalysisToast(null)}
-            >
+            <Button variant="ghost" size="icon-sm" onClick={() => setAnalysisToast(null)}>
               <X size={12} />
             </Button>
           </div>
@@ -356,10 +304,7 @@ export function DashboardHome({
 
       <main className="max-w-5xl mx-auto w-full px-6 py-6">
         <div style={{ marginBottom: 24 }}>
-          <StockSearchBar
-            onAdded={reload}
-            watchlistSymbols={watchlist.map((w) => w.symbol)}
-          />
+          <StockSearchBar onAdded={reload} watchlistSymbols={watchlist.map((w) => w.symbol)} />
         </div>
 
         <section style={{ marginBottom: 40 }}>
@@ -385,12 +330,9 @@ export function DashboardHome({
               >
                 User stocks
               </div>
-              <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
-                Your saved stocks
-              </h2>
+              <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Your saved stocks</h2>
               <p style={{ color: "var(--fg-muted)", fontSize: 14 }}>
-                These are your personal saved stocks. Click a card to open its
-                detail page.
+                These are your personal saved stocks. Click a card to open its detail page.
               </p>
             </div>
           </div>
@@ -402,7 +344,10 @@ export function DashboardHome({
               <p className="text-sm">Search above to add stocks.</p>
             </Card>
           ) : (
-            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+            <div
+              className="grid gap-3"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}
+            >
               {watchlist.map(({ symbol, name }) => {
                 const analysis = analyses.find((a) => a.symbol === symbol);
                 const m = metrics.find((x) => x.symbol === symbol);
@@ -417,93 +362,67 @@ export function DashboardHome({
                     params={{ symbol }}
                     className="block no-underline"
                   >
-                    <Card className="cursor-pointer transition-colors hover:bg-muted/40 h-full">
-                      <CardHeader className="flex flex-row items-start justify-between gap-2 p-3 pb-2">
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-sm leading-none">{symbol}</span>
-                            {analysis ? (
-                              <SignalBadge signal={analysis.signal as Signal} />
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] py-0 h-4">No analysis</Badge>
-                            )}
-                            {sharedByCommunity && (
-                              <Badge variant="outline" className="text-[10px] py-0 h-4 gap-0.5">
-                                <Users className="size-2.5" /> community
-                              </Badge>
-                            )}
-                          </div>
-                          <span className="text-xs text-muted-foreground truncate max-w-[160px]">{name ?? "—"}</span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="shrink-0 -mt-0.5"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleRemove(symbol);
-                          }}
-                        >
-                          {removing === symbol ? (
-                            <Loader2 className="spin" />
+                    <Card className="cursor-pointer transition-colors hover:bg-muted/40">
+                      <CardContent className="p-2.5 flex flex-col gap-1.5">
+                        {/* Row 1: symbol + signal + name + remove */}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-bold text-sm leading-none shrink-0">{symbol}</span>
+                          {analysis ? (
+                            <SignalBadge signal={analysis.signal as Signal} />
                           ) : (
-                            <X />
+                            <Badge variant="outline" className="text-[10px] py-0 h-4 shrink-0">
+                              —
+                            </Badge>
                           )}
-                        </Button>
-                      </CardHeader>
+                          {sharedByCommunity && (
+                            <Users className="size-3 text-muted-foreground shrink-0" />
+                          )}
+                          <span className="text-xs text-muted-foreground truncate flex-1">
+                            {name ?? ""}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="shrink-0 size-5 ml-auto"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRemove(symbol);
+                            }}
+                          >
+                            {removing === symbol ? <Loader2 className="spin" /> : <X />}
+                          </Button>
+                        </div>
 
-                      <CardContent className="px-3 pb-3 pt-0 flex flex-col gap-2">
-                        {/* Mini performance chart */}
-                        <PerfMiniChart wtd={m?.perfWtd} mtd={m?.perfMtd} ytd={m?.perfYtd} />
-
-                        {/* Perf values row */}
-                        <div className="grid grid-cols-3 gap-1 text-center">
+                        {/* Row 2: perf stats + analyze button */}
+                        <div className="flex items-center gap-2">
                           {(["WTD", "MTD", "YTD"] as const).map((label, i) => {
                             const val = [m?.perfWtd, m?.perfMtd, m?.perfYtd][i];
                             return (
-                              <div key={label} className="flex flex-col gap-0.5">
+                              <div key={label} className="flex items-baseline gap-0.5">
                                 <span className="text-[10px] text-muted-foreground">{label}</span>
-                                <span className="text-xs font-semibold" style={{ color: pctColor(val) }}>
+                                <span
+                                  className={`text-xs font-semibold tabular-nums ${pctColor(val)}`}
+                                >
                                   {pctStr(val)}
                                 </span>
                               </div>
                             );
                           })}
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            className="h-6 w-6 ml-auto shrink-0"
+                            disabled={analyzing === symbol || removing === symbol}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleAnalyze(symbol);
+                            }}
+                          >
+                            {analyzing === symbol ? <Loader2 className="spin" /> : <Sparkles />}
+                          </Button>
                         </div>
-
-                        {/* Analyze button */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full h-7 text-xs mt-0.5"
-                          disabled={analyzing === symbol || removing === symbol}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleAnalyze(symbol);
-                          }}
-                        >
-                          {analyzing === symbol ? (
-                            <Loader2 data-icon="inline-start" className="spin" />
-                          ) : (
-                            <Sparkles data-icon="inline-start" />
-                          )}
-                          {analyzing === symbol
-                            ? "Analyzing…"
-                            : analysis
-                              ? "Refresh"
-                              : "Run analysis"}
-                          {!isAdmin && !analyzing && (
-                            <span className="ml-auto text-muted-foreground text-[10px]">1 cr</span>
-                          )}
-                        </Button>
-
-                        {analysis?.updatedAt && (
-                          <p className="text-[10px] text-muted-foreground text-center -mt-1">
-                            Updated {new Date(analysis.updatedAt).toLocaleDateString()}
-                          </p>
-                        )}
                       </CardContent>
                     </Card>
                   </Link>
@@ -540,8 +459,7 @@ export function DashboardHome({
                 Recent community analysis
               </h2>
               <p style={{ color: "var(--fg-muted)", fontSize: 14 }}>
-                Global shared analysis across the platform. Click a row to open
-                its detail page.
+                Global shared analysis across the platform. Click a row to open its detail page.
               </p>
             </div>
           </div>

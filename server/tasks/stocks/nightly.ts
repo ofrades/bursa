@@ -24,28 +24,18 @@ export default defineTask({
   async run() {
     console.log("[stocks:nightly] Starting…");
 
-    const [{ getDb }, { eq, or, lte, isNull, inArray, sql }, schema] =
-      await Promise.all([
-        import("../../../src/lib/db"),
-        import("drizzle-orm"),
-        import("../../../src/lib/schema"),
-      ]);
-    const {
-      stock,
-      watchlist,
-      stockAnalysis,
-      stockMemory,
-      stockMetrics,
-      dailySignal,
-    } = schema;
+    const [{ getDb }, { eq, or, lte, isNull, inArray, sql }, schema] = await Promise.all([
+      import("../../../src/lib/db"),
+      import("drizzle-orm"),
+      import("../../../src/lib/schema"),
+    ]);
+    const { stock, watchlist, stockAnalysis, stockMemory, stockMetrics, dailySignal } = schema;
 
     const db = await getDb();
     const now = new Date();
 
     // All distinct symbols that any user has added — analysis is shared
-    const watchlistSymbols = await db
-      .select({ symbol: watchlist.symbol })
-      .from(watchlist);
+    const watchlistSymbols = await db.select({ symbol: watchlist.symbol }).from(watchlist);
     const allSymbols = [...new Set(watchlistSymbols.map((s) => s.symbol))];
 
     if (!allSymbols.length) {
@@ -66,10 +56,7 @@ export default defineTask({
     );
 
     const { format, startOfWeek, endOfWeek } = await import("date-fns");
-    const weekStart = format(
-      startOfWeek(now, { weekStartsOn: 1 }),
-      "yyyy-MM-dd",
-    );
+    const weekStart = format(startOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd");
     const weekEnd = format(endOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd");
 
     const { default: YahooFinance } = await import("yahoo-finance2");
@@ -108,18 +95,14 @@ export default defineTask({
         ]);
 
         const price: number = quote.regularMarketPrice ?? 0;
-        const earningsRaw =
-          summary?.calendarEvents?.earnings?.earningsDate?.[0];
+        const earningsRaw = summary?.calendarEvents?.earnings?.earningsDate?.[0];
         const earningsDate = earningsRaw ? new Date(earningsRaw) : null;
 
         // Compute metrics
         const metrics = await refreshStockMetrics(symbol);
 
         // Read memory
-        const [memRow] = await db
-          .select()
-          .from(stockMemory)
-          .where(eq(stockMemory.symbol, symbol));
+        const [memRow] = await db.select().from(stockMemory).where(eq(stockMemory.symbol, symbol));
         const memory = memRow?.content ?? buildInitialMemory(symbol);
 
         const metricsStr = `WTD: ${metrics.perfWtd?.toFixed(1) ?? "N/A"}% | Last week: ${metrics.perfLastWeek?.toFixed(1) ?? "N/A"}%
@@ -127,17 +110,11 @@ MTD: ${metrics.perfMtd?.toFixed(1) ?? "N/A"}% | Last month: ${metrics.perfLastMo
 YTD: ${metrics.perfYtd?.toFixed(1) ?? "N/A"}% | Last year: ${metrics.perfLastYear?.toFixed(1) ?? "N/A"}%
 Momentum: ${metrics.momentumSignal?.toUpperCase() ?? "UNKNOWN"}`;
 
-        const closes = (historical as any[])
-          .map((h: any) => h.close)
-          .filter(Boolean) as number[];
+        const closes = (historical as any[]).map((h: any) => h.close).filter(Boolean) as number[];
         const sma20 =
-          closes.length >= 20
-            ? closes.slice(-20).reduce((a, b) => a + b, 0) / 20
-            : null;
+          closes.length >= 20 ? closes.slice(-20).reduce((a, b) => a + b, 0) / 20 : null;
         const sma50 =
-          closes.length >= 50
-            ? closes.slice(-50).reduce((a, b) => a + b, 0) / 50
-            : null;
+          closes.length >= 50 ? closes.slice(-50).reduce((a, b) => a + b, 0) / 50 : null;
 
         const prompt = `You are an expert stock analyst with persistent memory.
 
@@ -202,20 +179,18 @@ Respond with:
             })
             .where(eq(stockAnalysis.id, recId));
         } else {
-          await db
-            .insert(stockAnalysis)
-            .values({
-              id: recId,
-              symbol,
-              weekStart,
-              weekEnd,
-              signal: parsed.signal,
-              confidence: parsed.confidence,
-              reasoning: JSON.stringify(parsed),
-              priceAtAnalysis: price,
-              createdAt: now,
-              updatedAt: now,
-            });
+          await db.insert(stockAnalysis).values({
+            id: recId,
+            symbol,
+            weekStart,
+            weekEnd,
+            signal: parsed.signal,
+            confidence: parsed.confidence,
+            reasoning: JSON.stringify(parsed),
+            priceAtAnalysis: price,
+            createdAt: now,
+            updatedAt: now,
+          });
         }
 
         // Update memory
@@ -232,8 +207,7 @@ Respond with:
         // Set next_check_at
         let nextCheckAt: Date;
         if (earningsDate) {
-          const daysUntil =
-            (earningsDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+          const daysUntil = (earningsDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
           if (daysUntil > 0 && daysUntil <= 3) {
             nextCheckAt = new Date(earningsDate);
             nextCheckAt.setDate(nextCheckAt.getDate() - 1);
@@ -268,9 +242,7 @@ Respond with:
       }
     }
 
-    console.log(
-      `[stocks:nightly] Done. ${done} analyzed, ${skipped} skipped, ${failed} failed.`,
-    );
+    console.log(`[stocks:nightly] Done. ${done} analyzed, ${skipped} skipped, ${failed} failed.`);
     return { result: "ok", done, skipped, failed };
   },
 });

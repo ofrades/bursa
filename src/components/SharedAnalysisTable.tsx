@@ -12,14 +12,7 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "#/lib/utils";
 
 import { type Signal, SignalBadge } from "./ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 export type SharedAnalysisRow = {
   symbol: string;
@@ -35,11 +28,7 @@ export type SharedAnalysisRow = {
 
 function pctColor(v: number | null | undefined) {
   if (v == null) return "text-muted-foreground";
-  return v > 0
-    ? "text-emerald-500"
-    : v < 0
-      ? "text-red-400"
-      : "text-muted-foreground";
+  return v > 0 ? "text-emerald-500" : v < 0 ? "text-red-400" : "text-muted-foreground";
 }
 
 function pctStr(v: number | null | undefined) {
@@ -74,17 +63,13 @@ function SortableHeader({
 }
 
 export function SharedAnalysisTable({ rows }: { rows: SharedAnalysisRow[] }) {
-  const [sorting, setSorting] = React.useState<SortingState>([
-    { id: "updatedAt", desc: true },
-  ]);
+  const [sorting, setSorting] = React.useState<SortingState>([{ id: "updatedAt", desc: true }]);
 
   const columns = React.useMemo<ColumnDef<SharedAnalysisRow>[]>(
     () => [
       {
         accessorKey: "symbol",
-        header: ({ column }) => (
-          <SortableHeader column={column} title="Symbol" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} title="Symbol" />,
         cell: ({ row }) => (
           <Link
             to="/$symbol"
@@ -105,9 +90,7 @@ export function SharedAnalysisTable({ rows }: { rows: SharedAnalysisRow[] }) {
       },
       {
         accessorKey: "signal",
-        header: ({ column }) => (
-          <SortableHeader column={column} title="Signal" align="center" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} title="Signal" align="center" />,
         cell: ({ row }) => (
           <div className="flex justify-center">
             <SignalBadge signal={row.original.signal as Signal} />
@@ -116,74 +99,51 @@ export function SharedAnalysisTable({ rows }: { rows: SharedAnalysisRow[] }) {
       },
       {
         accessorKey: "confidence",
-        header: ({ column }) => (
-          <SortableHeader column={column} title="Conf." align="center" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} title="Conf." align="center" />,
         cell: ({ row }) => (
           <div className="text-center text-muted-foreground">
-            {row.original.confidence != null
-              ? `${row.original.confidence}%`
-              : "—"}
+            {row.original.confidence != null ? `${row.original.confidence}%` : "—"}
           </div>
         ),
       },
       {
         accessorKey: "perfWtd",
-        header: ({ column }) => (
-          <SortableHeader column={column} title="WTD" align="center" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} title="WTD" align="center" />,
         cell: ({ row }) => (
-          <div
-            className={`text-center font-semibold ${pctColor(row.original.perfWtd)}`}
-          >
+          <div className={`text-center font-semibold ${pctColor(row.original.perfWtd)}`}>
             {pctStr(row.original.perfWtd)}
           </div>
         ),
       },
       {
         accessorKey: "perfMtd",
-        header: ({ column }) => (
-          <SortableHeader column={column} title="MTD" align="center" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} title="MTD" align="center" />,
         cell: ({ row }) => (
-          <div
-            className={`text-center font-semibold ${pctColor(row.original.perfMtd)}`}
-          >
+          <div className={`text-center font-semibold ${pctColor(row.original.perfMtd)}`}>
             {pctStr(row.original.perfMtd)}
           </div>
         ),
       },
       {
         accessorKey: "perfYtd",
-        header: ({ column }) => (
-          <SortableHeader column={column} title="YTD" align="center" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} title="YTD" align="center" />,
         cell: ({ row }) => (
-          <div
-            className={`text-center font-semibold ${pctColor(row.original.perfYtd)}`}
-          >
+          <div className={`text-center font-semibold ${pctColor(row.original.perfYtd)}`}>
             {pctStr(row.original.perfYtd)}
           </div>
         ),
       },
       {
         accessorKey: "updatedAt",
-        header: ({ column }) => (
-          <SortableHeader column={column} title="Updated" align="center" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} title="Updated" align="center" />,
         sortingFn: (a, b, id) => {
           const av = a.getValue<Date | null>(id);
           const bv = b.getValue<Date | null>(id);
-          return (
-            (av ? new Date(av).getTime() : 0) -
-            (bv ? new Date(bv).getTime() : 0)
-          );
+          return (av ? new Date(av).getTime() : 0) - (bv ? new Date(bv).getTime() : 0);
         },
         cell: ({ row }) => (
           <div className="text-center text-muted-foreground">
-            {row.original.updatedAt
-              ? new Date(row.original.updatedAt).toLocaleDateString()
-              : "—"}
+            {row.original.updatedAt ? new Date(row.original.updatedAt).toLocaleDateString() : "—"}
           </div>
         ),
       },
@@ -209,10 +169,7 @@ export function SharedAnalysisTable({ rows }: { rows: SharedAnalysisRow[] }) {
               <TableHead key={header.id}>
                 {header.isPlaceholder
                   ? null
-                  : flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )}
+                  : flexRender(header.column.columnDef.header, header.getContext())}
               </TableHead>
             ))}
           </TableRow>

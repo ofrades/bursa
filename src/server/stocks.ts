@@ -5,6 +5,7 @@ import {
   stockMetrics,
   stockAnalysis,
   dailySignal,
+  supervisorAlert,
   watchlist,
 } from "../lib/schema";
 import { authMiddleware } from "./middleware";
@@ -42,22 +43,12 @@ export const getMultipleMetrics = createServerFn({ method: "GET" })
     const existingBySymbol = new Map(existing.map((m) => [m.symbol, m]));
     const staleOrMissing = data.symbols.filter((symbol) => {
       const row = existingBySymbol.get(symbol);
-      return (
-        !row ||
-        row.perfWtd == null ||
-        row.perfMtd == null ||
-        row.perfYtd == null
-      );
+      return !row || row.perfWtd == null || row.perfMtd == null || row.perfYtd == null;
     });
     if (staleOrMissing.length) {
-      await Promise.allSettled(
-        staleOrMissing.map((s) => refreshStockMetrics(s)),
-      );
+      await Promise.allSettled(staleOrMissing.map((s) => refreshStockMetrics(s)));
     }
-    return db
-      .select()
-      .from(stockMetrics)
-      .where(inArray(stockMetrics.symbol, data.symbols));
+    return db.select().from(stockMetrics).where(inArray(stockMetrics.symbol, data.symbols));
   });
 
 // ─── Analysis (global — shared across all users) ─────────────────────────────
@@ -111,18 +102,10 @@ export const getStockPageData = createServerFn({ method: "GET" })
     ]);
 
     let metrics = metricsRow[0] ?? null;
-    if (
-      !metrics ||
-      metrics.perfWtd == null ||
-      metrics.perfMtd == null ||
-      metrics.perfYtd == null
-    ) {
+    if (!metrics || metrics.perfWtd == null || metrics.perfMtd == null || metrics.perfYtd == null) {
       const { refreshStockMetrics } = await import("../lib/metrics");
       await refreshStockMetrics(symbol);
-      const refreshed = await db
-        .select()
-        .from(stockMetrics)
-        .where(eq(stockMetrics.symbol, symbol));
+      const refreshed = await db.select().from(stockMetrics).where(eq(stockMetrics.symbol, symbol));
       metrics = refreshed[0] ?? null;
     }
 
@@ -135,12 +118,22 @@ export const getStockPageData = createServerFn({ method: "GET" })
           .orderBy(desc(dailySignal.date), desc(dailySignal.createdAt))
       : [];
 
+    // Latest supervisor alerts (one per supervisor, from most recent analysis)
+    const supervisorAlertsForLatest = latestAnalysis
+      ? await db
+          .select()
+          .from(supervisorAlert)
+          .where(eq(supervisorAlert.stockAnalysisId, latestAnalysis.id))
+          .orderBy(desc(supervisorAlert.createdAt))
+      : [];
+
     return {
       stock: stockRow[0] ?? null,
       metrics,
       latestAnalysis,
       analysisHistory: analysisRows,
       dailySignals: dailySignalsForLatest,
+      supervisorAlerts: supervisorAlertsForLatest,
     };
   });
 
@@ -194,9 +187,7 @@ export const getWatchlist = createServerFn({ method: "GET" })
 
 export const addToWatchlist = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .inputValidator(
-    (data: { symbol: string; name?: string; exchange?: string }) => data,
-  )
+  .inputValidator((data: { symbol: string; name?: string; exchange?: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = (context ?? {}) as { session: { sub: string } | null };
     const { getDb } = await import("../lib/db");
@@ -223,11 +214,6 @@ export const removeFromWatchlist = createServerFn({ method: "POST" })
     const { and } = await import("drizzle-orm");
     await db
       .delete(watchlist)
-      .where(
-        and(
-          eq(watchlist.userId, session.sub),
-          eq(watchlist.symbol, data.symbol),
-        ),
-      );
+      .where(and(eq(watchlist.userId, session.sub), eq(watchlist.symbol, data.symbol)));
     return { ok: true };
   });

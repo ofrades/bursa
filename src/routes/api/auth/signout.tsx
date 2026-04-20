@@ -1,14 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { clearSessionCookie } from '../../../lib/session'
+import { createFileRoute } from "@tanstack/react-router";
+import { clearSessionCookie } from "../../../lib/session";
 
-export const Route = createFileRoute('/api/auth/signout')({
+export const Route = createFileRoute("/api/auth/signout")({
   server: {
     handlers: {
       POST: () =>
         new Response(null, {
           status: 302,
-          headers: { Location: '/', 'Set-Cookie': clearSessionCookie() },
+          headers: { Location: "/", "Set-Cookie": clearSessionCookie() },
         }),
     },
   },
-})
+});

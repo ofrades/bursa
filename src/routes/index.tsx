@@ -116,7 +116,9 @@ function HomePage() {
                 <TrendingUp className="size-8 text-muted-foreground/40" />
                 <div>
                   <p className="text-sm font-medium mb-1">No shared analyses yet</p>
-                  <p className="text-sm text-muted-foreground">Sign in and add a stock to run the first one.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Sign in and add a stock to run the first one.
+                  </p>
                 </div>
               </div>
             ) : (

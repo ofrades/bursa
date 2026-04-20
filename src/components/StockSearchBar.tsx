@@ -55,8 +55,7 @@ export function StockSearchBar({ onAdded, watchlistSymbols }: Props) {
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
-        setOpen(false);
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
@@ -95,11 +94,7 @@ export function StockSearchBar({ onAdded, watchlistSymbols }: Props) {
             pointerEvents: "none",
           }}
         >
-          {loading ? (
-            <Loader2 size={15} className="spin" />
-          ) : (
-            <Search size={15} />
-          )}
+          {loading ? <Loader2 size={15} className="spin" /> : <Search size={15} />}
         </span>
         <Input
           style={{ paddingLeft: 38 }}
@@ -110,11 +105,7 @@ export function StockSearchBar({ onAdded, watchlistSymbols }: Props) {
           autoComplete="off"
         />
       </div>
-      {error && (
-        <p style={{ fontSize: 12, color: "var(--danger)", marginTop: 6 }}>
-          {error}
-        </p>
-      )}
+      {error && <p style={{ fontSize: 12, color: "var(--danger)", marginTop: 6 }}>{error}</p>}
       {open && results.length > 0 && (
         <div
           style={{
@@ -167,9 +158,7 @@ export function StockSearchBar({ onAdded, watchlistSymbols }: Props) {
                     </span>
                   </div>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>
-                      {r.symbol}
-                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{r.symbol}</div>
                     <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>
                       {r.shortname ?? r.longname ?? "—"} · {r.exchDisp}
                     </div>

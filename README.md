@@ -20,6 +20,7 @@ vp test
 ```
 
 Notes:
+
 - `vp test` currently exits non-zero when there are no test files.
 - `vp check` currently reports existing formatting issues across the repo.
 
@@ -28,6 +29,7 @@ Notes:
 Copy `.env.example` to `.env` and fill in the values you need.
 
 Important variables:
+
 - `AUTH_SECRET`
 - `DB_PATH`
 - `GOOGLE_CLIENT_ID`
@@ -42,6 +44,7 @@ Production deploys use Kamal from your local machine.
 There is no GitHub Actions deploy.
 
 Target:
+
 - app URL: `https://bursa.mohshoo.com`
 - server: `mohshoo.tailf9eafe.ts.net`
 - persistent SQLite volume: `/var/lib/bursa/data`

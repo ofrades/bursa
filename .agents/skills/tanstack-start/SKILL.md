@@ -47,24 +47,22 @@ my-app/
 ### Configuration (`app.config.ts`)
 
 ```typescript
-import { defineConfig } from '@tanstack/react-start/config'
-import viteTsConfigPaths from 'vite-tsconfig-paths'
+import { defineConfig } from "@tanstack/react-start/config";
+import viteTsConfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   vite: {
-    plugins: [
-      viteTsConfigPaths({ projects: ['./tsconfig.json'] }),
-    ],
+    plugins: [viteTsConfigPaths({ projects: ["./tsconfig.json"] })],
   },
   server: {
-    preset: 'node-server', // 'vercel' | 'netlify' | 'cloudflare-pages' | etc.
+    preset: "node-server", // 'vercel' | 'netlify' | 'cloudflare-pages' | etc.
   },
   tsr: {
-    appDirectory: './app',
-    routesDirectory: './app/routes',
-    generatedRouteTree: './app/routeTree.gen.ts',
+    appDirectory: "./app",
+    routesDirectory: "./app/routes",
+    generatedRouteTree: "./app/routeTree.gen.ts",
   },
-})
+});
 ```
 
 ## Server Functions (`createServerFn`)
@@ -74,41 +72,40 @@ Server functions provide type-safe RPC calls between client and server.
 ### Basic Server Functions
 
 ```typescript
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn } from "@tanstack/react-start";
 
 // GET (data fetching, cacheable)
-const getUsers = createServerFn()
-  .handler(async () => {
-    const users = await db.query.users.findMany()
-    return users
-  })
+const getUsers = createServerFn().handler(async () => {
+  const users = await db.query.users.findMany();
+  return users;
+});
 
 // POST (mutations, side effects)
-const createUser = createServerFn({ method: 'POST' })
+const createUser = createServerFn({ method: "POST" })
   .validator((data: { name: string; email: string }) => data)
   .handler(async ({ data }) => {
-    const user = await db.insert(users).values(data).returning()
-    return user
-  })
+    const user = await db.insert(users).values(data).returning();
+    return user;
+  });
 ```
 
 ### With Zod Validation
 
 ```typescript
-import { z } from 'zod'
+import { z } from "zod";
 
-const updateUser = createServerFn({ method: 'POST' })
+const updateUser = createServerFn({ method: "POST" })
   .validator(
     z.object({
       id: z.string(),
       name: z.string().min(1),
       email: z.string().email(),
-    })
+    }),
   )
   .handler(async ({ data }) => {
     // data is fully typed: { id: string; name: string; email: string }
-    return await db.update(users).set(data).where(eq(users.id, data.id))
-  })
+    return await db.update(users).set(data).where(eq(users.id, data.id));
+  });
 ```
 
 ## Middleware
@@ -116,30 +113,30 @@ const updateUser = createServerFn({ method: 'POST' })
 ### Creating Middleware
 
 ```typescript
-import { createMiddleware } from '@tanstack/react-start'
+import { createMiddleware } from "@tanstack/react-start";
 
 const loggingMiddleware = createMiddleware().handler(async ({ next }) => {
-  console.log('Request started')
-  const result = await next()
-  console.log('Request completed')
-  return result
-})
+  console.log("Request started");
+  const result = await next();
+  console.log("Request completed");
+  return result;
+});
 ```
 
 ### Auth Middleware with Context
 
 ```typescript
 const authMiddleware = createMiddleware().handler(async ({ next }) => {
-  const request = getWebRequest()
-  const session = await getSession(request)
+  const request = getWebRequest();
+  const session = await getSession(request);
 
   if (!session?.user) {
-    throw redirect({ to: '/login' })
+    throw redirect({ to: "/login" });
   }
 
   // Pass typed context to handler
-  return next({ context: { user: session.user } })
-})
+  return next({ context: { user: session.user } });
+});
 ```
 
 ### Chaining Middleware
@@ -149,38 +146,38 @@ const adminMiddleware = createMiddleware()
   .middleware([authMiddleware])
   .handler(async ({ next, context }) => {
     // context.user is typed from authMiddleware
-    if (context.user.role !== 'admin') {
-      throw redirect({ to: '/unauthorized' })
+    if (context.user.role !== "admin") {
+      throw redirect({ to: "/unauthorized" });
     }
-    return next({ context: { isAdmin: true } })
-  })
+    return next({ context: { isAdmin: true } });
+  });
 
 // Usage
-const adminAction = createServerFn({ method: 'POST' })
+const adminAction = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .handler(async ({ context }) => {
     // context: { user: User; isAdmin: boolean }
-    return { success: true }
-  })
+    return { success: true };
+  });
 ```
 
 ## API Routes (Server Routes)
 
 ```typescript
 // app/routes/api/users.ts
-import { createAPIFileRoute } from '@tanstack/react-start/api'
+import { createAPIFileRoute } from "@tanstack/react-start/api";
 
-export const APIRoute = createAPIFileRoute('/api/users')({
+export const APIRoute = createAPIFileRoute("/api/users")({
   GET: async ({ request }) => {
-    const users = await db.query.users.findMany()
-    return Response.json(users)
+    const users = await db.query.users.findMany();
+    return Response.json(users);
   },
   POST: async ({ request }) => {
-    const body = await request.json()
-    const user = await db.insert(users).values(body).returning()
-    return new Response(JSON.stringify(user), { status: 201 })
+    const body = await request.json();
+    const user = await db.insert(users).values(body).returning();
+    return new Response(JSON.stringify(user), { status: 201 });
   },
-})
+});
 ```
 
 ## SSR Strategies
@@ -219,7 +216,7 @@ function Dashboard() {
 // app.config.ts
 export default defineConfig({
   server: {
-    preset: 'node-server',        // Self-hosted Node.js
+    preset: "node-server", // Self-hosted Node.js
     // preset: 'vercel',          // Vercel
     // preset: 'netlify',         // Netlify
     // preset: 'cloudflare-pages', // Cloudflare Pages
@@ -227,7 +224,7 @@ export default defineConfig({
     // preset: 'deno-server',     // Deno Deploy
     // preset: 'bun',             // Bun
   },
-})
+});
 ```
 
 ## Best Practices
