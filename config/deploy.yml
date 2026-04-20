@@ -41,7 +41,7 @@ env:
     NODE_ENV: production
     BETTER_AUTH_URL: https://bursa.mohshoo.com
     DB_PATH: /app/data/stocktrack.sqlite
-    AI_MODEL: google/gemini-2.0-flash-001
+    AI_MODEL: moonshotai/kimi-k2.5
   secret:
     - AUTH_SECRET
     - GOOGLE_CLIENT_ID
