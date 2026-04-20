@@ -224,18 +224,29 @@ Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 
 // ─── AI call ──────────────────────────────────────────────────────────────────
 
+const AI_MODEL = process.env.AI_MODEL ?? "google/gemini-2.0-flash-001";
+const AI_TIMEOUT_MS = 90_000; // 90s — well under Cloudflare's 100s gateway timeout
+
 async function callAI(prompt: string): Promise<string> {
   const { chat } = await import("@tanstack/ai");
   const { createOpenaiChat } = await import("@tanstack/ai-openai");
-  const adapter = createOpenaiChat("z-ai/glm-5.1" as any, process.env.OPENROUTER_API_KEY ?? "", {
+  const adapter = createOpenaiChat(AI_MODEL as any, process.env.OPENROUTER_API_KEY ?? "", {
     baseURL: "https://openrouter.ai/api/v1",
   });
-  return chat({
-    adapter,
-    messages: [{ role: "user", content: prompt }],
-    stream: false,
-    maxTokens: 4000,
-  });
+
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("AI call timed out after 90s")), AI_TIMEOUT_MS),
+  );
+
+  return Promise.race([
+    chat({
+      adapter,
+      messages: [{ role: "user", content: prompt }],
+      stream: false,
+      maxTokens: 4000,
+    }),
+    timeout,
+  ]);
 }
 
 // ─── Memory helpers ───────────────────────────────────────────────────────────
