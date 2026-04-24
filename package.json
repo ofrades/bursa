@@ -13,6 +13,9 @@
     "test": "vitest run",
     "db:pull": "./scripts/db-pull.sh",
     "db:push": "./scripts/db-push.sh",
+    "db:diff": "./scripts/db-sync.sh",
+    "db:merge": "./scripts/db-sync.sh --merge",
+    "db:merge:push": "./scripts/db-sync.sh --merge --push",
     "start": "node .output/server/index.mjs"
   },
   "dependencies": {

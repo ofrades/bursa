@@ -13,6 +13,8 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
+.tmp/
+
 
 data/*.sqlite
 data/*.sqlite-*
