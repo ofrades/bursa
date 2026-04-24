@@ -31,29 +31,31 @@ export function Pagination({ page, pageCount, onPageChange, className }: Paginat
   const visible = getVisiblePages();
 
   return (
-    <div className={cn("flex items-center justify-center gap-1", className)}>
+    <div className={cn("flex items-center gap-1.5", className)}>
       <Button
         variant="outline"
-        size="icon-sm"
+        size="sm"
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
         aria-label="Previous page"
+        className="h-8 w-8 px-0"
       >
         <ChevronLeft className="size-4" />
       </Button>
       {visible.map((item, i) =>
         item === "ellipsis" ? (
-          <span key={`ellipsis-${i}`} className="flex size-8 items-center justify-center text-muted-foreground">
+          <span key={`ellipsis-${i}`} className="flex h-8 w-8 items-center justify-center text-muted-foreground">
             <MoreHorizontal className="size-4" />
           </span>
         ) : (
           <Button
             key={item}
             variant={item === page ? "default" : "outline"}
-            size="icon-sm"
+            size="sm"
             onClick={() => onPageChange(item)}
             aria-label={`Page ${item}`}
             aria-current={item === page ? "page" : undefined}
+            className="h-8 min-w-8 px-2"
           >
             {item}
           </Button>
@@ -61,10 +63,11 @@ export function Pagination({ page, pageCount, onPageChange, className }: Paginat
       )}
       <Button
         variant="outline"
-        size="icon-sm"
+        size="sm"
         onClick={() => onPageChange(page + 1)}
         disabled={page >= pageCount}
         aria-label="Next page"
+        className="h-8 w-8 px-0"
       >
         <ChevronRight className="size-4" />
       </Button>

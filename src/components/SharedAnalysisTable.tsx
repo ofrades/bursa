@@ -176,7 +176,7 @@ export function SharedAnalysisTable({
   const currentPage = table.getState().pagination.pageIndex + 1;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col">
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -203,11 +203,18 @@ export function SharedAnalysisTable({
           ))}
         </TableBody>
       </Table>
-      <Pagination
-        page={currentPage}
-        pageCount={pageCount}
-        onPageChange={(p) => table.setPageIndex(p - 1)}
-      />
+      <div className="flex items-center justify-between border-t px-4 py-3">
+        <span className="text-xs text-muted-foreground">
+          {rows.length > 0
+            ? `Page ${currentPage} of ${pageCount} · ${rows.length} total`
+            : "No results"}
+        </span>
+        <Pagination
+          page={currentPage}
+          pageCount={pageCount}
+          onPageChange={(p) => table.setPageIndex(p - 1)}
+        />
+      </div>
     </div>
   );
 }
