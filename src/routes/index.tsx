@@ -1,12 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { TrendingUp, Search } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
-import {
-  getRecentSharedAnalyses,
-  getWatchlist,
-  getMultipleAnalyses,
-  getMultipleMetrics,
-} from "../server/stocks";
+import { getRecentSharedAnalyses, getWatchlist, getMultipleAnalyses } from "../server/stocks";
 import { DashboardHome } from "../components/DashboardHome";
 import { SharedAnalysisTable } from "../components/SharedAnalysisTable";
 import { Button } from "../components/ui/button";
@@ -22,17 +17,13 @@ export const Route = createFileRoute("/")({
 
     const watchlist = await getWatchlist();
     const symbols = watchlist.map((w) => w.symbol);
-    const [myAnalyses, myMetrics] = await Promise.all([
-      getMultipleAnalyses({ data: { symbols } }),
-      getMultipleMetrics({ data: { symbols } }),
-    ]);
+    const myAnalyses = await getMultipleAnalyses({ data: { symbols } });
 
     return {
       mode: "dashboard" as const,
       analyses,
       watchlist,
       myAnalyses,
-      myMetrics,
     };
   },
   component: HomePage,
@@ -60,7 +51,6 @@ function HomePage() {
         isAdmin={isAdmin}
         initialWatchlist={data.watchlist}
         initialAnalyses={data.myAnalyses}
-        initialMetrics={data.myMetrics}
         initialShared={data.analyses}
       />
     );

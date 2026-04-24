@@ -90,9 +90,8 @@ export const getStockPageData = createServerFn({ method: "GET" })
     const db = await getDb();
     const symbol = data.symbol.toUpperCase();
 
-    const [stockRow, metricsRow, analysisRows] = await Promise.all([
+    const [stockRow, analysisRows] = await Promise.all([
       db.select().from(stock).where(eq(stock.symbol, symbol)),
-      db.select().from(stockMetrics).where(eq(stockMetrics.symbol, symbol)),
       db
         .select()
         .from(stockAnalysis)
@@ -100,14 +99,6 @@ export const getStockPageData = createServerFn({ method: "GET" })
         .orderBy(desc(stockAnalysis.weekStart), desc(stockAnalysis.updatedAt))
         .limit(6),
     ]);
-
-    let metrics = metricsRow[0] ?? null;
-    if (!metrics || metrics.perfWtd == null || metrics.perfMtd == null || metrics.perfYtd == null) {
-      const { refreshStockMetrics } = await import("../lib/metrics");
-      await refreshStockMetrics(symbol);
-      const refreshed = await db.select().from(stockMetrics).where(eq(stockMetrics.symbol, symbol));
-      metrics = refreshed[0] ?? null;
-    }
 
     const latestAnalysis = analysisRows[0] ?? null;
     const dailySignalsForLatest = latestAnalysis
@@ -129,7 +120,6 @@ export const getStockPageData = createServerFn({ method: "GET" })
 
     return {
       stock: stockRow[0] ?? null,
-      metrics,
       latestAnalysis,
       analysisHistory: analysisRows,
       dailySignals: dailySignalsForLatest,
@@ -150,14 +140,9 @@ export const getRecentSharedAnalyses = createServerFn({
       confidence: stockAnalysis.confidence,
       updatedAt: stockAnalysis.updatedAt,
       name: stock.name,
-      perfWtd: stockMetrics.perfWtd,
-      perfMtd: stockMetrics.perfMtd,
-      perfYtd: stockMetrics.perfYtd,
-      nextEarningsDate: stockMetrics.nextEarningsDate,
     })
     .from(stockAnalysis)
     .leftJoin(stock, eq(stockAnalysis.symbol, stock.symbol))
-    .leftJoin(stockMetrics, eq(stockAnalysis.symbol, stockMetrics.symbol))
     .orderBy(desc(stockAnalysis.updatedAt))
     .limit(8);
 });

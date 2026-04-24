@@ -50,7 +50,7 @@ export function JsonSpecRenderer({ spec }: { spec: any }) {
   );
 }
 
-export function buildAnalysisSpec(recData: any, metrics?: any, community = false) {
+export function buildAnalysisSpec(recData: any, community = false) {
   const bullishRows = (recData?.keyBullishFactors ?? []).map((x: string) => [x]);
   const bearishRows = (recData?.keyBearishFactors ?? []).map((x: string) => [x]);
 
@@ -100,10 +100,23 @@ export function buildAnalysisSpec(recData: any, metrics?: any, community = false
             ["Risk", recData?.riskLevel ?? "—"],
             ["Price target", recData?.priceTarget != null ? `$${recData.priceTarget}` : "—"],
             ["Stop loss", recData?.stopLoss != null ? `$${recData.stopLoss}` : "—"],
-            ["WTD", metrics?.perfWtd != null ? `${metrics.perfWtd.toFixed(1)}%` : "—"],
-            ["MTD", metrics?.perfMtd != null ? `${metrics.perfMtd.toFixed(1)}%` : "—"],
-            ["YTD", metrics?.perfYtd != null ? `${metrics.perfYtd.toFixed(1)}%` : "—"],
-            ["Momentum", metrics?.momentumSignal ?? "—"],
+            ["Weekly trend", recData?.weeklyTrend ?? "—"],
+            [
+              "Pullback to 21 EMA",
+              recData?.pullbackTo21EMA === true
+                ? "Yes"
+                : recData?.pullbackTo21EMA === false
+                  ? "No"
+                  : "—",
+            ],
+            [
+              "Consolidation breakout",
+              recData?.consolidationBreakout21EMA === true
+                ? "Yes"
+                : recData?.consolidationBreakout21EMA === false
+                  ? "No"
+                  : "—",
+            ],
           ],
         },
       },

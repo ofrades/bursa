@@ -54,6 +54,9 @@ type ParsedRecommendation = {
   stopLoss?: number | null;
   keyBullishFactors?: string[];
   keyBearishFactors?: string[];
+  weeklyTrend?: "uptrend" | "downtrend" | "sideways";
+  pullbackTo21EMA?: boolean;
+  consolidationBreakout21EMA?: boolean;
 };
 
 function parseRecommendation(value: unknown): ParsedRecommendation | null {
@@ -98,33 +101,6 @@ function dateStr(v: string | Date | null | undefined, withTime = false) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "—";
   return withTime ? d.toLocaleString() : d.toLocaleDateString();
-}
-
-function MetricCard({
-  label,
-  value,
-  detail,
-  valueClass,
-  sub,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  valueClass?: string;
-  sub?: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription className="text-xs uppercase tracking-wider">{label}</CardDescription>
-        <CardTitle className={cn("text-xl font-bold tabular-nums whitespace-nowrap", valueClass)}>
-          {value}
-        </CardTitle>
-        {detail && <CardDescription className="text-xs">{detail}</CardDescription>}
-        {sub}
-      </CardHeader>
-    </Card>
-  );
 }
 
 // ─── Supervisor card ──────────────────────────────────────────────────────────
@@ -197,20 +173,57 @@ function CycleStrengthBar({ strength }: { strength: number | null }) {
   );
 }
 
-// ─── RSI gauge helper ─────────────────────────────────────────────────────────
-
-function rsiLabel(rsi: number | null | undefined): string {
-  if (rsi == null) return "—";
-  if (rsi >= 70) return `${rsi.toFixed(1)} · Overbought`;
-  if (rsi <= 30) return `${rsi.toFixed(1)} · Oversold`;
-  return `${rsi.toFixed(1)} · Neutral`;
-}
-
-function rsiClass(rsi: number | null | undefined): string {
-  if (rsi == null) return "text-muted-foreground";
-  if (rsi >= 70) return "text-red-600 dark:text-red-400";
-  if (rsi <= 30) return "text-emerald-600 dark:text-emerald-400";
-  return "";
+function SetupChecklist({ rec }: { rec: ParsedRecommendation | null }) {
+  if (!rec) return null;
+  const items = [
+    {
+      label: "Weekly trend",
+      value: rec.weeklyTrend ?? "—",
+      ok: rec.weeklyTrend === "uptrend",
+    },
+    {
+      label: "Pullback to 21 EMA",
+      value: rec.pullbackTo21EMA === true ? "Yes" : rec.pullbackTo21EMA === false ? "No" : "—",
+      ok: rec.pullbackTo21EMA === true,
+    },
+    {
+      label: "Consolidation breakout near 21 EMA",
+      value:
+        rec.consolidationBreakout21EMA === true
+          ? "Yes"
+          : rec.consolidationBreakout21EMA === false
+            ? "No"
+            : "—",
+      ok: rec.consolidationBreakout21EMA === true,
+    },
+  ];
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription className="text-xs uppercase tracking-wider">
+          Setup checklist
+        </CardDescription>
+        <CardTitle className="text-lg">Strategy criteria</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between">
+            <span className="text-sm">{item.label}</span>
+            <Badge
+              variant="outline"
+              className={
+                item.ok
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40"
+                  : undefined
+              }
+            >
+              {item.value}
+            </Badge>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
 }
 
 function StockPage() {
@@ -238,7 +251,6 @@ function StockPage() {
 
   const symbol = params.symbol.toUpperCase();
   const stock = data.stock;
-  const metrics = data.metrics;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
   const bullishFactors = recommendation?.keyBullishFactors ?? [];
@@ -328,7 +340,7 @@ function StockPage() {
                   Latest update
                 </p>
                 <p className="text-2xl font-bold tabular-nums mb-1.5">
-                  {moneyStr(metrics?.currentPrice ?? latestAnalysis?.priceAtAnalysis ?? null)}
+                  {moneyStr(latestAnalysis?.priceAtAnalysis ?? null)}
                 </p>
                 <div className="text-xs text-muted-foreground space-y-0.5">
                   <p>Updated: {dateStr(latestAnalysis?.updatedAt, true)}</p>
@@ -343,118 +355,7 @@ function StockPage() {
           </CardHeader>
         </Card>
 
-        {/* Metric strip — performance */}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-          <MetricCard
-            label="Current price"
-            value={moneyStr(metrics?.currentPrice ?? latestAnalysis?.priceAtAnalysis ?? null)}
-          />
-          <MetricCard
-            label="WTD"
-            value={pctStr(metrics?.perfWtd)}
-            detail={metrics?.momentumSignal ? `Momentum ${metrics.momentumSignal}` : undefined}
-            valueClass={pctClass(metrics?.perfWtd)}
-          />
-          <MetricCard
-            label="MTD"
-            value={pctStr(metrics?.perfMtd)}
-            valueClass={pctClass(metrics?.perfMtd)}
-          />
-          <MetricCard
-            label="YTD"
-            value={pctStr(metrics?.perfYtd)}
-            valueClass={pctClass(metrics?.perfYtd)}
-          />
-          <MetricCard label="Next earnings" value={metrics?.nextEarningsDate ?? "—"} />
-          <MetricCard
-            label="P/E"
-            value={numberStr(metrics?.peRatio)}
-            detail={
-              metrics?.forwardPe != null ? `Forward ${numberStr(metrics.forwardPe)}` : undefined
-            }
-          />
-        </div>
-
-        {/* Oscillator + cycle strip */}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-          <MetricCard
-            label="RSI 14"
-            value={rsiLabel(metrics?.rsi14)}
-            valueClass={rsiClass(metrics?.rsi14)}
-          />
-          <MetricCard
-            label="MACD"
-            value={metrics?.macdHistogram != null ? metrics.macdHistogram.toFixed(3) : "—"}
-            detail={
-              metrics?.macdHistogram != null
-                ? metrics.macdHistogram > 0
-                  ? "Bullish momentum"
-                  : "Bearish momentum"
-                : undefined
-            }
-            valueClass={
-              metrics?.macdHistogram != null
-                ? metrics.macdHistogram > 0
-                  ? pctClass(1)
-                  : pctClass(-1)
-                : undefined
-            }
-          />
-          <MetricCard
-            label="Rel. volume"
-            value={metrics?.relativeVolume != null ? `${metrics.relativeVolume.toFixed(2)}×` : "—"}
-            detail={
-              metrics?.relativeVolume != null
-                ? metrics.relativeVolume > 1.5
-                  ? "Elevated — watch for breakout"
-                  : metrics.relativeVolume < 0.7
-                    ? "Low — low conviction"
-                    : "Normal"
-                : undefined
-            }
-          />
-          <MetricCard
-            label="52w position"
-            value={metrics?.pct52wHigh != null ? `${metrics.pct52wHigh.toFixed(1)}% from top` : "—"}
-            detail={
-              metrics?.pct52wLow != null
-                ? `${metrics.pct52wLow.toFixed(1)}% from bottom`
-                : undefined
-            }
-            valueClass={
-              metrics?.pct52wHigh != null && metrics.pct52wHigh < -30
-                ? "text-emerald-600 dark:text-emerald-400"
-                : metrics?.pct52wHigh != null && metrics.pct52wHigh > -5
-                  ? "text-amber-600 dark:text-amber-400"
-                  : undefined
-            }
-          />
-          <MetricCard
-            label="ATR 14"
-            value={metrics?.atr14 != null ? `$${metrics.atr14.toFixed(2)}` : "—"}
-            detail="Daily volatility range"
-          />
-          <MetricCard
-            label="ROE"
-            value={
-              metrics?.returnOnEquity != null
-                ? `${(metrics.returnOnEquity * 100).toFixed(1)}%`
-                : "—"
-            }
-            detail={
-              metrics?.revenueGrowthYoy != null
-                ? `Rev growth ${(metrics.revenueGrowthYoy * 100).toFixed(1)}%`
-                : undefined
-            }
-            valueClass={
-              metrics?.returnOnEquity != null && metrics.returnOnEquity > 0.15
-                ? pctClass(1)
-                : metrics?.returnOnEquity != null && metrics.returnOnEquity < 0
-                  ? pctClass(-1)
-                  : undefined
-            }
-          />
-        </div>
+        <SetupChecklist rec={recommendation} />
 
         {/* No analysis state */}
         {!latestAnalysis && (

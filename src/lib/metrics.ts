@@ -58,7 +58,7 @@ function sma(prices: number[], period: number): number | null {
   return slice.reduce((a, b) => a + b, 0) / period;
 }
 
-function ema(prices: number[], period: number): number[] {
+export function ema(prices: number[], period: number): number[] {
   if (prices.length < period) return [];
   const k = 2 / (period + 1);
   // Seed with simple average of first `period` points

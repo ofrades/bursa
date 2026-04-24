@@ -3,8 +3,7 @@ import * as schema from "./schema";
 let _db: Awaited<ReturnType<typeof buildDb>> | null = null;
 
 function resolveDbPath() {
-  const raw =
-    process.env.DB_PATH || process.env.DATABASE_URL || "./data/stocktrack.sqlite";
+  const raw = process.env.DB_PATH || process.env.DATABASE_URL || "./data/stocktrack.sqlite";
   return raw.startsWith("file:") ? raw.slice("file:".length) : raw;
 }
 

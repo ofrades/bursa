@@ -31,7 +31,7 @@ builder:
 proxy:
   host: bursa.mohshoo.com
   app_port: 3000
-  response_timeout: 300  # AI calls can take up to ~2 min; Cloudflare allows up to 600s on paid plans
+  response_timeout: 300 # AI calls can take up to ~2 min; Cloudflare allows up to 600s on paid plans
   healthcheck:
     path: /api/health
 

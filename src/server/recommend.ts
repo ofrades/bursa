@@ -5,7 +5,7 @@ import { format, startOfWeek, endOfWeek } from "date-fns";
 import { stockAnalysis, dailySignal, stock, stockMemory, supervisorAlert } from "../lib/schema";
 import { authMiddleware } from "./middleware";
 import { buildInitialMemory } from "./memory";
-import { refreshStockMetrics } from "../lib/metrics";
+import { ema } from "../lib/metrics";
 import { parseAiJson, parseSupervisorResponse } from "../lib/ai-parse";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,6 +56,9 @@ export type RecommendationResult = {
   stopLoss: number | null;
   reasoning: string;
   signalChanged?: boolean;
+  weeklyTrend?: "uptrend" | "downtrend" | "sideways";
+  pullbackTo21EMA?: boolean;
+  consolidationBreakout21EMA?: boolean;
   priceAtAnalysis: number | null;
   weekStart: string;
   weekEnd: string;
@@ -73,7 +76,7 @@ async function gatherStockData(symbol: string) {
   const quote = (await yf.quote(symbol)) as any;
 
   const period1 = new Date();
-  period1.setDate(period1.getDate() - 90);
+  period1.setDate(period1.getDate() - 150);
 
   const [historical, summary] = await Promise.all([
     (
@@ -90,11 +93,37 @@ async function gatherStockData(symbol: string) {
     ).catch(() => null),
   ]);
 
-  const closes = (historical as any[]).map((h: any) => h.close).filter(Boolean) as number[];
+  const hist = (historical as any[])
+    .filter((h: any) => h.close != null && h.date != null)
+    .map((h: any) => ({ date: new Date(h.date), close: h.close as number }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const closes = hist.map((h) => h.close);
   const volumes = (historical as any[]).map((h: any) => h.volume).filter(Boolean) as number[];
 
   const sma20 = closes.length >= 20 ? closes.slice(-20).reduce((a, b) => a + b, 0) / 20 : null;
   const sma50 = closes.length >= 50 ? closes.slice(-50).reduce((a, b) => a + b, 0) / 50 : null;
+
+  const ema21DailyArr = ema(closes, 21);
+  const ema21Daily = ema21DailyArr.length ? ema21DailyArr[ema21DailyArr.length - 1] : null;
+
+  function getWeeklyCloses(hist: Array<{ date: Date; close: number }>): number[] {
+    const weeks = new Map<string, number>();
+    for (const h of hist) {
+      const d = h.date;
+      const year = d.getFullYear();
+      const jan1 = new Date(year, 0, 1);
+      const day = Math.floor((d.getTime() - jan1.getTime()) / 86400000);
+      const week = Math.floor(day / 7);
+      weeks.set(`${year}-W${week}`, h.close);
+    }
+    return Array.from(weeks.values());
+  }
+
+  const weeklyCloses = getWeeklyCloses(hist);
+  const weeklyEma21Arr = ema(weeklyCloses, 21);
+  const weeklyEma21 = weeklyEma21Arr.length ? weeklyEma21Arr[weeklyEma21Arr.length - 1] : null;
+
   const recentVol = volumes.length >= 5 ? volumes.slice(-5).reduce((a, b) => a + b, 0) / 5 : 0;
   const olderVol =
     volumes.length >= 20 ? volumes.slice(-20, -5).reduce((a, b) => a + b, 0) / 15 : recentVol;
@@ -115,11 +144,15 @@ async function gatherStockData(symbol: string) {
     beta: quote.beta as number | undefined,
     sma20,
     sma50,
+    ema21Daily,
+    weeklyEma21,
     volumeTrend,
     momentum5d: price5d > 0 ? ((priceNow - price5d) / price5d) * 100 : 0,
     momentum20d: price20d > 0 ? ((priceNow - price20d) / price20d) * 100 : 0,
     priceVsSMA20: sma20 ? ((priceNow - sma20) / sma20) * 100 : null,
     priceVsSMA50: sma50 ? ((priceNow - sma50) / sma50) * 100 : null,
+    priceVsEMA21: ema21Daily ? ((priceNow - ema21Daily) / ema21Daily) * 100 : null,
+    priceVsWeeklyEMA21: weeklyEma21 ? ((priceNow - weeklyEma21) / weeklyEma21) * 100 : null,
     earningsDate: summary?.calendarEvents?.earnings?.earningsDate?.[0] ?? null,
     revenueGrowth: summary?.financialData?.revenueGrowth ?? null,
     profitMargin: summary?.financialData?.profitMargins ?? null,
@@ -138,7 +171,7 @@ type StockData = Awaited<ReturnType<typeof gatherStockData>>;
 function buildPrompt(
   d: StockData,
   memory: string,
-  metrics: string,
+  setupContext: string,
   isDaily: boolean,
   weekStart: string,
   weekEnd: string,
@@ -151,14 +184,15 @@ Your job: produce a structured multi-section response. Follow the format exactly
 ## STOCK MEMORY (accumulated context)
 ${memory}
 
-## OBJECTIVE METRICS (no opinion — pure math)
-${metrics}
+## SETUP CONTEXT
+${setupContext}
 
 ## CURRENT MARKET DATA
 STOCK: ${d.symbol} | SECTOR: ${d.sector ?? "Unknown"} | INDUSTRY: ${d.industry ?? "Unknown"}
 PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today) | 52W: $${fmt(d.fiftyTwoWeekLow)}–$${fmt(d.fiftyTwoWeekHigh)}
 MARKET CAP: ${d.marketCap ? "$" + (d.marketCap / 1e9).toFixed(1) + "B" : "N/A"} | BETA: ${fmt(d.beta)}
-SMA20: ${fmt(d.priceVsSMA20)}% vs price | SMA50: ${fmt(d.priceVsSMA50)}% vs price
+Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
+Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
 MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
 P/E: ${fmt(d.peRatio, 1)} | Fwd P/E: ${fmt(d.forwardPE, 1)} | D/E: ${fmt(d.debtToEquity, 1)}
 Profit margin: ${d.profitMargin != null ? (d.profitMargin * 100).toFixed(1) + "%" : "N/A"} | ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"}
@@ -182,12 +216,17 @@ TIMEFRAME DEFINITIONS:
 - SHORT: days–2 weeks (price action, volume, RSI)
 - MEDIUM: weeks–quarter (SMAs, earnings, sector rotation)
 - LONG: quarters–year (fundamentals, macro, valuation)
+
+STRATEGY SETUP (evaluate and include in SIGNAL_JSON):
+1. Weekly trend — is price in a weekly uptrend above the 21-week EMA?
+2. Pullback to 21 EMA — has price pulled back to or consolidated around the daily 21 EMA?
+3. Consolidation breakout near 21 EMA — is there a strong daily candle breaking above recent consolidation/high away from the 21 EMA?
 ────────────────────────────────────────────────────────────────
 
 Respond with EXACTLY these four sections, nothing else:
 
 1. SIGNAL_JSON:
-{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>}
+{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
 
 2. TALEB_JSON:
 Nassim Taleb's lens: tail risk, fragility, convexity, black swans. Only fire BLACK_SWAN_BUY or BLACK_SWAN_SELL if something is truly extreme. Use NONE for severity LOW when nothing is extreme.
@@ -203,7 +242,7 @@ Warren Buffett's lens: moat, margin of safety, rationality, long-term value. Alw
 
 function buildJsonOnlyRetryPrompt(
   d: StockData,
-  metrics: string,
+  setupContext: string,
   isDaily: boolean,
   weekStart: string,
   weekEnd: string,
@@ -212,14 +251,15 @@ function buildJsonOnlyRetryPrompt(
   return `You are an expert stock analyst. Return ONLY one valid JSON object. No markdown fences. No prose.
 
 STOCK: ${d.symbol} | PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today)
-SMA20: ${fmt(d.priceVsSMA20)}% | SMA50: ${fmt(d.priceVsSMA50)}%
+Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
+Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
 MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
 P/E: ${fmt(d.peRatio, 1)} | D/E: ${fmt(d.debtToEquity, 1)} | ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"}
-METRICS: ${metrics}
+SETUP CONTEXT: ${setupContext}
 CONTEXT: ${isDaily ? `Daily update ${weekStart}–${weekEnd}.` : `Weekly rec ${weekStart}–${weekEnd}.`}
 
 Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
-{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>}`;
+{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
 }
 
 // ─── AI call ──────────────────────────────────────────────────────────────────
@@ -384,21 +424,20 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
     const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
 
-    const [stockData, memory, metrics] = await Promise.all([
+    const [stockData, memory] = await Promise.all([
       gatherStockData(data.symbol),
       readMemory(data.symbol),
-      refreshStockMetrics(data.symbol),
     ]);
 
-    const metricsStr = [
-      `Performance: WTD ${metrics.perfWtd?.toFixed(1) ?? "N/A"}% | Last week ${metrics.perfLastWeek?.toFixed(1) ?? "N/A"}% | MTD ${metrics.perfMtd?.toFixed(1) ?? "N/A"}% | YTD ${metrics.perfYtd?.toFixed(1) ?? "N/A"}%`,
-      `Momentum: ${metrics.momentumSignal?.toUpperCase() ?? "UNKNOWN"} | RSI14: ${metrics.rsi14?.toFixed(1) ?? "N/A"} | MACD histogram: ${metrics.macdHistogram?.toFixed(3) ?? "N/A"}`,
-      `SMA200: ${metrics.sma200 != null && metrics.currentPrice ? (((metrics.currentPrice - metrics.sma200) / metrics.sma200) * 100).toFixed(1) + "% vs price" : "N/A"} | ATR14: ${metrics.atr14?.toFixed(2) ?? "N/A"}`,
-      `Relative volume: ${metrics.relativeVolume?.toFixed(2) ?? "N/A"}x | 52w: ${metrics.pct52wHigh?.toFixed(1) ?? "N/A"}% from high, ${metrics.pct52wLow?.toFixed(1) ?? "N/A"}% from low`,
-      `ROE: ${metrics.returnOnEquity != null ? (metrics.returnOnEquity * 100).toFixed(1) + "%" : "N/A"} | Rev growth YoY: ${metrics.revenueGrowthYoy != null ? (metrics.revenueGrowthYoy * 100).toFixed(1) + "%" : "N/A"} | FCF yield: ${metrics.freeCashflowYield?.toFixed(2) ?? "N/A"}%`,
-    ].join("\n");
+    const setupContext = [
+      `Daily 21 EMA: $${stockData.ema21Daily?.toFixed(2) ?? "N/A"} (${stockData.priceVsEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
+      `Weekly 21 EMA: $${stockData.weeklyEma21?.toFixed(2) ?? "N/A"} (${stockData.priceVsWeeklyEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
+      `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
+    ].join(" | ");
 
-    const raw = await callAI(buildPrompt(stockData, memory, metricsStr, false, weekStart, weekEnd));
+    const raw = await callAI(
+      buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd),
+    );
 
     let parsed: ReturnType<typeof parseFullResponse>;
     try {
@@ -406,7 +445,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     } catch {
       // Fallback: retry for signal JSON only
       const retryRaw = await callAI(
-        buildJsonOnlyRetryPrompt(stockData, metricsStr, false, weekStart, weekEnd),
+        buildJsonOnlyRetryPrompt(stockData, setupContext, false, weekStart, weekEnd),
       );
       const signalOnly = parseAiJson<any>(retryRaw);
       parsed = { signal: signalOnly, talebreview: null, buffettReview: null, memoryUpdate: null };
@@ -512,26 +551,27 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       .where(eq(stockAnalysis.id, data.analysisId));
     if (!analysis) throw new Error("Analysis not found");
 
-    const [stockData, memory, metrics] = await Promise.all([
+    const [stockData, memory] = await Promise.all([
       gatherStockData(data.symbol),
       readMemory(data.symbol),
-      refreshStockMetrics(data.symbol),
     ]);
 
-    const metricsStr = [
-      `WTD ${metrics.perfWtd?.toFixed(1) ?? "N/A"}% | MTD ${metrics.perfMtd?.toFixed(1) ?? "N/A"}% | YTD ${metrics.perfYtd?.toFixed(1) ?? "N/A"}%`,
-      `Momentum: ${metrics.momentumSignal?.toUpperCase() ?? "UNKNOWN"} | RSI14: ${metrics.rsi14?.toFixed(1) ?? "N/A"} | MACD histogram: ${metrics.macdHistogram?.toFixed(3) ?? "N/A"}`,
-      `Rel vol: ${metrics.relativeVolume?.toFixed(2) ?? "N/A"}x | 52w: ${metrics.pct52wHigh?.toFixed(1) ?? "N/A"}% from high`,
-    ].join("\n");
+    const setupContext = [
+      `Daily 21 EMA: $${stockData.ema21Daily?.toFixed(2) ?? "N/A"} (${stockData.priceVsEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
+      `Weekly 21 EMA: $${stockData.weeklyEma21?.toFixed(2) ?? "N/A"} (${stockData.priceVsWeeklyEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
+      `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
+    ].join(" | ");
 
-    const raw = await callAI(buildPrompt(stockData, memory, metricsStr, true, weekStart, weekEnd));
+    const raw = await callAI(
+      buildPrompt(stockData, memory, setupContext, true, weekStart, weekEnd),
+    );
 
     let parsed: ReturnType<typeof parseFullResponse>;
     try {
       parsed = parseFullResponse(raw);
     } catch {
       const retryRaw = await callAI(
-        buildJsonOnlyRetryPrompt(stockData, metricsStr, true, weekStart, weekEnd),
+        buildJsonOnlyRetryPrompt(stockData, setupContext, true, weekStart, weekEnd),
       );
       const signalOnly = parseAiJson<any>(retryRaw);
       parsed = { signal: signalOnly, talebreview: null, buffettReview: null, memoryUpdate: null };

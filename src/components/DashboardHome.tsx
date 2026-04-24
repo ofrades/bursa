@@ -4,14 +4,13 @@ import { Loader2, Sparkles, TrendingUp, Users, X } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import {
   getWatchlist,
+  addToWatchlist,
   removeFromWatchlist,
   getMultipleAnalyses,
-  getMultipleMetrics,
   getRecentSharedAnalyses,
 } from "../server/stocks";
-import { generateWeeklyAnalysis } from "../server/recommend";
 import { getSession } from "../server/session";
-import type { StockAnalysis, StockMetrics } from "../lib/schema";
+import type { StockAnalysis } from "../lib/schema";
 import { StockSearchBar } from "./StockSearchBar";
 import { Badge, SignalBadge, type Signal } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -24,10 +23,6 @@ type SharedRow = {
   confidence: number | null;
   updatedAt: Date | null;
   name: string | null;
-  perfWtd: number | null;
-  perfMtd: number | null;
-  perfYtd: number | null;
-  nextEarningsDate: string | null;
 };
 
 type Props = {
@@ -40,7 +35,6 @@ type Props = {
     exchange: string | null;
   }>;
   initialAnalyses: StockAnalysis[];
-  initialMetrics: StockMetrics[];
   initialShared: SharedRow[];
 };
 
@@ -68,22 +62,14 @@ export function DashboardHome({
   isAdmin,
   initialWatchlist,
   initialAnalyses,
-  initialMetrics,
   initialShared,
 }: Props) {
   const [watchlist, setWatchlist] = useState(initialWatchlist);
   const [analyses, setAnalyses] = useState<StockAnalysis[]>(initialAnalyses);
-  const [metrics, setMetrics] = useState<StockMetrics[]>(initialMetrics);
   const [shared, setShared] = useState<SharedRow[]>(initialShared);
   const [credits, setCredits] = useState(analysisCredits);
   const [showCreditsToast, setShowCreditsToast] = useState(false);
-  const [removing, setRemoving] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState<string | null>(null);
-  const [analysisToast, setAnalysisToast] = useState<{
-    title: string;
-    body: string;
-    tone: "success" | "danger";
-  } | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -98,15 +84,13 @@ export function DashboardHome({
   const reload = useCallback(async () => {
     const wl = await getWatchlist();
     const syms = wl.map((w) => w.symbol);
-    const [newAnalyses, newMetrics, newShared, freshSession] = await Promise.all([
+    const [newAnalyses, newShared, freshSession] = await Promise.all([
       getMultipleAnalyses({ data: { symbols: syms } }),
-      getMultipleMetrics({ data: { symbols: syms } }),
       getRecentSharedAnalyses(),
       getSession(),
     ]);
     setWatchlist(wl);
     setAnalyses(newAnalyses);
-    setMetrics(newMetrics);
     setShared(newShared);
     setCredits(freshSession?.analysisCredits ?? 0);
   }, []);
@@ -120,45 +104,21 @@ export function DashboardHome({
     const { url } = await res.json();
     if (url) window.location.href = url;
   };
-  const handleRemove = async (symbol: string) => {
-    setRemoving(symbol);
+  const handleToggleSave = async (symbol: string, isSaved: boolean) => {
+    setToggling(symbol);
     try {
-      await removeFromWatchlist({ data: { symbol } });
-      await reload();
-    } finally {
-      setRemoving(null);
-    }
-  };
-  const handleAnalyze = async (symbol: string) => {
-    setAnalyzing(symbol);
-    setAnalysisToast(null);
-    try {
-      await generateWeeklyAnalysis({ data: { symbol } });
-      await reload();
-      setAnalysisToast({
-        title: `${symbol} analyzed`,
-        body: isAdmin
-          ? "The latest weekly analysis is ready."
-          : "The latest weekly analysis is ready and your credits were updated.",
-        tone: "success",
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Analysis failed";
-      if (message === "CREDITS_REQUIRED") {
-        setAnalysisToast({
-          title: "Not enough credits",
-          body: "You need at least 1 credit to run a new analysis.",
-          tone: "danger",
-        });
-        return;
+      if (isSaved) {
+        await removeFromWatchlist({ data: { symbol } });
+      } else {
+        const name =
+          watchlist.find((w) => w.symbol === symbol)?.name ??
+          shared.find((s) => s.symbol === symbol)?.name ??
+          undefined;
+        await addToWatchlist({ data: { symbol, name } });
       }
-      setAnalysisToast({
-        title: "Analysis failed",
-        body: message,
-        tone: "danger",
-      });
+      await reload();
     } finally {
-      setAnalyzing(null);
+      setToggling(null);
     }
   };
 
@@ -263,174 +223,10 @@ export function DashboardHome({
         </div>
       )}
 
-      {analysisToast && (
-        <div
-          style={{
-            position: "fixed",
-            right: 16,
-            top: showCreditsToast ? 164 : 68,
-            zIndex: 60,
-            background: "var(--bg)",
-            border: "1px solid var(--border)",
-            boxShadow: "var(--shadow-lg)",
-            borderRadius: 12,
-            padding: "12px 14px",
-            maxWidth: 320,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "start", gap: 10 }}>
-            <div
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background: analysisToast.tone === "success" ? "var(--brand)" : "var(--danger)",
-                marginTop: 4,
-                flexShrink: 0,
-              }}
-            />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
-                {analysisToast.title}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>{analysisToast.body}</div>
-            </div>
-            <Button variant="ghost" size="icon-sm" onClick={() => setAnalysisToast(null)}>
-              <X size={12} />
-            </Button>
-          </div>
-        </div>
-      )}
-
       <main className="max-w-5xl mx-auto w-full px-6 py-6">
         <div style={{ marginBottom: 24 }}>
           <StockSearchBar onAdded={reload} watchlistSymbols={watchlist.map((w) => w.symbol)} />
         </div>
-
-        <section style={{ marginBottom: 40 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "end",
-              justifyContent: "space-between",
-              gap: 16,
-              marginBottom: 14,
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--fg-subtle)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 4,
-                }}
-              >
-                User stocks
-              </div>
-              <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Your saved stocks</h2>
-              <p style={{ color: "var(--fg-muted)", fontSize: 14 }}>
-                These are your personal saved stocks. Click a card to open its detail page.
-              </p>
-            </div>
-          </div>
-
-          {watchlist.length === 0 ? (
-            <Card className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground">
-              <TrendingUp className="size-8 text-muted-foreground/40" />
-              <p className="font-medium">Your watchlist is empty</p>
-              <p className="text-sm">Search above to add stocks.</p>
-            </Card>
-          ) : (
-            <div
-              className="grid gap-3"
-              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}
-            >
-              {watchlist.map(({ symbol, name }) => {
-                const analysis = analyses.find((a) => a.symbol === symbol);
-                const m = metrics.find((x) => x.symbol === symbol);
-                const sharedByCommunity = Boolean(
-                  analysis?.lastTriggeredByUserId &&
-                  analysis.lastTriggeredByUserId !== session?.sub,
-                );
-                return (
-                  <Link
-                    key={symbol}
-                    to="/$symbol"
-                    params={{ symbol }}
-                    className="block no-underline"
-                  >
-                    <Card className="cursor-pointer transition-colors hover:bg-muted/40">
-                      <CardContent className="p-2.5 flex flex-col gap-1.5">
-                        {/* Row 1: symbol + signal + name + remove */}
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="font-bold text-sm leading-none shrink-0">{symbol}</span>
-                          {analysis ? (
-                            <SignalBadge signal={analysis.signal as Signal} />
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] py-0 h-4 shrink-0">
-                              —
-                            </Badge>
-                          )}
-                          {sharedByCommunity && (
-                            <Users className="size-3 text-muted-foreground shrink-0" />
-                          )}
-                          <span className="text-xs text-muted-foreground truncate flex-1">
-                            {name ?? ""}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="shrink-0 size-5 ml-auto"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleRemove(symbol);
-                            }}
-                          >
-                            {removing === symbol ? <Loader2 className="spin" /> : <X />}
-                          </Button>
-                        </div>
-
-                        {/* Row 2: perf stats + analyze button */}
-                        <div className="flex items-center gap-2">
-                          {(["WTD", "MTD", "YTD"] as const).map((label, i) => {
-                            const val = [m?.perfWtd, m?.perfMtd, m?.perfYtd][i];
-                            return (
-                              <div key={label} className="flex items-baseline gap-0.5">
-                                <span className="text-[10px] text-muted-foreground">{label}</span>
-                                <span
-                                  className={`text-xs font-semibold tabular-nums ${pctColor(val)}`}
-                                >
-                                  {pctStr(val)}
-                                </span>
-                              </div>
-                            );
-                          })}
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            className="h-6 w-6 ml-auto shrink-0"
-                            disabled={analyzing === symbol || removing === symbol}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleAnalyze(symbol);
-                            }}
-                          >
-                            {analyzing === symbol ? <Loader2 className="spin" /> : <Sparkles />}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </section>
 
         <section>
           <div
@@ -453,31 +249,50 @@ export function DashboardHome({
                   marginBottom: 4,
                 }}
               >
-                Shared table
+                Stocks
               </div>
               <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
-                Recent community analysis
+                Watchlist & community
               </h2>
               <p style={{ color: "var(--fg-muted)", fontSize: 14 }}>
-                Global shared analysis across the platform. Click a row to open its detail page.
+                Star a stock to save it to your watchlist. Click a row to see the full breakdown.
               </p>
             </div>
           </div>
 
           <Card className="overflow-hidden p-0">
-            {shared.length === 0 ? (
-              <div
-                style={{
-                  padding: 24,
-                  color: "var(--fg-muted)",
-                  textAlign: "center",
-                }}
-              >
-                No shared analysis yet.
-              </div>
-            ) : (
-              <SharedAnalysisTable rows={shared} />
-            )}
+            {(() => {
+              const map = new Map<string, SharedRow & { isSaved: boolean }>();
+              for (const w of watchlist) {
+                const a = analyses.find((x) => x.symbol === w.symbol);
+                map.set(w.symbol, {
+                  symbol: w.symbol,
+                  name: w.name ?? null,
+                  signal: a?.signal ?? "HOLD",
+                  confidence: a?.confidence ?? null,
+                  updatedAt: a?.updatedAt ?? null,
+                  isSaved: true,
+                });
+              }
+              for (const s of shared) {
+                if (map.has(s.symbol)) continue;
+                map.set(s.symbol, { ...s, isSaved: false });
+              }
+              const rows = Array.from(map.values());
+              return rows.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground">
+                  <TrendingUp className="size-8 text-muted-foreground/40" />
+                  <p className="font-medium">No stocks yet</p>
+                  <p className="text-sm">Search above to add or discover stocks.</p>
+                </div>
+              ) : (
+                <SharedAnalysisTable
+                  rows={rows}
+                  onToggleSave={handleToggleSave}
+                  savingSymbol={toggling}
+                />
+              );
+            })()}
           </Card>
         </section>
       </main>

@@ -7,7 +7,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Star } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "#/lib/utils";
 
@@ -20,21 +20,8 @@ export type SharedAnalysisRow = {
   confidence: number | null;
   updatedAt: Date | null;
   name: string | null;
-  perfWtd: number | null;
-  perfMtd: number | null;
-  perfYtd: number | null;
-  nextEarningsDate: string | null;
+  isSaved?: boolean;
 };
-
-function pctColor(v: number | null | undefined) {
-  if (v == null) return "text-muted-foreground";
-  return v > 0 ? "text-emerald-500" : v < 0 ? "text-red-400" : "text-muted-foreground";
-}
-
-function pctStr(v: number | null | undefined) {
-  if (v == null) return "—";
-  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
 
 function SortableHeader({
   column,
@@ -62,11 +49,57 @@ function SortableHeader({
   );
 }
 
-export function SharedAnalysisTable({ rows }: { rows: SharedAnalysisRow[] }) {
-  const [sorting, setSorting] = React.useState<SortingState>([{ id: "updatedAt", desc: true }]);
+export function SharedAnalysisTable({
+  rows,
+  onToggleSave,
+  savingSymbol,
+}: {
+  rows: SharedAnalysisRow[];
+  onToggleSave?: (symbol: string, isSaved: boolean) => void;
+  savingSymbol?: string | null;
+}) {
+  const [sorting, setSorting] = React.useState<SortingState>([
+    { id: onToggleSave ? "favorite" : "updatedAt", desc: true },
+  ]);
 
   const columns = React.useMemo<ColumnDef<SharedAnalysisRow>[]>(
     () => [
+      ...(onToggleSave
+        ? [
+            {
+              id: "favorite",
+              header: ({ column }: { column: any }) => (
+                <SortableHeader column={column} title="" align="center" />
+              ),
+              cell: ({ row }: { row: any }) => (
+                <div className="flex justify-center">
+                  <button
+                    className="cursor-pointer disabled:opacity-50"
+                    disabled={savingSymbol === row.original.symbol}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onToggleSave?.(row.original.symbol, !!row.original.isSaved);
+                    }}
+                  >
+                    <Star
+                      size={16}
+                      className={cn(
+                        row.original.isSaved
+                          ? "text-amber-400"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      fill={row.original.isSaved ? "currentColor" : "none"}
+                    />
+                  </button>
+                </div>
+              ),
+              sortingFn: (a: any, b: any) => {
+                return (b.original.isSaved ? 1 : 0) - (a.original.isSaved ? 1 : 0);
+              },
+            } as ColumnDef<SharedAnalysisRow>,
+          ]
+        : []),
       {
         accessorKey: "symbol",
         header: ({ column }) => <SortableHeader column={column} title="Symbol" />,
@@ -103,33 +136,6 @@ export function SharedAnalysisTable({ rows }: { rows: SharedAnalysisRow[] }) {
         cell: ({ row }) => (
           <div className="text-center text-muted-foreground">
             {row.original.confidence != null ? `${row.original.confidence}%` : "—"}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "perfWtd",
-        header: ({ column }) => <SortableHeader column={column} title="WTD" align="center" />,
-        cell: ({ row }) => (
-          <div className={`text-center font-semibold ${pctColor(row.original.perfWtd)}`}>
-            {pctStr(row.original.perfWtd)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "perfMtd",
-        header: ({ column }) => <SortableHeader column={column} title="MTD" align="center" />,
-        cell: ({ row }) => (
-          <div className={`text-center font-semibold ${pctColor(row.original.perfMtd)}`}>
-            {pctStr(row.original.perfMtd)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "perfYtd",
-        header: ({ column }) => <SortableHeader column={column} title="YTD" align="center" />,
-        cell: ({ row }) => (
-          <div className={`text-center font-semibold ${pctColor(row.original.perfYtd)}`}>
-            {pctStr(row.original.perfYtd)}
           </div>
         ),
       },
