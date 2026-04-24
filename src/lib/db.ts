@@ -67,6 +67,26 @@ function runMigrations(sqlite: any) {
   sqlite.exec(
     `CREATE INDEX IF NOT EXISTS idx_supervisor_alert_analysis ON supervisor_alert (stock_analysis_id)`,
   );
+
+  // wallet migration — additive
+  addCol("user", "wallet_balance", "integer NOT NULL DEFAULT 0");
+
+  // usage_log — per-analysis cost tracking
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS usage_log (
+      id text PRIMARY KEY NOT NULL,
+      user_id text NOT NULL,
+      symbol text NOT NULL,
+      model text NOT NULL,
+      prompt_tokens integer,
+      completion_tokens integer,
+      total_tokens integer,
+      cost_cents integer NOT NULL,
+      created_at integer NOT NULL
+    )
+  `);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_usage_log_user ON usage_log (user_id)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_usage_log_symbol ON usage_log (symbol)`);
 }
 
 async function buildDb() {

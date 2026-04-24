@@ -1,4 +1,4 @@
-// POST /api/billing/checkout — buy a credits pack (one-time payment)
+// POST /api/billing/checkout — top up wallet with any amount
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionFromRequest } from "../../../lib/session";
 
@@ -11,14 +11,19 @@ export const Route = createFileRoute("/api/billing/checkout")({
 
         // Admin bypass never needs billing
         if (session.email.toLowerCase() === "mig.silva@gmail.com") {
-          return Response.json({ url: "/dashboard" });
+          return Response.json({ url: "/" });
         }
 
         const stripeSecret = process.env.STRIPE_SECRET_KEY;
-        const priceId = process.env.STRIPE_PRICE_CREDITS_10;
-        if (!stripeSecret || !priceId) {
+        if (!stripeSecret) {
           return Response.json({ error: "Stripe not configured" }, { status: 500 });
         }
+
+        const body = (await request.json().catch(() => ({}))) as {
+          amountEur?: number;
+        };
+        const amountEur = Math.max(1, Math.min(100, Math.round(body.amountEur ?? 1)));
+        const cents = amountEur * 100;
 
         const { default: Stripe } = await import("stripe");
         const stripe = new Stripe(stripeSecret, { apiVersion: "2026-03-25.dahlia" });
@@ -50,11 +55,23 @@ export const Route = createFileRoute("/api/billing/checkout")({
         const checkoutSession = await stripe.checkout.sessions.create({
           mode: "payment",
           customer: customerId,
-          line_items: [{ price: priceId, quantity: 1 }],
-          success_url: `${origin}/dashboard?credits=1`,
-          cancel_url: `${origin}/dashboard`,
+          line_items: [
+            {
+              price_data: {
+                currency: "eur",
+                unit_amount: cents,
+                product_data: {
+                  name: "Wallet Top-up",
+                  description: `Add €${amountEur.toFixed(2)} to your Bursa wallet`,
+                },
+              },
+              quantity: 1,
+            },
+          ],
+          success_url: `${origin}/?topup=1`,
+          cancel_url: `${origin}/`,
           allow_promotion_codes: true,
-          metadata: { user_id: session.sub, credits: "10" },
+          metadata: { user_id: session.sub, amount_eur: String(amountEur) },
         });
 
         return Response.json({ url: checkoutSession.url });

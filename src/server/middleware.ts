@@ -5,7 +5,7 @@ import { getSessionFromRequest } from "../lib/session";
 export const authMiddleware = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const session = await getSessionFromRequest(getRequest());
   if (!session)
-    return next({ context: { session: null, analysisCredits: 0, isAdmin: false } as any });
+    return next({ context: { session: null, walletBalance: 0, isAdmin: false } as any });
 
   // Ensure user exists in DB — handles stale JWTs after a DB reset
   const { getDb } = await import("../lib/db");
@@ -14,7 +14,7 @@ export const authMiddleware = createMiddleware({ type: "function" }).server(asyn
   const db = await getDb();
 
   const [existing] = await db
-    .select({ analysisCredits: user.analysisCredits })
+    .select({ walletBalance: user.walletBalance })
     .from(user)
     .where(eq(user.id, session.sub));
 
@@ -28,7 +28,7 @@ export const authMiddleware = createMiddleware({ type: "function" }).server(asyn
         email: session.email,
         name: session.name,
         image: session.image ?? null,
-        analysisCredits: isAdmin ? 999999 : 0,
+        walletBalance: isAdmin ? 999_999_00 : 0,
       })
       .onConflictDoNothing();
   }
@@ -36,7 +36,7 @@ export const authMiddleware = createMiddleware({ type: "function" }).server(asyn
   return next({
     context: {
       session,
-      analysisCredits: isAdmin ? 999999 : (existing?.analysisCredits ?? 0),
+      walletBalance: isAdmin ? 999_999_00 : (existing?.walletBalance ?? 0),
       isAdmin,
     } as any,
   });

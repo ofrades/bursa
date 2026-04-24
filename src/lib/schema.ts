@@ -11,7 +11,8 @@ export const user = sqliteTable("user", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   image: text("image"),
-  analysisCredits: integer("analysis_credits").notNull().default(0),
+  analysisCredits: integer("analysis_credits").notNull().default(0), // legacy — keep for migration
+  walletBalance: integer("wallet_balance").notNull().default(0), // cents (€1 = 100)
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripePriceId: text("stripe_price_id"),
@@ -206,6 +207,26 @@ export const watchlist = sqliteTable(
   (t) => [unique("uq_watchlist_user_symbol").on(t.userId, t.symbol)],
 );
 
+// ─── Usage log (per-analysis cost tracking) ───────────────────────────────────
+
+export const usageLog = sqliteTable(
+  "usage_log",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id").notNull(),
+    symbol: text("symbol").notNull(),
+    model: text("model").notNull(),
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    totalTokens: integer("total_tokens"),
+    costCents: integer("cost_cents").notNull(), // actual cost in cents (€0.01 = 1)
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(now),
+  },
+  (t) => [index("idx_usage_log_user").on(t.userId), index("idx_usage_log_symbol").on(t.symbol)],
+);
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type User = typeof user.$inferSelect;
@@ -216,3 +237,4 @@ export type StockAnalysis = typeof stockAnalysis.$inferSelect;
 export type DailySignal = typeof dailySignal.$inferSelect;
 export type SupervisorAlert = typeof supervisorAlert.$inferSelect;
 export type Watchlist = typeof watchlist.$inferSelect;
+export type UsageLog = typeof usageLog.$inferSelect;

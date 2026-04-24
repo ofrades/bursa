@@ -41,13 +41,13 @@ function WeekLabel() {
 
 function HomePage() {
   const data = Route.useLoaderData() as any;
-  const { session, analysisCredits, isAdmin } = Route.useRouteContext();
+  const { session, walletBalance, isAdmin } = Route.useRouteContext();
 
   if (data.mode === "dashboard") {
     return (
       <DashboardHome
         session={session}
-        analysisCredits={analysisCredits}
+        walletBalance={walletBalance}
         isAdmin={isAdmin}
         initialWatchlist={data.watchlist}
         initialAnalyses={data.myAnalyses}

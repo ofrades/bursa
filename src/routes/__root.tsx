@@ -22,7 +22,7 @@ export const Route = createRootRoute({
     const session = await getSession();
     return {
       session,
-      analysisCredits: session?.analysisCredits ?? 0,
+      walletBalance: session?.walletBalance ?? 0,
       isAdmin: session?.isAdmin ?? false,
     };
   },

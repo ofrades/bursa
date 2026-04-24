@@ -27,7 +27,7 @@ type SharedRow = {
 
 type Props = {
   session: { sub: string; image?: string | null } | null;
-  analysisCredits: number;
+  walletBalance: number;
   isAdmin: boolean;
   initialWatchlist: Array<{
     symbol: string;
@@ -37,6 +37,15 @@ type Props = {
   initialAnalyses: StockAnalysis[];
   initialShared: SharedRow[];
 };
+
+function formatEuro(cents: number): string {
+  return new Intl.NumberFormat("en-IE", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
 
 function pctColor(v: number | null | undefined) {
   if (v == null || v === 0) return "";
@@ -58,7 +67,7 @@ function WeekLabel() {
 
 export function DashboardHome({
   session,
-  analysisCredits,
+  walletBalance,
   isAdmin,
   initialWatchlist,
   initialAnalyses,
@@ -67,16 +76,17 @@ export function DashboardHome({
   const [watchlist, setWatchlist] = useState(initialWatchlist);
   const [analyses, setAnalyses] = useState<StockAnalysis[]>(initialAnalyses);
   const [shared, setShared] = useState<SharedRow[]>(initialShared);
-  const [credits, setCredits] = useState(analysisCredits);
-  const [showCreditsToast, setShowCreditsToast] = useState(false);
+  const [balance, setBalance] = useState(walletBalance);
+  const [showTopupToast, setShowTopupToast] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [topupAmount, setTopupAmount] = useState<string>("1");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    if (url.searchParams.get("credits") === "1") {
-      setShowCreditsToast(true);
-      url.searchParams.delete("credits");
+    if (url.searchParams.get("topup") === "1") {
+      setShowTopupToast(true);
+      url.searchParams.delete("topup");
       window.history.replaceState({}, "", url.toString());
     }
   }, []);
@@ -92,7 +102,7 @@ export function DashboardHome({
     setWatchlist(wl);
     setAnalyses(newAnalyses);
     setShared(newShared);
-    setCredits(freshSession?.analysisCredits ?? 0);
+    setBalance(freshSession?.walletBalance ?? 0);
   }, []);
 
   const signOut = () =>
@@ -100,7 +110,12 @@ export function DashboardHome({
       window.location.href = "/";
     });
   const startCheckout = async () => {
-    const res = await fetch("/api/billing/checkout", { method: "POST" });
+    const amount = Math.max(1, Math.min(100, parseInt(topupAmount, 10) || 1));
+    const res = await fetch("/api/billing/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amountEur: amount }),
+    });
     const { url } = await res.json();
     if (url) window.location.href = url;
   };
@@ -151,10 +166,21 @@ export function DashboardHome({
               </Badge>
             ) : (
               <>
-                <Badge variant="outline">{credits ?? 0} credits</Badge>
-                <Button size="sm" onClick={startCheckout}>
-                  Buy 10 credits
-                </Button>
+                <Badge variant="outline">{formatEuro(balance ?? 0)}</Badge>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm text-muted-foreground">€</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={topupAmount}
+                    onChange={(e) => setTopupAmount(e.target.value)}
+                    className="w-14 h-7 px-1.5 text-sm rounded border border-border bg-background text-center"
+                  />
+                  <Button size="sm" onClick={startCheckout} className="cursor-pointer">
+                    Top up
+                  </Button>
+                </div>
               </>
             )}
             <Button variant="ghost" size="sm" onClick={signOut}>
@@ -164,27 +190,7 @@ export function DashboardHome({
         </div>
       </header>
 
-      {!isAdmin && (
-        <div
-          style={{
-            background: "var(--bg-muted)",
-            borderBottom: "1px solid var(--border)",
-            padding: "10px 24px",
-          }}
-        >
-          <div className="max-w-5xl mx-auto w-full px-6 flex items-center justify-between flex-wrap gap-2">
-            <div style={{ fontSize: 13, color: "var(--fg-muted)" }}>
-              <strong style={{ color: "var(--fg)" }}>Credits:</strong> {credits ?? 0} — add stocks
-              and view shared analyses. Each analysis costs 1 credit. Buy 10 credits for €1.
-            </div>
-            <Button size="sm" onClick={startCheckout}>
-              Buy credits →
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {showCreditsToast && (
+      {showTopupToast && (
         <div
           style={{
             position: "fixed",
@@ -211,12 +217,12 @@ export function DashboardHome({
               }}
             />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Credits added</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Wallet topped up</div>
               <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>
-                Your purchase completed. Credits are ready to use.
+                Your purchase completed. Funds are ready to use.
               </div>
             </div>
-            <Button variant="ghost" size="icon-sm" onClick={() => setShowCreditsToast(false)}>
+            <Button variant="ghost" size="icon-sm" onClick={() => setShowTopupToast(false)}>
               <X size={12} />
             </Button>
           </div>

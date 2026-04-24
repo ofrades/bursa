@@ -7,6 +7,7 @@ import { authMiddleware } from "./middleware";
 import { buildInitialMemory } from "./memory";
 import { ema } from "../lib/metrics";
 import { parseAiJson, parseSupervisorResponse } from "../lib/ai-parse";
+import { calculateCostCents } from "../lib/pricing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -289,8 +290,34 @@ export async function callAI(prompt: string): Promise<string> {
   ]);
 }
 
-/** Stream AI response as an async iterable of text chunks */
-export async function* callAIStream(prompt: string): AsyncIterable<string> {
+/** Call AI and return text + token usage */
+export async function callAIWithUsage(prompt: string): Promise<{ text: string; usage: AIUsage }> {
+  const stream = callAIStream(prompt);
+  let text = "";
+  let usage: AIUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+  for await (const chunk of stream) {
+    if (chunk.type === "delta") {
+      text += chunk.delta;
+    }
+    if (chunk.type === "usage") {
+      usage = chunk.usage;
+    }
+  }
+
+  return { text, usage };
+}
+
+export type AIUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
+export type AIStreamChunk = { type: "delta"; delta: string } | { type: "usage"; usage: AIUsage };
+
+/** Stream AI response with text deltas and final usage */
+export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk> {
   const { chat } = await import("@tanstack/ai");
   const { createOpenaiChat } = await import("@tanstack/ai-openai");
   const adapter = createOpenaiChat(AI_MODEL as any, process.env.OPENROUTER_API_KEY ?? "", {
@@ -311,7 +338,17 @@ export async function* callAIStream(prompt: string): AsyncIterable<string> {
 
     for await (const chunk of stream) {
       if (chunk.type === "TEXT_MESSAGE_CONTENT" && chunk.delta) {
-        yield chunk.delta;
+        yield { type: "delta", delta: chunk.delta };
+      }
+      if (chunk.type === "RUN_FINISHED" && chunk.usage) {
+        yield {
+          type: "usage",
+          usage: {
+            promptTokens: chunk.usage.promptTokens ?? 0,
+            completionTokens: chunk.usage.completionTokens ?? 0,
+            totalTokens: chunk.usage.totalTokens ?? 0,
+          },
+        };
       }
     }
   } finally {
@@ -440,14 +477,18 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<RecommendationResult> => {
     const ctx = (context ?? {}) as {
       session: { sub: string } | null;
-      analysisCredits: number;
+      walletBalance: number;
       isAdmin: boolean;
     };
     if (!ctx.session) throw new Error("Unauthorized");
-    if (!ctx.isAdmin && (ctx.analysisCredits ?? 0) < 1) throw new Error("CREDITS_REQUIRED");
+
+    const MIN_BALANCE_CENTS = 10;
+    if (!ctx.isAdmin && (ctx.walletBalance ?? 0) < MIN_BALANCE_CENTS) {
+      throw new Error("INSUFFICIENT_FUNDS");
+    }
 
     const { getDb } = await import("../lib/db");
-    const { user } = await import("../lib/schema");
+    const { user, usageLog } = await import("../lib/schema");
     const db = await getDb();
 
     const today = new Date();
@@ -465,16 +506,15 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const raw = await callAI(
-      buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd),
-    );
+    const prompt = buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd);
+    const { text: raw, usage } = await callAIWithUsage(prompt);
 
     let parsed: ReturnType<typeof parseFullResponse>;
     try {
       parsed = parseFullResponse(raw);
     } catch {
       // Fallback: retry for signal JSON only
-      const retryRaw = await callAI(
+      const { text: retryRaw } = await callAIWithUsage(
         buildJsonOnlyRetryPrompt(stockData, setupContext, false, weekStart, weekEnd),
       );
       const signalOnly = parseAiJson<any>(retryRaw);
@@ -529,15 +569,28 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 
+    // Deduct actual cost from wallet
     if (!ctx.isAdmin) {
+      const costCents = calculateCostCents(AI_MODEL, usage.promptTokens, usage.completionTokens);
       const [u] = await db
-        .select({ analysisCredits: user.analysisCredits })
+        .select({ walletBalance: user.walletBalance })
         .from(user)
         .where(eq(user.id, ctx.session.sub));
       await db
         .update(user)
-        .set({ analysisCredits: Math.max(0, (u?.analysisCredits ?? 0) - 1) })
+        .set({ walletBalance: Math.max(0, (u?.walletBalance ?? 0) - costCents) })
         .where(eq(user.id, ctx.session.sub));
+
+      await db.insert(usageLog).values({
+        userId: ctx.session.sub,
+        symbol: data.symbol,
+        model: AI_MODEL,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.totalTokens,
+        costCents,
+        createdAt: new Date(),
+      });
     }
 
     return {
@@ -561,14 +614,18 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<RecommendationResult> => {
     const ctx = (context ?? {}) as {
       session: { sub: string } | null;
-      analysisCredits: number;
+      walletBalance: number;
       isAdmin: boolean;
     };
     if (!ctx.session) throw new Error("Unauthorized");
-    if (!ctx.isAdmin && (ctx.analysisCredits ?? 0) < 1) throw new Error("CREDITS_REQUIRED");
+
+    const MIN_BALANCE_CENTS = 10;
+    if (!ctx.isAdmin && (ctx.walletBalance ?? 0) < MIN_BALANCE_CENTS) {
+      throw new Error("INSUFFICIENT_FUNDS");
+    }
 
     const { getDb } = await import("../lib/db");
-    const { user } = await import("../lib/schema");
+    const { user, usageLog } = await import("../lib/schema");
     const db = await getDb();
 
     const today = new Date();
@@ -592,15 +649,14 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const raw = await callAI(
-      buildPrompt(stockData, memory, setupContext, true, weekStart, weekEnd),
-    );
+    const prompt = buildPrompt(stockData, memory, setupContext, true, weekStart, weekEnd);
+    const { text: raw, usage } = await callAIWithUsage(prompt);
 
     let parsed: ReturnType<typeof parseFullResponse>;
     try {
       parsed = parseFullResponse(raw);
     } catch {
-      const retryRaw = await callAI(
+      const { text: retryRaw } = await callAIWithUsage(
         buildJsonOnlyRetryPrompt(stockData, setupContext, true, weekStart, weekEnd),
       );
       const signalOnly = parseAiJson<any>(retryRaw);
@@ -643,15 +699,28 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 
+    // Deduct actual cost from wallet
     if (!ctx.isAdmin) {
+      const costCents = calculateCostCents(AI_MODEL, usage.promptTokens, usage.completionTokens);
       const [u] = await db
-        .select({ analysisCredits: user.analysisCredits })
+        .select({ walletBalance: user.walletBalance })
         .from(user)
         .where(eq(user.id, ctx.session.sub));
       await db
         .update(user)
-        .set({ analysisCredits: Math.max(0, (u?.analysisCredits ?? 0) - 1) })
+        .set({ walletBalance: Math.max(0, (u?.walletBalance ?? 0) - costCents) })
         .where(eq(user.id, ctx.session.sub));
+
+      await db.insert(usageLog).values({
+        userId: ctx.session.sub,
+        symbol: data.symbol,
+        model: AI_MODEL,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.totalTokens,
+        costCents,
+        createdAt: new Date(),
+      });
     }
 
     return {

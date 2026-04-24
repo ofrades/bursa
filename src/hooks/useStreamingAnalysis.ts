@@ -38,7 +38,7 @@ export function useStreamingAnalysis() {
         return;
       }
       if (response.status === 402) {
-        setState((s) => ({ ...s, isLoading: false, error: "CREDITS_REQUIRED" }));
+        setState((s) => ({ ...s, isLoading: false, error: "INSUFFICIENT_FUNDS" }));
         return;
       }
       if (!response.ok) {
@@ -95,6 +95,9 @@ export function useStreamingAnalysis() {
                 ...s,
                 text: s.text + parsed.delta,
               }));
+            }
+            if (parsed.done && parsed.costCents != null) {
+              // Final metadata — cost already deducted server-side
             }
           } catch {
             // Ignore malformed SSE lines
