@@ -20,6 +20,7 @@ import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing/webh
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiBillingCheckoutRouteImport } from './routes/api/billing/checkout'
 import { Route as ApiAuthSignoutRouteImport } from './routes/api/auth/signout'
+import { Route as ApiAnalyzeStreamRouteImport } from './routes/api/analyze/stream'
 import { Route as ApiAuthGoogleStartRouteImport } from './routes/api/auth/google/start'
 import { Route as ApiAuthGoogleCallbackRouteImport } from './routes/api/auth/google/callback'
 
@@ -78,6 +79,11 @@ const ApiAuthSignoutRoute = ApiAuthSignoutRouteImport.update({
   path: '/api/auth/signout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAnalyzeStreamRoute = ApiAnalyzeStreamRouteImport.update({
+  id: '/api/analyze/stream',
+  path: '/api/analyze/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthGoogleStartRoute = ApiAuthGoogleStartRouteImport.update({
   id: '/api/auth/google/start',
   path: '/api/auth/google/start',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
+  '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
   '/api/auth/signout': typeof ApiAuthSignoutRoute
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
+  '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
   '/api/auth/signout': typeof ApiAuthSignoutRoute
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
+  '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
   '/api/auth/signout': typeof ApiAuthSignoutRoute
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/api/health'
     | '/stocks/$symbol'
+    | '/api/analyze/stream'
     | '/api/auth/signout'
     | '/api/billing/checkout'
     | '/api/billing/portal'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/api/health'
     | '/stocks/$symbol'
+    | '/api/analyze/stream'
     | '/api/auth/signout'
     | '/api/billing/checkout'
     | '/api/billing/portal'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/api/health'
     | '/stocks/$symbol'
+    | '/api/analyze/stream'
     | '/api/auth/signout'
     | '/api/billing/checkout'
     | '/api/billing/portal'
@@ -190,6 +202,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   ApiHealthRoute: typeof ApiHealthRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
+  ApiAnalyzeStreamRoute: typeof ApiAnalyzeStreamRoute
   ApiAuthSignoutRoute: typeof ApiAuthSignoutRoute
   ApiBillingCheckoutRoute: typeof ApiBillingCheckoutRoute
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
@@ -278,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSignoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/analyze/stream': {
+      id: '/api/analyze/stream'
+      path: '/api/analyze/stream'
+      fullPath: '/api/analyze/stream'
+      preLoaderRoute: typeof ApiAnalyzeStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/google/start': {
       id: '/api/auth/google/start'
       path: '/api/auth/google/start'
@@ -302,6 +322,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   ApiHealthRoute: ApiHealthRoute,
   StocksSymbolRoute: StocksSymbolRoute,
+  ApiAnalyzeStreamRoute: ApiAnalyzeStreamRoute,
   ApiAuthSignoutRoute: ApiAuthSignoutRoute,
   ApiBillingCheckoutRoute: ApiBillingCheckoutRoute,
   ApiBillingPortalRoute: ApiBillingPortalRoute,

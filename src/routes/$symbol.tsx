@@ -36,7 +36,9 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { getStockPageData } from "../server/stocks";
-import { generateWeeklyAnalysis } from "../server/recommend";
+import { saveWeeklyAnalysis } from "../server/recommend";
+import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
+import { StreamingAnalysis } from "../components/StreamingAnalysis";
 
 export const Route = createFileRoute("/$symbol")({
   loader: async ({ params }) => {
@@ -232,20 +234,24 @@ function StockPage() {
   const { session } = Route.useRouteContext();
   const router = useRouter();
 
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const { state: streamState, start: startStream } = useStreamingAnalysis();
+  const [saving, setSaving] = useState(false);
 
-  const handleAnalyze = async () => {
-    setAnalyzing(true);
-    setAnalyzeError(null);
+  const handleAnalyze = () => {
+    startStream(symbol);
+  };
+
+  const handleSave = async (rawText: string) => {
+    setSaving(true);
     try {
-      await generateWeeklyAnalysis({ data: { symbol } });
-      await router.invalidate(); // re-run loader in place — no full page refresh
+      await saveWeeklyAnalysis({ data: { symbol, rawText } });
+      await router.invalidate();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Analysis failed";
-      setAnalyzeError(msg === "CREDITS_REQUIRED" ? "Not enough credits" : msg);
+      const msg = err instanceof Error ? err.message : "Save failed";
+      // eslint-disable-next-line no-console
+      console.error("Save failed:", msg);
     } finally {
-      setAnalyzing(false);
+      setSaving(false);
     }
   };
 
@@ -299,14 +305,21 @@ function StockPage() {
           </div>
           {session && (
             <div className="flex items-center gap-2">
-              {analyzeError && <span className="text-xs text-red-500">{analyzeError}</span>}
-              <Button size="sm" variant="outline" disabled={analyzing} onClick={handleAnalyze}>
-                {analyzing ? (
+              {streamState.error && (
+                <span className="text-xs text-red-500">{streamState.error}</span>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={streamState.isLoading}
+                onClick={handleAnalyze}
+              >
+                {streamState.isLoading ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <Sparkles className="size-3.5" />
                 )}
-                {analyzing ? "Analyzing…" : "Analyze"}
+                {streamState.isLoading ? "Analyzing…" : "Analyze"}
               </Button>
             </div>
           )}
@@ -355,162 +368,161 @@ function StockPage() {
           </CardHeader>
         </Card>
 
-        <SetupChecklist rec={recommendation} />
+        {/* Streaming analysis or saved analysis */}
+        {streamState.isLoading || streamState.isComplete || streamState.text ? (
+          <StreamingAnalysis state={streamState} onSave={handleSave} saving={saving} />
+        ) : latestAnalysis ? (
+          <>
+            <SetupChecklist rec={recommendation} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              {/* AI analysis card */}
+              <Card>
+                <CardHeader>
+                  <div>
+                    <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
+                      AI analysis
+                    </CardDescription>
+                    <CardTitle className="text-xl">Weekly recommendation</CardTitle>
+                  </div>
+                  <CardAction>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <SignalBadge signal={latestAnalysis.signal} />
+                      {latestAnalysis.cycle && (
+                        <CycleBadge
+                          cycle={latestAnalysis.cycle as Cycle}
+                          timeframe={latestAnalysis.cycleTimeframe}
+                        />
+                      )}
+                    </div>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-5">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      {
+                        label: "Confidence",
+                        value:
+                          latestAnalysis.confidence != null ? `${latestAnalysis.confidence}%` : "—",
+                      },
+                      {
+                        label: "Risk",
+                        value: recommendation?.riskLevel ?? "—",
+                      },
+                      {
+                        label: "Price target",
+                        value: moneyStr(recommendation?.priceTarget),
+                      },
+                      {
+                        label: "Stop loss",
+                        value: moneyStr(recommendation?.stopLoss),
+                      },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="rounded-lg bg-muted/60 px-3 py-3">
+                        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                        <p className="text-base font-semibold">{value}</p>
+                      </div>
+                    ))}
+                  </div>
 
-        {/* No analysis state */}
-        {!latestAnalysis && (
+                  {latestAnalysis.cycle && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
+                        Cycle phase
+                      </p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <CycleBadge cycle={latestAnalysis.cycle as Cycle} />
+                      </div>
+                      <CycleStrengthBar strength={latestAnalysis.cycleStrength} />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {latestAnalysis.cycleTimeframe === "SHORT" &&
+                          "Days to 2 weeks — price action driven"}
+                        {latestAnalysis.cycleTimeframe === "MEDIUM" &&
+                          "Weeks to a quarter — SMA & earnings driven"}
+                        {latestAnalysis.cycleTimeframe === "LONG" &&
+                          "Quarters to a year — fundamentals & macro driven"}
+                      </p>
+                    </div>
+                  )}
+
+                  {recommendation?.weeklyOutlook && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
+                        Weekly outlook
+                      </p>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {recommendation.weeklyOutlook}
+                      </p>
+                    </div>
+                  )}
+
+                  {recommendation?.reasoning && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
+                        Reasoning
+                      </p>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {recommendation.reasoning}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Bullish / Bearish */}
+              <div className="flex flex-col gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardDescription className="text-xs uppercase tracking-wider">
+                      Bullish factors
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {bullishFactors.length ? (
+                      <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
+                        {bullishFactors.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No bullish factors saved.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardDescription className="text-xs uppercase tracking-wider">
+                      Bearish factors
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {bearishFactors.length ? (
+                      <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
+                        {bearishFactors.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No bearish factors saved.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* No analysis state */
           <Card>
             <CardContent className="flex items-start gap-3 pt-5">
               <CircleAlert className="size-5 text-amber-500 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold mb-1">No analysis generated for {symbol} yet</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Add it to your watchlist from the home page and run an analysis to populate this
-                  view.
+                  Click Analyze above to run a new streaming analysis.
                 </p>
               </div>
             </CardContent>
           </Card>
-        )}
-
-        {/* Analysis + factors */}
-        {latestAnalysis && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            {/* AI analysis card */}
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
-                    AI analysis
-                  </CardDescription>
-                  <CardTitle className="text-xl">Weekly recommendation</CardTitle>
-                </div>
-                <CardAction>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <SignalBadge signal={latestAnalysis.signal} />
-                    {latestAnalysis.cycle && (
-                      <CycleBadge
-                        cycle={latestAnalysis.cycle as Cycle}
-                        timeframe={latestAnalysis.cycleTimeframe}
-                      />
-                    )}
-                  </div>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-5">
-                {/* Mini metric grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    {
-                      label: "Confidence",
-                      value:
-                        latestAnalysis.confidence != null ? `${latestAnalysis.confidence}%` : "—",
-                    },
-                    {
-                      label: "Risk",
-                      value: recommendation?.riskLevel ?? "—",
-                    },
-                    {
-                      label: "Price target",
-                      value: moneyStr(recommendation?.priceTarget),
-                    },
-                    {
-                      label: "Stop loss",
-                      value: moneyStr(recommendation?.stopLoss),
-                    },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="rounded-lg bg-muted/60 px-3 py-3">
-                      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                      <p className="text-base font-semibold">{value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {latestAnalysis.cycle && (
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                      Cycle phase
-                    </p>
-                    <div className="flex items-center gap-2 mb-1">
-                      <CycleBadge cycle={latestAnalysis.cycle as Cycle} />
-                    </div>
-                    <CycleStrengthBar strength={latestAnalysis.cycleStrength} />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {latestAnalysis.cycleTimeframe === "SHORT" &&
-                        "Days to 2 weeks — price action driven"}
-                      {latestAnalysis.cycleTimeframe === "MEDIUM" &&
-                        "Weeks to a quarter — SMA & earnings driven"}
-                      {latestAnalysis.cycleTimeframe === "LONG" &&
-                        "Quarters to a year — fundamentals & macro driven"}
-                    </p>
-                  </div>
-                )}
-
-                {recommendation?.weeklyOutlook && (
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                      Weekly outlook
-                    </p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {recommendation.weeklyOutlook}
-                    </p>
-                  </div>
-                )}
-
-                {recommendation?.reasoning && (
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                      Reasoning
-                    </p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {recommendation.reasoning}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Bullish / Bearish */}
-            <div className="flex flex-col gap-4">
-              <Card>
-                <CardHeader>
-                  <CardDescription className="text-xs uppercase tracking-wider">
-                    Bullish factors
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {bullishFactors.length ? (
-                    <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
-                      {bullishFactors.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No bullish factors saved.</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardDescription className="text-xs uppercase tracking-wider">
-                    Bearish factors
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {bearishFactors.length ? (
-                    <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
-                      {bearishFactors.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No bearish factors saved.</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
         )}
 
         {/* ── Board of Supervisors ───────────────────────────────────────────── */}

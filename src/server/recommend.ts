@@ -68,7 +68,7 @@ export type RecommendationResult = {
 
 // ─── Yahoo Finance data gathering ─────────────────────────────────────────────
 
-async function gatherStockData(symbol: string) {
+export async function gatherStockData(symbol: string) {
   const { default: YahooFinance } = await import("yahoo-finance2");
   const yf = new YahooFinance({
     suppressNotices: ["ripHistorical", "yahooSurvey"],
@@ -168,7 +168,7 @@ type StockData = Awaited<ReturnType<typeof gatherStockData>>;
 
 // ─── AI prompt ────────────────────────────────────────────────────────────────
 
-function buildPrompt(
+export function buildPrompt(
   d: StockData,
   memory: string,
   setupContext: string,
@@ -240,7 +240,7 @@ Warren Buffett's lens: moat, margin of safety, rationality, long-term value. Alw
 <updated full memory markdown — include today's signal, cycle, and any new observations>`;
 }
 
-function buildJsonOnlyRetryPrompt(
+export function buildJsonOnlyRetryPrompt(
   d: StockData,
   setupContext: string,
   isDaily: boolean,
@@ -267,7 +267,7 @@ Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 const AI_MODEL = process.env.AI_MODEL ?? "google/gemini-2.0-flash-001";
 const AI_TIMEOUT_MS = 90_000; // 90s — well under Cloudflare's 100s gateway timeout
 
-async function callAI(prompt: string): Promise<string> {
+export async function callAI(prompt: string): Promise<string> {
   const { chat } = await import("@tanstack/ai");
   const { createOpenaiChat } = await import("@tanstack/ai-openai");
   const adapter = createOpenaiChat(AI_MODEL as any, process.env.OPENROUTER_API_KEY ?? "", {
@@ -289,16 +289,46 @@ async function callAI(prompt: string): Promise<string> {
   ]);
 }
 
+/** Stream AI response as an async iterable of text chunks */
+export async function* callAIStream(prompt: string): AsyncIterable<string> {
+  const { chat } = await import("@tanstack/ai");
+  const { createOpenaiChat } = await import("@tanstack/ai-openai");
+  const adapter = createOpenaiChat(AI_MODEL as any, process.env.OPENROUTER_API_KEY ?? "", {
+    baseURL: "https://openrouter.ai/api/v1",
+  });
+
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
+
+  try {
+    const stream = await chat({
+      adapter,
+      messages: [{ role: "user", content: prompt }],
+      stream: true,
+      maxTokens: 4000,
+      abortController,
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.type === "TEXT_MESSAGE_CONTENT" && chunk.delta) {
+        yield chunk.delta;
+      }
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ─── Memory helpers ───────────────────────────────────────────────────────────
 
-async function readMemory(symbol: string): Promise<string> {
+export async function readMemory(symbol: string): Promise<string> {
   const { getDb } = await import("../lib/db");
   const db = await getDb();
   const [row] = await db.select().from(stockMemory).where(eq(stockMemory.symbol, symbol));
   return row?.content ?? buildInitialMemory(symbol);
 }
 
-async function writeMemory(symbol: string, content: string) {
+export async function writeMemory(symbol: string, content: string) {
   const { getDb } = await import("../lib/db");
   const db = await getDb();
   await db
@@ -632,6 +662,95 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
       cycleStrength: parsedSignal.cycleStrength ?? null,
       signalChanged: changed,
+      priceAtAnalysis: stockData.currentPrice,
+      weekStart,
+      weekEnd,
+      talebreview,
+      buffettReview,
+    };
+  });
+
+// ─── Save pre-computed analysis (used after streaming) ────────────────────────
+
+export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((data: { symbol: string; rawText: string }) => data)
+  .handler(async ({ data, context }): Promise<RecommendationResult> => {
+    const ctx = (context ?? {}) as {
+      session: { sub: string } | null;
+      isAdmin: boolean;
+    };
+    if (!ctx.session) throw new Error("Unauthorized");
+
+    const { getDb } = await import("../lib/db");
+    const db = await getDb();
+
+    const today = new Date();
+    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
+
+    const stockData = await gatherStockData(data.symbol);
+
+    let parsed: ReturnType<typeof parseFullResponse>;
+    try {
+      parsed = parseFullResponse(data.rawText);
+    } catch {
+      throw new Error("Failed to parse streamed analysis");
+    }
+
+    const { signal: parsedSignal, talebreview, buffettReview, memoryUpdate } = parsed;
+
+    // Upsert global analysis
+    const existing = await db
+      .select()
+      .from(stockAnalysis)
+      .where(eq(stockAnalysis.symbol, data.symbol));
+    const thisWeek = existing.find((r) => r.weekStart === weekStart);
+    const recId = thisWeek?.id ?? randomUUID();
+    const now = new Date();
+
+    const analysisPayload = {
+      signal: parsedSignal.signal as Signal,
+      cycle: parsedSignal.cycle ?? null,
+      cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
+      cycleStrength: parsedSignal.cycleStrength ?? null,
+      confidence: parsedSignal.confidence,
+      reasoning: JSON.stringify(parsedSignal),
+      priceAtAnalysis: stockData.currentPrice,
+      lastTriggeredByUserId: ctx.session.sub,
+      updatedAt: now,
+    };
+
+    if (thisWeek) {
+      await db.update(stockAnalysis).set(analysisPayload).where(eq(stockAnalysis.id, recId));
+    } else {
+      await db.insert(stockAnalysis).values({
+        id: recId,
+        symbol: data.symbol,
+        weekStart,
+        weekEnd,
+        ...analysisPayload,
+        createdAt: now,
+      });
+    }
+
+    await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
+
+    const earningsDate = stockData.earningsDate ? new Date(stockData.earningsDate) : null;
+    await db
+      .update(stock)
+      .set({ lastAnalyzedAt: now, nextCheckAt: computeNextCheck(earningsDate) })
+      .where(eq(stock.symbol, data.symbol));
+
+    if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
+
+    return {
+      id: recId,
+      ...parsedSignal,
+      signal: parsedSignal.signal as Signal,
+      cycle: parsedSignal.cycle ?? null,
+      cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
+      cycleStrength: parsedSignal.cycleStrength ?? null,
       priceAtAnalysis: stockData.currentPrice,
       weekStart,
       weekEnd,
