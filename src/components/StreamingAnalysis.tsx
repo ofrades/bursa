@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { Loader2, CircleAlert, Save } from "lucide-react";
+import { Loader2, CircleAlert } from "lucide-react";
 import { parseSections } from "../lib/stream-parsing";
 import type { StreamingState } from "../hooks/useStreamingAnalysis";
 import { Badge, SignalBadge, CycleBadge, SupervisorBadge } from "./ui/badge";
 import type { Signal, Cycle, SupervisorSeverity } from "./ui/badge";
-import { Button } from "./ui/button";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
 function moneyStr(v: number | null | undefined) {
@@ -77,15 +77,7 @@ function SetupChecklistPartial({
   );
 }
 
-export function StreamingAnalysis({
-  state,
-  onSave,
-  saving,
-}: {
-  state: StreamingState;
-  onSave?: (rawText: string) => void;
-  saving?: boolean;
-}) {
+export function StreamingAnalysis({ state }: { state: StreamingState }) {
   const sections = useMemo(() => parseSections(state.text), [state.text]);
 
   const signal = sections.signalJson;
@@ -358,17 +350,10 @@ export function StreamingAnalysis({
         </Card>
       )}
 
-      {/* Save button when complete */}
-      {state.isComplete && onSave && (
+      {/* Auto-saving indicator */}
+      {state.isComplete && (
         <div className="flex justify-end">
-          <Button onClick={() => onSave(state.text)} disabled={saving}>
-            {saving ? (
-              <Loader2 className="size-4 animate-spin mr-2" />
-            ) : (
-              <Save className="size-4 mr-2" />
-            )}
-            {saving ? "Saving…" : "Save analysis"}
-          </Button>
+          <span className="text-xs text-muted-foreground">Saving analysis…</span>
         </div>
       )}
     </div>

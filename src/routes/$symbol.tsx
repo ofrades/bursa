@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BarChart3,
   CalendarDays,
@@ -235,25 +235,23 @@ function StockPage() {
   const router = useRouter();
 
   const { state: streamState, start: startStream } = useStreamingAnalysis();
-  const [saving, setSaving] = useState(false);
 
   const handleAnalyze = () => {
     startStream(symbol);
   };
 
-  const handleSave = async (rawText: string) => {
-    setSaving(true);
-    try {
-      await saveWeeklyAnalysis({ data: { symbol, rawText } });
-      await router.invalidate();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      // eslint-disable-next-line no-console
-      console.error("Save failed:", msg);
-    } finally {
-      setSaving(false);
+  // Auto-save streamed analysis to DB when complete
+  useEffect(() => {
+    if (streamState.isComplete && streamState.text && !streamState.error) {
+      saveWeeklyAnalysis({ data: { symbol, rawText: streamState.text } })
+        .then(() => router.invalidate())
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Save failed";
+          // eslint-disable-next-line no-console
+          console.error("Auto-save failed:", msg);
+        });
     }
-  };
+  }, [streamState.isComplete, streamState.text, streamState.error, symbol]);
 
   const symbol = params.symbol.toUpperCase();
   const stock = data.stock;
@@ -370,7 +368,7 @@ function StockPage() {
 
         {/* Streaming analysis or saved analysis */}
         {streamState.isLoading || streamState.isComplete || streamState.text ? (
-          <StreamingAnalysis state={streamState} onSave={handleSave} saving={saving} />
+          <StreamingAnalysis state={streamState} />
         ) : latestAnalysis ? (
           <>
             <SetupChecklist rec={recommendation} />
