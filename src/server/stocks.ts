@@ -133,7 +133,7 @@ export const getRecentSharedAnalyses = createServerFn({
 }).handler(async () => {
   const { getDb } = await import("../lib/db");
   const db = await getDb();
-  return db
+  const rows = await db
     .select({
       symbol: stockAnalysis.symbol,
       signal: stockAnalysis.signal,
@@ -143,8 +143,17 @@ export const getRecentSharedAnalyses = createServerFn({
     })
     .from(stockAnalysis)
     .leftJoin(stock, eq(stockAnalysis.symbol, stock.symbol))
-    .orderBy(desc(stockAnalysis.updatedAt))
-    .limit(8);
+    .orderBy(desc(stockAnalysis.weekStart));
+
+  // Keep the latest analysis per symbol
+  const latest = new Map<
+    string,
+    { symbol: string; signal: string; confidence: number | null; updatedAt: Date | null; name: string | null }
+  >();
+  for (const row of rows) {
+    if (!latest.has(row.symbol)) latest.set(row.symbol, row);
+  }
+  return Array.from(latest.values());
 });
 
 // ─── User watchlist ───────────────────────────────────────────────────────────
