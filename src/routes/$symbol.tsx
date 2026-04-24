@@ -233,6 +233,7 @@ function StockPage() {
   const params = Route.useParams();
   const { session } = Route.useRouteContext();
   const router = useRouter();
+  const symbol = params.symbol.toUpperCase();
 
   const { state: streamState, start: startStream } = useStreamingAnalysis();
 
@@ -252,8 +253,6 @@ function StockPage() {
         });
     }
   }, [streamState.isComplete, streamState.text, streamState.error, symbol]);
-
-  const symbol = params.symbol.toUpperCase();
   const stock = data.stock;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
