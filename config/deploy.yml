@@ -41,7 +41,7 @@ env:
     NODE_ENV: production
     BETTER_AUTH_URL: https://bursa.mohshoo.com
     DB_PATH: /app/data/stocktrack.sqlite
-    AI_MODEL: moonshotai/kimi-k2.5
+    AI_MODEL: moonshotai/kimi-k2.6
   secret:
     - AUTH_SECRET
     - GOOGLE_CLIENT_ID
@@ -51,6 +51,5 @@ env:
     - STRIPE_SECRET_KEY
     - STRIPE_WEBHOOK_SECRET
     - STRIPE_PRICE_CREDITS_10
-
 # Cloudflare Tunnel should target http://127.0.0.1:80 on the VPS for
 # bursa.mohshoo.com. kamal-proxy is published on host port 80.
