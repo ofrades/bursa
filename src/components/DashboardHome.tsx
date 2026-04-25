@@ -1,6 +1,5 @@
-import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Sparkles, TrendingUp, Users, X } from "lucide-react";
+import { TrendingUp, X } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import {
   getWatchlist,
@@ -12,9 +11,9 @@ import {
 import { getSession } from "../server/session";
 import type { StockAnalysis } from "../lib/schema";
 import { StockSearchBar } from "./StockSearchBar";
-import { Badge, SignalBadge, type Signal } from "./ui/badge";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card, CardContent } from "./ui/card";
+import { Card } from "./ui/card";
 import { SharedAnalysisTable } from "./SharedAnalysisTable";
 
 type SharedRow = {
@@ -47,14 +46,6 @@ function formatEuro(cents: number): string {
   }).format(cents / 100);
 }
 
-function pctColor(v: number | null | undefined) {
-  if (v == null || v === 0) return "";
-  return v > 0 ? "text-emerald-500" : "text-red-500";
-}
-function pctStr(v: number | null | undefined) {
-  if (v == null) return "—";
-  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
 function WeekLabel() {
   const t = new Date();
   return (

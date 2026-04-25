@@ -7,23 +7,23 @@ export type StreamingState = {
   error: string | null;
 };
 
+const INITIAL_STATE: StreamingState = {
+  isLoading: false,
+  isComplete: false,
+  text: "",
+  error: null,
+};
+
 export function useStreamingAnalysis() {
-  const [state, setState] = useState<StreamingState>({
-    isLoading: false,
-    isComplete: false,
-    text: "",
-    error: null,
-  });
+  const [state, setState] = useState<StreamingState>(INITIAL_STATE);
 
   const abortRef = useRef<(() => void) | null>(null);
 
   const start = useCallback(async (symbol: string) => {
     // Reset state
     setState({
+      ...INITIAL_STATE,
       isLoading: true,
-      isComplete: false,
-      text: "",
-      error: null,
     });
 
     try {
@@ -120,5 +120,10 @@ export function useStreamingAnalysis() {
     setState((s) => ({ ...s, isLoading: false }));
   }, []);
 
-  return { state, start, stop };
+  const reset = useCallback(() => {
+    abortRef.current = null;
+    setState(INITIAL_STATE);
+  }, []);
+
+  return { state, start, stop, reset };
 }

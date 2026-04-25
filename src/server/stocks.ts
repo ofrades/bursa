@@ -148,7 +148,13 @@ export const getRecentSharedAnalyses = createServerFn({
   // Keep the latest analysis per symbol
   const latest = new Map<
     string,
-    { symbol: string; signal: string; confidence: number | null; updatedAt: Date | null; name: string | null }
+    {
+      symbol: string;
+      signal: string;
+      confidence: number | null;
+      updatedAt: Date | null;
+      name: string | null;
+    }
   >();
   for (const row of rows) {
     if (!latest.has(row.symbol)) latest.set(row.symbol, row);

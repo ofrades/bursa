@@ -43,7 +43,7 @@ export const stock = sqliteTable("stock", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(now),
 });
 
-// ─── Metrics (updated each nightly analysis) ───────────────────────────────────
+// ─── Metrics (updated during analysis refreshes) ───────────────────────────────
 // Pure price-performance numbers — no AI, no opinion.
 
 export const stockMetrics = sqliteTable("stock_metrics", {

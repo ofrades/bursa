@@ -5,6 +5,9 @@
  */
 
 const PRICING_TABLE: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  // Moonshot AI
+  "moonshotai/kimi-k2.6": { inputPer1M: 0.7448, outputPer1M: 4.655 },
+
   // Google Gemini
   "google/gemini-2.0-flash-001": { inputPer1M: 0.1, outputPer1M: 0.4 },
   "google/gemini-2.5-flash-preview": { inputPer1M: 0.15, outputPer1M: 0.6 },

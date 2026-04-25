@@ -8,6 +8,7 @@ import { buildInitialMemory } from "./memory";
 import { ema } from "../lib/metrics";
 import { parseAiJson, parseSupervisorResponse } from "../lib/ai-parse";
 import { calculateCostCents } from "../lib/pricing";
+import { AI_MODEL } from "../lib/ai-model";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -265,7 +266,6 @@ Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 
 // ─── AI call ──────────────────────────────────────────────────────────────────
 
-const AI_MODEL = process.env.AI_MODEL ?? "google/gemini-2.0-flash-001";
 const AI_TIMEOUT_MS = 90_000; // 90s — well under Cloudflare's 100s gateway timeout
 
 export async function callAI(prompt: string): Promise<string> {
@@ -412,25 +412,6 @@ async function saveSupervisorAlerts(
   }
 }
 
-// ─── Next check scheduling ────────────────────────────────────────────────────
-
-function computeNextCheck(earningsDate: Date | null | undefined): Date {
-  const now = new Date();
-  if (earningsDate) {
-    const daysUntil = (earningsDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-    if (daysUntil > 0 && daysUntil <= 7) {
-      const dayBefore = new Date(earningsDate);
-      dayBefore.setDate(dayBefore.getDate() - 1);
-      dayBefore.setHours(9, 0, 0, 0);
-      return dayBefore;
-    }
-  }
-  const nextMonday = new Date(now);
-  nextMonday.setDate(now.getDate() + ((8 - now.getDay()) % 7 || 7));
-  nextMonday.setHours(22, 0, 0, 0);
-  return nextMonday;
-}
-
 // ─── Parse full AI response ───────────────────────────────────────────────────
 
 function parseFullResponse(raw: string): {
@@ -560,12 +541,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     // Save supervisor alerts
     await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
 
-    // Update stock next check
-    const earningsDate = stockData.earningsDate ? new Date(stockData.earningsDate) : null;
-    await db
-      .update(stock)
-      .set({ lastAnalyzedAt: now, nextCheckAt: computeNextCheck(earningsDate) })
-      .where(eq(stock.symbol, data.symbol));
+    await db.update(stock).set({ lastAnalyzedAt: now }).where(eq(stock.symbol, data.symbol));
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 
@@ -805,11 +781,7 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
 
     await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
 
-    const earningsDate = stockData.earningsDate ? new Date(stockData.earningsDate) : null;
-    await db
-      .update(stock)
-      .set({ lastAnalyzedAt: now, nextCheckAt: computeNextCheck(earningsDate) })
-      .where(eq(stock.symbol, data.symbol));
+    await db.update(stock).set({ lastAnalyzedAt: now }).where(eq(stock.symbol, data.symbol));
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 

@@ -93,7 +93,14 @@ function run(sql: string, label: string) {
 
 if (mode === "diff") {
   console.log("\n=== Table row counts ===\n");
-  for (const t of ["stock", "stock_metrics", "stock_memory", "stock_analysis", "daily_signal", "supervisor_alert"]) {
+  for (const t of [
+    "stock",
+    "stock_metrics",
+    "stock_memory",
+    "stock_analysis",
+    "daily_signal",
+    "supervisor_alert",
+  ]) {
     printDiff(t, diffCount(t));
   }
 
@@ -171,7 +178,9 @@ if (mode === "diff") {
        WHERE pds.id IS NULL`,
     )
     .all() as { symbol: string; date: string; signal: string }[];
-  console.log(`  ${missingSignals.length} signals exist in local without matching prod stock_analysis_id+date`);
+  console.log(
+    `  ${missingSignals.length} signals exist in local without matching prod stock_analysis_id+date`,
+  );
 
   console.log("\n=== Supervisor alerts missing in prod ===\n");
   const missingAlerts = db
@@ -185,7 +194,9 @@ if (mode === "diff") {
        WHERE psa.id IS NULL`,
     )
     .all() as { symbol: string; supervisor: string; alert_type: string }[];
-  console.log(`  ${missingAlerts.length} alerts exist in local without matching prod stock_analysis_id+supervisor+alert_type`);
+  console.log(
+    `  ${missingAlerts.length} alerts exist in local without matching prod stock_analysis_id+supervisor+alert_type`,
+  );
 
   console.log("\n");
   db.close();
@@ -230,19 +241,22 @@ const tx = db.transaction(() => {
   console.log("\n[stockAnalysis]");
 
   // 4a. Insert analyses that don't exist in prod (by symbol+week_start)
-  const insertedAnalyses = db.prepare(
-    `INSERT INTO stock_analysis (id, symbol, week_start, week_end, signal, cycle, cycle_timeframe, cycle_strength, confidence, reasoning, price_at_analysis, last_triggered_by_user_id, created_at, updated_at)
+  const insertedAnalyses = db
+    .prepare(
+      `INSERT INTO stock_analysis (id, symbol, week_start, week_end, signal, cycle, cycle_timeframe, cycle_strength, confidence, reasoning, price_at_analysis, last_triggered_by_user_id, created_at, updated_at)
      SELECT a.id, a.symbol, a.week_start, a.week_end, a.signal, a.cycle, a.cycle_timeframe, a.cycle_strength, a.confidence, a.reasoning, a.price_at_analysis, a.last_triggered_by_user_id, a.created_at, a.updated_at
      FROM local.stock_analysis a
      LEFT JOIN stock_analysis p ON p.symbol = a.symbol AND p.week_start = a.week_start
      WHERE p.id IS NULL`,
-  ).run();
+    )
+    .run();
   console.log(`  inserted (new): ${insertedAnalyses.changes} rows`);
 
   // 4b. Update analyses that exist in prod but local is newer
   // We must keep prod.id so child FKs remain valid.
-  const updatedAnalyses = db.prepare(
-    `UPDATE stock_analysis AS p
+  const updatedAnalyses = db
+    .prepare(
+      `UPDATE stock_analysis AS p
      SET week_end            = a.week_end,
          signal              = a.signal,
          cycle               = a.cycle,
@@ -255,7 +269,8 @@ const tx = db.transaction(() => {
          updated_at          = a.updated_at
      FROM local.stock_analysis a
      WHERE p.symbol = a.symbol AND p.week_start = a.week_start AND a.updated_at > p.updated_at`,
-  ).run();
+    )
+    .run();
   console.log(`  updated (local newer): ${updatedAnalyses.changes} rows`);
 
   // Build a mapping of local analysis id → prod analysis id for rows that share (symbol, week_start)
@@ -279,10 +294,13 @@ const tx = db.transaction(() => {
   // Create a temp table with mapped stock_analysis_ids
   db.exec(`DROP TABLE IF EXISTS _tmp_daily_signal`);
   db.exec(`CREATE TEMP TABLE _tmp_daily_signal AS SELECT * FROM local.daily_signal WHERE 0`);
-  const insertTmpDs = db.prepare(`INSERT INTO _tmp_daily_signal (id, stock_analysis_id, symbol, date, signal, cycle, note, price_at_update, signal_changed, trigger, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const insertTmpDs = db.prepare(
+    `INSERT INTO _tmp_daily_signal (id, stock_analysis_id, symbol, date, signal, cycle, note, price_at_update, signal_changed, trigger, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
   const localDs = db.prepare(`SELECT * FROM local.daily_signal`).all() as Record<string, unknown>[];
   for (const row of localDs) {
-    const mappedId = idMap.get(row.stock_analysis_id as string) || (row.stock_analysis_id as string);
+    const mappedId =
+      idMap.get(row.stock_analysis_id as string) || (row.stock_analysis_id as string);
     insertTmpDs.run(
       row.id,
       mappedId,
@@ -298,17 +316,20 @@ const tx = db.transaction(() => {
     );
   }
 
-  const insertedSignals = db.prepare(
-    `INSERT OR IGNORE INTO daily_signal (id, stock_analysis_id, symbol, date, signal, cycle, note, price_at_update, signal_changed, trigger, created_at)
+  const insertedSignals = db
+    .prepare(
+      `INSERT OR IGNORE INTO daily_signal (id, stock_analysis_id, symbol, date, signal, cycle, note, price_at_update, signal_changed, trigger, created_at)
      SELECT t.id, t.stock_analysis_id, t.symbol, t.date, t.signal, t.cycle, t.note, t.price_at_update, t.signal_changed, t.trigger, t.created_at
      FROM _tmp_daily_signal t
      LEFT JOIN daily_signal p ON p.stock_analysis_id = t.stock_analysis_id AND p.date = t.date
      WHERE p.id IS NULL`,
-  ).run();
+    )
+    .run();
   console.log(`  inserted (new): ${insertedSignals.changes} rows`);
 
-  const updatedSignals = db.prepare(
-    `UPDATE daily_signal AS p
+  const updatedSignals = db
+    .prepare(
+      `UPDATE daily_signal AS p
      SET signal         = t.signal,
          cycle          = t.cycle,
          note           = t.note,
@@ -318,7 +339,8 @@ const tx = db.transaction(() => {
      FROM _tmp_daily_signal t
      WHERE p.stock_analysis_id = t.stock_analysis_id AND p.date = t.date
        AND t.created_at > p.created_at`,
-  ).run();
+    )
+    .run();
   console.log(`  updated (local newer): ${updatedSignals.changes} rows`);
 
   db.exec(`DROP TABLE IF EXISTS _tmp_daily_signal`);
@@ -327,11 +349,19 @@ const tx = db.transaction(() => {
   console.log("\n[supervisorAlert]");
 
   db.exec(`DROP TABLE IF EXISTS _tmp_supervisor_alert`);
-  db.exec(`CREATE TEMP TABLE _tmp_supervisor_alert AS SELECT * FROM local.supervisor_alert WHERE 0`);
-  const insertTmpSa = db.prepare(`INSERT INTO _tmp_supervisor_alert (id, symbol, stock_analysis_id, supervisor, alert_type, severity, title, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  const localSa = db.prepare(`SELECT * FROM local.supervisor_alert`).all() as Record<string, unknown>[];
+  db.exec(
+    `CREATE TEMP TABLE _tmp_supervisor_alert AS SELECT * FROM local.supervisor_alert WHERE 0`,
+  );
+  const insertTmpSa = db.prepare(
+    `INSERT INTO _tmp_supervisor_alert (id, symbol, stock_analysis_id, supervisor, alert_type, severity, title, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const localSa = db.prepare(`SELECT * FROM local.supervisor_alert`).all() as Record<
+    string,
+    unknown
+  >[];
   for (const row of localSa) {
-    const mappedId = idMap.get(row.stock_analysis_id as string) || (row.stock_analysis_id as string);
+    const mappedId =
+      idMap.get(row.stock_analysis_id as string) || (row.stock_analysis_id as string);
     insertTmpSa.run(
       row.id,
       row.symbol,
@@ -345,8 +375,9 @@ const tx = db.transaction(() => {
     );
   }
 
-  const insertedAlerts = db.prepare(
-    `INSERT OR IGNORE INTO supervisor_alert (id, symbol, stock_analysis_id, supervisor, alert_type, severity, title, content, created_at)
+  const insertedAlerts = db
+    .prepare(
+      `INSERT OR IGNORE INTO supervisor_alert (id, symbol, stock_analysis_id, supervisor, alert_type, severity, title, content, created_at)
      SELECT t.id, t.symbol, t.stock_analysis_id, t.supervisor, t.alert_type, t.severity, t.title, t.content, t.created_at
      FROM _tmp_supervisor_alert t
      LEFT JOIN supervisor_alert p
@@ -354,7 +385,8 @@ const tx = db.transaction(() => {
        AND p.supervisor = t.supervisor
        AND p.alert_type = t.alert_type
      WHERE p.id IS NULL`,
-  ).run();
+    )
+    .run();
   console.log(`  inserted (new): ${insertedAlerts.changes} rows`);
 
   // For alerts we don't update — they are immutable snapshots, so keep prod's if both exist.
@@ -367,7 +399,9 @@ tx();
 console.log("\n✅ Merge complete.");
 if (outputPath !== prodPath) {
   console.log(`   Merged DB written to: ${outputPath}`);
-  console.log(`   Push to prod with:  scp ${outputPath} root@mohshoo.tailf9eafe.ts.net:/var/lib/bursa/data/stocktrack.sqlite`);
+  console.log(
+    `   Push to prod with:  scp ${outputPath} root@mohshoo.tailf9eafe.ts.net:/var/lib/bursa/data/stocktrack.sqlite`,
+  );
 }
 console.log("");
 

@@ -70,20 +70,6 @@ function parseRecommendation(value: unknown): ParsedRecommendation | null {
   }
 }
 
-function pctClass(v: number | null | undefined) {
-  if (v == null) return "text-muted-foreground";
-  return v > 0
-    ? "text-emerald-600 dark:text-emerald-400"
-    : v < 0
-      ? "text-red-600 dark:text-red-400"
-      : "text-muted-foreground";
-}
-
-function pctStr(v: number | null | undefined) {
-  if (v == null) return "—";
-  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
-
 function moneyStr(v: number | null | undefined) {
   if (v == null) return "—";
   return new Intl.NumberFormat("en-US", {
@@ -91,11 +77,6 @@ function moneyStr(v: number | null | undefined) {
     currency: "USD",
     maximumFractionDigits: v >= 100 ? 0 : 2,
   }).format(v);
-}
-
-function numberStr(v: number | null | undefined, digits = 1) {
-  if (v == null) return "—";
-  return v.toFixed(digits);
 }
 
 function dateStr(v: string | Date | null | undefined, withTime = false) {
@@ -235,24 +216,57 @@ function StockPage() {
   const router = useRouter();
   const symbol = params.symbol.toUpperCase();
 
-  const { state: streamState, start: startStream } = useStreamingAnalysis();
+  const { state: streamState, start: startStream, reset: resetStream } = useStreamingAnalysis();
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const lastSavedPayloadRef = React.useRef<string | null>(null);
 
   const handleAnalyze = () => {
+    lastSavedPayloadRef.current = null;
+    setSaveState("idle");
+    setSaveError(null);
     startStream(symbol);
   };
 
   // Auto-save streamed analysis to DB when complete
   useEffect(() => {
-    if (streamState.isComplete && streamState.text && !streamState.error) {
-      saveWeeklyAnalysis({ data: { symbol, rawText: streamState.text } })
-        .then(() => router.invalidate())
-        .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : "Save failed";
-          // eslint-disable-next-line no-console
-          console.error("Auto-save failed:", msg);
-        });
-    }
-  }, [streamState.isComplete, streamState.text, streamState.error, symbol]);
+    const rawText = streamState.text.trim();
+    if (!streamState.isComplete || !rawText || streamState.error) return;
+    if (lastSavedPayloadRef.current === rawText) return;
+
+    let cancelled = false;
+    lastSavedPayloadRef.current = rawText;
+    setSaveState("saving");
+    setSaveError(null);
+
+    void (async () => {
+      try {
+        await saveWeeklyAnalysis({ data: { symbol, rawText } });
+        if (cancelled) return;
+
+        await router.invalidate();
+        if (cancelled) return;
+
+        resetStream();
+        setSaveState("idle");
+        setSaveError(null);
+        lastSavedPayloadRef.current = null;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Save failed";
+        if (cancelled) return;
+
+        setSaveState("error");
+        setSaveError(msg);
+        lastSavedPayloadRef.current = null;
+        // eslint-disable-next-line no-console
+        console.error("Auto-save failed:", msg);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resetStream, router, streamState.error, streamState.isComplete, streamState.text, symbol]);
   const stock = data.stock;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
@@ -367,7 +381,7 @@ function StockPage() {
 
         {/* Streaming analysis or saved analysis */}
         {streamState.isLoading || streamState.isComplete || streamState.text ? (
-          <StreamingAnalysis state={streamState} />
+          <StreamingAnalysis state={streamState} saveState={saveState} saveError={saveError} />
         ) : latestAnalysis ? (
           <>
             <SetupChecklist rec={recommendation} />

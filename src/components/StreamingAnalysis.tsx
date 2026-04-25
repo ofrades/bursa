@@ -77,7 +77,15 @@ function SetupChecklistPartial({
   );
 }
 
-export function StreamingAnalysis({ state }: { state: StreamingState }) {
+export function StreamingAnalysis({
+  state,
+  saveState = "idle",
+  saveError = null,
+}: {
+  state: StreamingState;
+  saveState?: "idle" | "saving" | "error";
+  saveError?: string | null;
+}) {
   const sections = useMemo(() => parseSections(state.text), [state.text]);
 
   const signal = sections.signalJson;
@@ -350,11 +358,23 @@ export function StreamingAnalysis({ state }: { state: StreamingState }) {
         </Card>
       )}
 
-      {/* Auto-saving indicator */}
-      {state.isComplete && (
+      {/* Auto-save status */}
+      {state.isComplete && saveState === "saving" && (
         <div className="flex justify-end">
           <span className="text-xs text-muted-foreground">Saving analysis…</span>
         </div>
+      )}
+
+      {state.isComplete && saveState === "error" && saveError && (
+        <Card className="border-red-200">
+          <CardContent className="flex items-start gap-3 py-5">
+            <CircleAlert className="size-5 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sm">Failed to save analysis</p>
+              <p className="text-sm text-muted-foreground">{saveError}</p>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

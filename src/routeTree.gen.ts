@@ -15,7 +15,6 @@ import { Route as SymbolRouteImport } from './routes/$symbol'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
-import { Route as ApiCronRunRouteImport } from './routes/api/cron/run'
 import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing/webhook'
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiBillingCheckoutRouteImport } from './routes/api/billing/checkout'
@@ -52,11 +51,6 @@ const StocksSymbolRoute = StocksSymbolRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiCronRunRoute = ApiCronRunRouteImport.update({
-  id: '/api/cron/run',
-  path: '/api/cron/run',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBillingWebhookRoute = ApiBillingWebhookRouteImport.update({
@@ -107,7 +101,6 @@ export interface FileRoutesByFullPath {
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
-  '/api/cron/run': typeof ApiCronRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
 }
@@ -123,7 +116,6 @@ export interface FileRoutesByTo {
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
-  '/api/cron/run': typeof ApiCronRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
 }
@@ -140,7 +132,6 @@ export interface FileRoutesById {
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
-  '/api/cron/run': typeof ApiCronRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
 }
@@ -158,7 +149,6 @@ export interface FileRouteTypes {
     | '/api/billing/checkout'
     | '/api/billing/portal'
     | '/api/billing/webhook'
-    | '/api/cron/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
   fileRoutesByTo: FileRoutesByTo
@@ -174,7 +164,6 @@ export interface FileRouteTypes {
     | '/api/billing/checkout'
     | '/api/billing/portal'
     | '/api/billing/webhook'
-    | '/api/cron/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
   id:
@@ -190,7 +179,6 @@ export interface FileRouteTypes {
     | '/api/billing/checkout'
     | '/api/billing/portal'
     | '/api/billing/webhook'
-    | '/api/cron/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
   fileRoutesById: FileRoutesById
@@ -207,7 +195,6 @@ export interface RootRouteChildren {
   ApiBillingCheckoutRoute: typeof ApiBillingCheckoutRoute
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
-  ApiCronRunRoute: typeof ApiCronRunRoute
   ApiAuthGoogleCallbackRoute: typeof ApiAuthGoogleCallbackRoute
   ApiAuthGoogleStartRoute: typeof ApiAuthGoogleStartRoute
 }
@@ -254,13 +241,6 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/cron/run': {
-      id: '/api/cron/run'
-      path: '/api/cron/run'
-      fullPath: '/api/cron/run'
-      preLoaderRoute: typeof ApiCronRunRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/billing/webhook': {
@@ -327,7 +307,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBillingCheckoutRoute: ApiBillingCheckoutRoute,
   ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiBillingWebhookRoute: ApiBillingWebhookRoute,
-  ApiCronRunRoute: ApiCronRunRoute,
   ApiAuthGoogleCallbackRoute: ApiAuthGoogleCallbackRoute,
   ApiAuthGoogleStartRoute: ApiAuthGoogleStartRoute,
 }

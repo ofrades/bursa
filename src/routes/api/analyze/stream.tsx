@@ -1,16 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import { getSessionFromRequest } from "../../../lib/session";
-import {
-  gatherStockData,
-  buildPrompt,
-  readMemory,
-  callAIStream,
-  type AIStreamChunk,
-} from "../../../server/recommend";
+import { gatherStockData, buildPrompt, readMemory, callAIStream } from "../../../server/recommend";
 import { calculateCostCents } from "../../../lib/pricing";
-
-const AI_MODEL = process.env.AI_MODEL ?? "google/gemini-2.0-flash-001";
+import { AI_MODEL } from "../../../lib/ai-model";
 const MIN_WALLET_BALANCE_CENTS = 10; // require at least €0.10 to start
 
 // POST /api/analyze/stream

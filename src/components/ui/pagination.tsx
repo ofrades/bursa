@@ -44,7 +44,10 @@ export function Pagination({ page, pageCount, onPageChange, className }: Paginat
       </Button>
       {visible.map((item, i) =>
         item === "ellipsis" ? (
-          <span key={`ellipsis-${i}`} className="flex h-8 w-8 items-center justify-center text-muted-foreground">
+          <span
+            key={`ellipsis-${i}`}
+            className="flex h-8 w-8 items-center justify-center text-muted-foreground"
+          >
             <MoreHorizontal className="size-4" />
           </span>
         ) : (
