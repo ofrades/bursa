@@ -267,6 +267,8 @@ Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 // ─── AI call ──────────────────────────────────────────────────────────────────
 
 const AI_TIMEOUT_MS = 90_000; // 90s — well under Cloudflare's 100s gateway timeout
+const AI_MAX_OUTPUT_TOKENS = 8_000; // Leaves ample room for the full four-section payload.
+const AI_REASONING = { effort: "none" as const }; // Kimi 2.6 is much faster/cheaper here without hidden reasoning burn.
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 export type AIUsage = {
@@ -326,6 +328,17 @@ function extractTextFromResponse(response: any): string {
   return text;
 }
 
+function requireVisibleText(text: string, reason?: string | null) {
+  if (!text.trim()) {
+    throw new Error(
+      reason
+        ? `OpenRouter completed without visible output text (${reason})`
+        : "OpenRouter completed without visible output text",
+    );
+  }
+  return text;
+}
+
 function extractUsageFromResponse(response: any): AIUsage {
   const usage = response?.usage;
   if (!usage) throw new Error("OpenRouter response missing usage");
@@ -379,14 +392,15 @@ export async function callAIWithUsage(prompt: string): Promise<{ text: string; u
       {
         model: AI_MODEL,
         input: prompt,
-        max_output_tokens: 4000,
+        reasoning: AI_REASONING,
+        max_output_tokens: AI_MAX_OUTPUT_TOKENS,
         stream: false,
       },
       { signal: abortController.signal },
     );
 
     return {
-      text: extractTextFromResponse(response),
+      text: requireVisibleText(extractTextFromResponse(response)),
       usage: extractUsageFromResponse(response),
     };
   } catch (error) {
@@ -413,15 +427,25 @@ export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk
       {
         model: AI_MODEL,
         input: prompt,
-        max_output_tokens: 4000,
+        reasoning: AI_REASONING,
+        max_output_tokens: AI_MAX_OUTPUT_TOKENS,
         stream: true,
       },
       { signal: abortController.signal },
     );
 
+    let terminalReason: string | null = null;
+
     for await (const event of stream as AsyncIterable<any>) {
-      if (event.type === "response.completed" && event.response) {
+      if (
+        (event.type === "response.completed" || event.type === "response.incomplete") &&
+        event.response
+      ) {
         completedResponse = event.response;
+        terminalReason =
+          event.type === "response.incomplete"
+            ? (event.response.incomplete_details?.reason ?? "response.incomplete")
+            : null;
       }
 
       if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
@@ -436,14 +460,12 @@ export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk
     }
 
     if (!completedResponse) {
-      throw new Error("OpenRouter stream finished without response.completed");
+      throw new Error("OpenRouter stream finished without a terminal response event");
     }
 
     if (!sawTextDelta) {
-      const text = extractTextFromResponse(completedResponse);
-      if (text) {
-        yield { type: "delta", delta: text };
-      }
+      const text = requireVisibleText(extractTextFromResponse(completedResponse), terminalReason);
+      yield { type: "delta", delta: text };
     }
 
     yield { type: "usage", usage: extractUsageFromResponse(completedResponse) };

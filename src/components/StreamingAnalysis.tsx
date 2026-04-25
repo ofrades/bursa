@@ -342,8 +342,8 @@ export function StreamingAnalysis({
         )}
       </div>
 
-      {/* Raw text preview while streaming */}
-      {state.isLoading && state.text.length > 0 && !hasSignal && (
+      {/* Raw text preview whenever the stream has text but we do not yet have parsable signal JSON. */}
+      {state.text.length > 0 && !hasSignal && (
         <Card>
           <CardHeader>
             <CardDescription className="text-xs uppercase tracking-wider">
