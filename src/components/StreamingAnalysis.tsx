@@ -7,6 +7,71 @@ import type { Signal, Cycle, SupervisorSeverity } from "./ui/badge";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
+const STREAM_SECTION_MARKERS = [
+  {
+    marker: "1. SIGNAL_JSON:",
+    label: "Signal JSON",
+    tone: "text-emerald-700 dark:text-emerald-300",
+  },
+  { marker: "2. TALEB_JSON:", label: "Taleb JSON", tone: "text-amber-700 dark:text-amber-300" },
+  { marker: "3. BUFFETT_JSON:", label: "Buffett JSON", tone: "text-blue-700 dark:text-blue-300" },
+  {
+    marker: "4. MEMORY_UPDATE:",
+    label: "Memory update",
+    tone: "text-fuchsia-700 dark:text-fuchsia-300",
+  },
+] as const;
+
+function splitStreamSections(text: string) {
+  const markers = STREAM_SECTION_MARKERS.map((section) => ({
+    ...section,
+    index: text.indexOf(section.marker),
+  })).filter((section) => section.index !== -1);
+
+  if (markers.length === 0) {
+    return text.trim()
+      ? [
+          {
+            key: "live-output",
+            label: "Live output",
+            tone: "text-muted-foreground",
+            body: text.trim(),
+          },
+        ]
+      : [];
+  }
+
+  return markers
+    .sort((a, b) => a.index - b.index)
+    .map((section, index) => {
+      const start = section.index + section.marker.length;
+      const end = markers[index + 1]?.index ?? text.length;
+      const body = text.slice(start, end).trim();
+
+      return {
+        key: section.marker,
+        label: section.label,
+        tone: section.tone,
+        body,
+      };
+    });
+}
+
+function formatStreamSectionBody(body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) return "";
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      // Keep partial / invalid JSON as-is while streaming.
+    }
+  }
+
+  return trimmed;
+}
+
 function moneyStr(v: number | null | undefined) {
   if (v == null) return "—";
   return new Intl.NumberFormat("en-US", {
@@ -87,6 +152,7 @@ export function StreamingAnalysis({
   saveError?: string | null;
 }) {
   const sections = useMemo(() => parseSections(state.text), [state.text]);
+  const streamSections = useMemo(() => splitStreamSections(state.text), [state.text]);
 
   const signal = sections.signalJson;
   const taleb = sections.talebJson;
@@ -134,7 +200,7 @@ export function StreamingAnalysis({
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <SignalBadge signal={(signal.signal as Signal) ?? "HOLD"} />
-                {signal.cycle && (
+                {Boolean(signal.cycle) && (
                   <CycleBadge
                     cycle={signal.cycle as Cycle}
                     timeframe={(signal.cycleTimeframe as string) ?? null}
@@ -189,7 +255,7 @@ export function StreamingAnalysis({
               </div>
             )}
 
-            {signal.weeklyOutlook && (
+            {Boolean(signal.weeklyOutlook) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
                   Weekly outlook
@@ -200,7 +266,7 @@ export function StreamingAnalysis({
               </div>
             )}
 
-            {signal.reasoning && (
+            {Boolean(signal.reasoning) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
                   Reasoning
@@ -342,18 +408,56 @@ export function StreamingAnalysis({
         )}
       </div>
 
-      {/* Raw text preview whenever the stream has text but we do not yet have parsable signal JSON. */}
+      {/* Progressive transcript before the structured cards can take over. */}
       {state.text.length > 0 && !hasSignal && (
         <Card>
           <CardHeader>
-            <CardDescription className="text-xs uppercase tracking-wider">
-              Raw stream
-            </CardDescription>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <CardDescription className="text-xs uppercase tracking-wider mb-1">
+                  Live transcript
+                </CardDescription>
+                <CardTitle className="text-base">Streaming model output</CardTitle>
+              </div>
+              <Badge variant="outline" className="font-mono text-[11px]">
+                {state.isLoading ? "streaming" : "final"}
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent>
-            <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono">
-              {state.text}
-            </pre>
+          <CardContent className="flex flex-col gap-3">
+            {streamSections.map((section, index) => {
+              const isActive = state.isLoading && index === streamSections.length - 1;
+              const content = formatStreamSectionBody(section.body);
+
+              return (
+                <div key={section.key} className="rounded-xl border bg-muted/25 overflow-hidden">
+                  <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider ${section.tone}`}
+                      >
+                        {section.label}
+                      </span>
+                      {isActive && (
+                        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {section.body.trim() ? `${section.body.trim().length} chars` : "pending"}
+                    </span>
+                  </div>
+                  <div className="px-3 py-3">
+                    {content ? (
+                      <pre className="text-[11px] leading-5 text-foreground/85 whitespace-pre-wrap break-words font-mono selection:bg-primary/15">
+                        {content}
+                      </pre>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">Waiting for content…</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
