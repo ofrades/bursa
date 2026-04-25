@@ -35,8 +35,9 @@ Important variables:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `OPENROUTER_API_KEY`
-- `AI_MODEL` — optional, defaults to `moonshotai/kimi-k2.6`
 - `BETTER_AUTH_URL` in production
+
+AI requests use `moonshotai/kimi-k2.6` via OpenRouter.
 
 ## Production deploy
 

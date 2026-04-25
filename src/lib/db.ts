@@ -81,10 +81,12 @@ function runMigrations(sqlite: any) {
       prompt_tokens integer,
       completion_tokens integer,
       total_tokens integer,
+      provider_cost_usd real,
       cost_cents integer NOT NULL,
       created_at integer NOT NULL
     )
   `);
+  addCol("usage_log", "provider_cost_usd", "real");
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_usage_log_user ON usage_log (user_id)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_usage_log_symbol ON usage_log (symbol)`);
 }

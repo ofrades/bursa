@@ -7,7 +7,7 @@ import { authMiddleware } from "./middleware";
 import { buildInitialMemory } from "./memory";
 import { ema } from "../lib/metrics";
 import { parseAiJson, parseSupervisorResponse } from "../lib/ai-parse";
-import { calculateCostCents } from "../lib/pricing";
+import { calculateBilledCost } from "../lib/pricing";
 import { AI_MODEL } from "../lib/ai-model";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -267,93 +267,232 @@ Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 // ─── AI call ──────────────────────────────────────────────────────────────────
 
 const AI_TIMEOUT_MS = 90_000; // 90s — well under Cloudflare's 100s gateway timeout
-
-export async function callAI(prompt: string): Promise<string> {
-  const { chat } = await import("@tanstack/ai");
-  const { createOpenaiChat } = await import("@tanstack/ai-openai");
-  const adapter = createOpenaiChat(AI_MODEL as any, process.env.OPENROUTER_API_KEY ?? "", {
-    baseURL: "https://openrouter.ai/api/v1",
-  });
-
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("AI call timed out after 90s")), AI_TIMEOUT_MS),
-  );
-
-  return Promise.race([
-    chat({
-      adapter,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      maxTokens: 4000,
-    }),
-    timeout,
-  ]);
-}
-
-/** Call AI and return text + token usage */
-export async function callAIWithUsage(prompt: string): Promise<{ text: string; usage: AIUsage }> {
-  const stream = callAIStream(prompt);
-  let text = "";
-  let usage: AIUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-
-  for await (const chunk of stream) {
-    if (chunk.type === "delta") {
-      text += chunk.delta;
-    }
-    if (chunk.type === "usage") {
-      usage = chunk.usage;
-    }
-  }
-
-  return { text, usage };
-}
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 export type AIUsage = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  costUsd: number;
+  model: string;
 };
 
 export type AIStreamChunk = { type: "delta"; delta: string } | { type: "usage"; usage: AIUsage };
 
-/** Stream AI response with text deltas and final usage */
-export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk> {
-  const { chat } = await import("@tanstack/ai");
-  const { createOpenaiChat } = await import("@tanstack/ai-openai");
-  const adapter = createOpenaiChat(AI_MODEL as any, process.env.OPENROUTER_API_KEY ?? "", {
-    baseURL: "https://openrouter.ai/api/v1",
-  });
+function isAbortError(error: unknown) {
+  return error instanceof Error && (error.name === "AbortError" || /aborted/i.test(error.message));
+}
 
+function numberOrThrow(value: unknown, label: string): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  throw new Error(`OpenRouter response missing ${label}`);
+}
+
+function getOpenRouterAttributionHeaders() {
+  const referer = process.env.OPENROUTER_HTTP_REFERER ?? process.env.BETTER_AUTH_URL;
+  const title = process.env.OPENROUTER_APP_TITLE ?? "Bursa";
+
+  return {
+    ...(referer ? { "HTTP-Referer": referer } : {}),
+    "X-OpenRouter-Title": title,
+  };
+}
+
+async function createOpenRouterClient() {
+  const { default: OpenAI } = await import("openai");
+  return new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY ?? "",
+    baseURL: OPENROUTER_BASE_URL,
+    defaultHeaders: getOpenRouterAttributionHeaders(),
+  });
+}
+
+function extractTextFromResponse(response: any): string {
+  let text = "";
+
+  for (const item of response?.output ?? []) {
+    if (item?.type !== "message") continue;
+    for (const part of item.content ?? []) {
+      if (part?.type === "output_text" && typeof part.text === "string") {
+        text += part.text;
+      }
+    }
+  }
+
+  return text;
+}
+
+function extractUsageFromResponse(response: any): AIUsage {
+  const usage = response?.usage;
+  if (!usage) throw new Error("OpenRouter response missing usage");
+
+  const promptTokens = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0;
+  const completionTokens = Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0;
+  const totalTokens =
+    Number(usage.total_tokens ?? promptTokens + completionTokens) ||
+    promptTokens + completionTokens;
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    costUsd: numberOrThrow(usage.cost, "usage.cost"),
+    model: response?.model ?? AI_MODEL,
+  };
+}
+
+function mergeUsages(usages: AIUsage[]): AIUsage {
+  if (usages.length === 0) {
+    throw new Error("No OpenRouter usage records to merge");
+  }
+
+  return usages.reduce(
+    (merged, usage) => ({
+      promptTokens: merged.promptTokens + usage.promptTokens,
+      completionTokens: merged.completionTokens + usage.completionTokens,
+      totalTokens: merged.totalTokens + usage.totalTokens,
+      costUsd: merged.costUsd + usage.costUsd,
+      model: usage.model || merged.model,
+    }),
+    {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      costUsd: 0,
+      model: AI_MODEL,
+    },
+  );
+}
+
+/** Call AI and return text + usage/cost metadata */
+export async function callAIWithUsage(prompt: string): Promise<{ text: string; usage: AIUsage }> {
+  const client = await createOpenRouterClient();
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
 
   try {
-    const stream = await chat({
-      adapter,
-      messages: [{ role: "user", content: prompt }],
-      stream: true,
-      maxTokens: 4000,
-      abortController,
-    });
+    const response = await client.responses.create(
+      {
+        model: AI_MODEL,
+        input: prompt,
+        max_output_tokens: 4000,
+        stream: false,
+      },
+      { signal: abortController.signal },
+    );
 
-    for await (const chunk of stream) {
-      if (chunk.type === "TEXT_MESSAGE_CONTENT" && chunk.delta) {
-        yield { type: "delta", delta: chunk.delta };
-      }
-      if (chunk.type === "RUN_FINISHED" && chunk.usage) {
-        yield {
-          type: "usage",
-          usage: {
-            promptTokens: chunk.usage.promptTokens ?? 0,
-            completionTokens: chunk.usage.completionTokens ?? 0,
-            totalTokens: chunk.usage.totalTokens ?? 0,
-          },
-        };
-      }
+    return {
+      text: extractTextFromResponse(response),
+      usage: extractUsageFromResponse(response),
+    };
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error("AI call timed out after 90s");
     }
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/** Stream AI response with text deltas and final usage metadata */
+export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk> {
+  const client = await createOpenRouterClient();
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
+
+  let completedResponse: any = null;
+  let sawTextDelta = false;
+
+  try {
+    const stream = await client.responses.create(
+      {
+        model: AI_MODEL,
+        input: prompt,
+        max_output_tokens: 4000,
+        stream: true,
+      },
+      { signal: abortController.signal },
+    );
+
+    for await (const event of stream as AsyncIterable<any>) {
+      if (event.type === "response.completed" && event.response) {
+        completedResponse = event.response;
+      }
+
+      if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+        if (!event.delta) continue;
+        sawTextDelta = true;
+        yield { type: "delta", delta: event.delta };
+      }
+
+      if (event.type === "error") {
+        throw new Error(event.message ?? "AI stream error");
+      }
+    }
+
+    if (!completedResponse) {
+      throw new Error("OpenRouter stream finished without response.completed");
+    }
+
+    if (!sawTextDelta) {
+      const text = extractTextFromResponse(completedResponse);
+      if (text) {
+        yield { type: "delta", delta: text };
+      }
+    }
+
+    yield { type: "usage", usage: extractUsageFromResponse(completedResponse) };
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error("AI call timed out after 90s");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function chargeUserForUsage(
+  db: Awaited<ReturnType<typeof import("../lib/db").getDb>>,
+  userId: string,
+  symbol: string,
+  usage: AIUsage,
+) {
+  const { user, usageLog } = await import("../lib/schema");
+
+  const billing = calculateBilledCost({
+    actualModel: usage.model,
+    providerCostUsd: usage.costUsd,
+  });
+
+  const [u] = await db
+    .select({ walletBalance: user.walletBalance })
+    .from(user)
+    .where(eq(user.id, userId));
+
+  await db
+    .update(user)
+    .set({ walletBalance: Math.max(0, (u?.walletBalance ?? 0) - billing.billedCents) })
+    .where(eq(user.id, userId));
+
+  await db.insert(usageLog).values({
+    userId,
+    symbol,
+    model: billing.actualModel,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+    providerCostUsd: billing.providerCostUsd,
+    costCents: billing.billedCents,
+    createdAt: new Date(),
+  });
+
+  return billing;
 }
 
 // ─── Memory helpers ───────────────────────────────────────────────────────────
@@ -469,7 +608,6 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     }
 
     const { getDb } = await import("../lib/db");
-    const { user, usageLog } = await import("../lib/schema");
     const db = await getDb();
 
     const today = new Date();
@@ -488,17 +626,19 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     ].join(" | ");
 
     const prompt = buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd);
-    const { text: raw, usage } = await callAIWithUsage(prompt);
+    const initial = await callAIWithUsage(prompt);
+    let usage = initial.usage;
 
     let parsed: ReturnType<typeof parseFullResponse>;
     try {
-      parsed = parseFullResponse(raw);
+      parsed = parseFullResponse(initial.text);
     } catch {
       // Fallback: retry for signal JSON only
-      const { text: retryRaw } = await callAIWithUsage(
+      const retry = await callAIWithUsage(
         buildJsonOnlyRetryPrompt(stockData, setupContext, false, weekStart, weekEnd),
       );
-      const signalOnly = parseAiJson<any>(retryRaw);
+      usage = mergeUsages([usage, retry.usage]);
+      const signalOnly = parseAiJson<any>(retry.text);
       parsed = { signal: signalOnly, talebreview: null, buffettReview: null, memoryUpdate: null };
     }
 
@@ -545,28 +685,9 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 
-    // Deduct actual cost from wallet
+    // Deduct billed amount from wallet using OpenRouter actual cost when available.
     if (!ctx.isAdmin) {
-      const costCents = calculateCostCents(AI_MODEL, usage.promptTokens, usage.completionTokens);
-      const [u] = await db
-        .select({ walletBalance: user.walletBalance })
-        .from(user)
-        .where(eq(user.id, ctx.session.sub));
-      await db
-        .update(user)
-        .set({ walletBalance: Math.max(0, (u?.walletBalance ?? 0) - costCents) })
-        .where(eq(user.id, ctx.session.sub));
-
-      await db.insert(usageLog).values({
-        userId: ctx.session.sub,
-        symbol: data.symbol,
-        model: AI_MODEL,
-        promptTokens: usage.promptTokens,
-        completionTokens: usage.completionTokens,
-        totalTokens: usage.totalTokens,
-        costCents,
-        createdAt: new Date(),
-      });
+      await chargeUserForUsage(db, ctx.session.sub, data.symbol, usage);
     }
 
     return {
@@ -601,7 +722,6 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
     }
 
     const { getDb } = await import("../lib/db");
-    const { user, usageLog } = await import("../lib/schema");
     const db = await getDb();
 
     const today = new Date();
@@ -626,16 +746,18 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
     ].join(" | ");
 
     const prompt = buildPrompt(stockData, memory, setupContext, true, weekStart, weekEnd);
-    const { text: raw, usage } = await callAIWithUsage(prompt);
+    const initial = await callAIWithUsage(prompt);
+    let usage = initial.usage;
 
     let parsed: ReturnType<typeof parseFullResponse>;
     try {
-      parsed = parseFullResponse(raw);
+      parsed = parseFullResponse(initial.text);
     } catch {
-      const { text: retryRaw } = await callAIWithUsage(
+      const retry = await callAIWithUsage(
         buildJsonOnlyRetryPrompt(stockData, setupContext, true, weekStart, weekEnd),
       );
-      const signalOnly = parseAiJson<any>(retryRaw);
+      usage = mergeUsages([usage, retry.usage]);
+      const signalOnly = parseAiJson<any>(retry.text);
       parsed = { signal: signalOnly, talebreview: null, buffettReview: null, memoryUpdate: null };
     }
 
@@ -675,28 +797,9 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 
-    // Deduct actual cost from wallet
+    // Deduct billed amount from wallet using OpenRouter actual cost when available.
     if (!ctx.isAdmin) {
-      const costCents = calculateCostCents(AI_MODEL, usage.promptTokens, usage.completionTokens);
-      const [u] = await db
-        .select({ walletBalance: user.walletBalance })
-        .from(user)
-        .where(eq(user.id, ctx.session.sub));
-      await db
-        .update(user)
-        .set({ walletBalance: Math.max(0, (u?.walletBalance ?? 0) - costCents) })
-        .where(eq(user.id, ctx.session.sub));
-
-      await db.insert(usageLog).values({
-        userId: ctx.session.sub,
-        symbol: data.symbol,
-        model: AI_MODEL,
-        promptTokens: usage.promptTokens,
-        completionTokens: usage.completionTokens,
-        totalTokens: usage.totalTokens,
-        costCents,
-        createdAt: new Date(),
-      });
+      await chargeUserForUsage(db, ctx.session.sub, data.symbol, usage);
     }
 
     return {

@@ -217,11 +217,12 @@ export const usageLog = sqliteTable(
       .$defaultFn(() => crypto.randomUUID()),
     userId: text("user_id").notNull(),
     symbol: text("symbol").notNull(),
-    model: text("model").notNull(),
+    model: text("model").notNull(), // actual model used
     promptTokens: integer("prompt_tokens"),
     completionTokens: integer("completion_tokens"),
     totalTokens: integer("total_tokens"),
-    costCents: integer("cost_cents").notNull(), // actual cost in cents (€0.01 = 1)
+    providerCostUsd: real("provider_cost_usd"),
+    costCents: integer("cost_cents").notNull(), // billed amount deducted from wallet in EUR cents
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(now),
   },
   (t) => [index("idx_usage_log_user").on(t.userId), index("idx_usage_log_symbol").on(t.symbol)],

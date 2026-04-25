@@ -41,7 +41,9 @@ env:
     NODE_ENV: production
     BETTER_AUTH_URL: https://bursa.mohshoo.com
     DB_PATH: /app/data/stocktrack.sqlite
-    AI_MODEL: moonshotai/kimi-k2.6
+    BILLING_MARKUP_MULTIPLIER: 1.8
+    BILLING_MIN_CENTS: 2
+    BILLING_USD_TO_EUR: 0.92
   secret:
     - AUTH_SECRET
     - GOOGLE_CLIENT_ID

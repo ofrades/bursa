@@ -1,14 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import { getSessionFromRequest } from "../../../lib/session";
-import { gatherStockData, buildPrompt, readMemory, callAIStream } from "../../../server/recommend";
-import { calculateCostCents } from "../../../lib/pricing";
-import { AI_MODEL } from "../../../lib/ai-model";
+import {
+  gatherStockData,
+  buildPrompt,
+  readMemory,
+  callAIStream,
+  chargeUserForUsage,
+  type AIUsage,
+} from "../../../server/recommend";
 const MIN_WALLET_BALANCE_CENTS = 10; // require at least €0.10 to start
 
 // POST /api/analyze/stream
 // Streams AI analysis via Server-Sent Events.
-// Deducts actual token cost from wallet after stream completes.
+// Deducts the billed wallet amount from OpenRouter's actual reported request cost.
 export const Route = createFileRoute("/api/analyze/stream")({
   server: {
     handlers: {
@@ -27,7 +32,7 @@ export const Route = createFileRoute("/api/analyze/stream")({
         }
 
         const { getDb } = await import("../../../lib/db");
-        const { user, usageLog } = await import("../../../lib/schema");
+        const { user } = await import("../../../lib/schema");
         const { eq } = await import("drizzle-orm");
         const db = await getDb();
 
@@ -64,11 +69,7 @@ export const Route = createFileRoute("/api/analyze/stream")({
         const stream = new ReadableStream({
           async start(controller) {
             let accumulatedText = "";
-            let usage: {
-              promptTokens: number;
-              completionTokens: number;
-              totalTokens: number;
-            } | null = null;
+            let usage: AIUsage | null = null;
 
             try {
               for await (const chunk of callAIStream(prompt)) {
@@ -87,38 +88,14 @@ export const Route = createFileRoute("/api/analyze/stream")({
 
               // Calculate and deduct cost
               if (!isAdmin && usage) {
-                const costCents = calculateCostCents(
-                  AI_MODEL,
-                  usage.promptTokens,
-                  usage.completionTokens,
-                );
-
-                const [u] = await db
-                  .select({ walletBalance: user.walletBalance })
-                  .from(user)
-                  .where(eq(user.id, session.sub));
-
-                const newBalance = Math.max(0, (u?.walletBalance ?? 0) - costCents);
-                await db
-                  .update(user)
-                  .set({ walletBalance: newBalance })
-                  .where(eq(user.id, session.sub));
-
-                await db.insert(usageLog).values({
-                  userId: session.sub,
-                  symbol,
-                  model: AI_MODEL,
-                  promptTokens: usage.promptTokens,
-                  completionTokens: usage.completionTokens,
-                  totalTokens: usage.totalTokens,
-                  costCents,
-                  createdAt: new Date(),
-                });
+                const billing = await chargeUserForUsage(db, session.sub, symbol, usage);
 
                 controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ done: true, costCents })}
+                  encoder.encode(
+                    `data: ${JSON.stringify({ done: true, costCents: billing.billedCents })}
 
-`),
+`,
+                  ),
                 );
               } else {
                 controller.enqueue(

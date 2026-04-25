@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "openrouter-models": {
+      "source": "openrouterteam/skills",
+      "sourceType": "github",
+      "computedHash": "407950b60a362857ed9685bf982b306b08b8c248f00668aafb32a027a9d45d7f"
+    },
     "react": {
       "source": "vercel-labs/json-render",
       "sourceType": "github",
