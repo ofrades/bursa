@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { eq } from "drizzle-orm";
+import type StripeType from "stripe";
 import { getDb } from "../../../lib/db";
 import { user } from "../../../lib/schema";
-import { eq } from "drizzle-orm";
 
 // POST /api/billing/webhook — Stripe webhook endpoint
 // Handles checkout.session.completed to top up user wallet.
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/api/billing/webhook")({
           return new Response("Missing signature", { status: 400 });
         }
 
-        let event: Stripe.Event;
+        let event: StripeType.Event;
         try {
           event = stripe.webhooks.constructEvent(payload, sig, webhookSecret);
         } catch (err: any) {
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/api/billing/webhook")({
         }
 
         if (event.type === "checkout.session.completed") {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object as StripeType.Checkout.Session;
           const userId = session.metadata?.user_id;
           const creditsRaw = session.metadata?.credits; // legacy
           const amountRaw = session.metadata?.amount_eur; // e.g. "5"

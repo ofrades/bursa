@@ -143,7 +143,7 @@ function StockPage() {
   // Auto-save streamed analysis to DB when complete
   useEffect(() => {
     const rawText = streamState.text.trim();
-    if (!streamState.isComplete || !rawText || streamState.error) return;
+    if (!streamState.isComplete || !streamState.canSave || !rawText || streamState.error) return;
     if (lastSavedPayloadRef.current === rawText) return;
 
     let cancelled = false;
@@ -178,7 +178,15 @@ function StockPage() {
     return () => {
       cancelled = true;
     };
-  }, [resetStream, router, streamState.error, streamState.isComplete, streamState.text, symbol]);
+  }, [
+    resetStream,
+    router,
+    streamState.canSave,
+    streamState.error,
+    streamState.isComplete,
+    streamState.text,
+    symbol,
+  ]);
   const stock = data.stock;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);

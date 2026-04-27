@@ -147,6 +147,21 @@ export function StreamingAnalysis({
         </Card>
       )}
 
+      {/* Warning */}
+      {state.warning && !state.error && (
+        <Card className="border-amber-200 bg-amber-50/70 dark:border-amber-800/40 dark:bg-amber-950/20">
+          <CardContent className="flex items-start gap-3 py-5">
+            <CircleAlert className="size-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sm text-amber-900 dark:text-amber-200">
+                Partial analysis received
+              </p>
+              <p className="text-sm text-amber-800/90 dark:text-amber-300/90">{state.warning}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Signal card — progressively appears */}
       {hasSignal && (
         <Card>

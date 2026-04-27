@@ -73,7 +73,7 @@ chmod 600 .kamal/secrets
 kamal setup
 ```
 
-Cloudflare Tunnel should send `bursa.mohshoo.com` traffic to `http://127.0.0.1:80` on the VPS, which is served by `kamal-proxy`.
+Route `bursa.mohshoo.com` traffic to `http://127.0.0.1:80` on the VPS, which is served by `kamal-proxy`.
 
 ### Deploy
 

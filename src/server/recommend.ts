@@ -266,7 +266,12 @@ Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 
 // ─── AI call ──────────────────────────────────────────────────────────────────
 
-const AI_TIMEOUT_MS = 90_000; // 90s — well under Cloudflare's 100s gateway timeout
+const DEFAULT_AI_TIMEOUT_MS = 300_000; // Match the VPS proxy response budget unless explicitly overridden.
+const AI_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.AI_TIMEOUT_MS ?? DEFAULT_AI_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_AI_TIMEOUT_MS;
+})();
+const AI_TIMEOUT_SECONDS = Math.ceil(AI_TIMEOUT_MS / 1_000);
 const AI_MAX_OUTPUT_TOKENS = 8_000; // Leaves ample room for the full four-section payload.
 const AI_REASONING = { effort: "none" as const }; // Kimi 2.6 is much faster/cheaper here without hidden reasoning burn.
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -279,10 +284,43 @@ export type AIUsage = {
   model: string;
 };
 
-export type AIStreamChunk = { type: "delta"; delta: string } | { type: "usage"; usage: AIUsage };
+export type AIStreamChunk =
+  | { type: "delta"; delta: string }
+  | { type: "usage"; usage: AIUsage }
+  | { type: "warning"; warning: string };
+
+export class AIRequestAbortedError extends Error {
+  constructor() {
+    super("AI request aborted");
+    this.name = "AIRequestAbortedError";
+  }
+}
 
 function isAbortError(error: unknown) {
   return error instanceof Error && (error.name === "AbortError" || /aborted/i.test(error.message));
+}
+
+function createAIRequestSignal(externalSignal?: AbortSignal) {
+  const timeoutSignal = AbortSignal.timeout(AI_TIMEOUT_MS);
+  return {
+    signal: externalSignal ? AbortSignal.any([externalSignal, timeoutSignal]) : timeoutSignal,
+    timeoutSignal,
+  };
+}
+
+function rethrowAIAbort(
+  error: unknown,
+  timeoutSignal: AbortSignal,
+  externalSignal?: AbortSignal,
+): never {
+  if (!isAbortError(error)) throw error;
+  if (timeoutSignal.aborted) {
+    throw new Error(`AI call timed out after ${AI_TIMEOUT_SECONDS}s`);
+  }
+  if (externalSignal?.aborted) {
+    throw new AIRequestAbortedError();
+  }
+  throw error;
 }
 
 function numberOrThrow(value: unknown, label: string): number {
@@ -382,10 +420,12 @@ function mergeUsages(usages: AIUsage[]): AIUsage {
 }
 
 /** Call AI and return text + usage/cost metadata */
-export async function callAIWithUsage(prompt: string): Promise<{ text: string; usage: AIUsage }> {
+export async function callAIWithUsage(
+  prompt: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ text: string; usage: AIUsage }> {
   const client = await createOpenRouterClient();
-  const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
+  const { signal, timeoutSignal } = createAIRequestSignal(options.signal);
 
   try {
     const response = await client.responses.create(
@@ -396,7 +436,7 @@ export async function callAIWithUsage(prompt: string): Promise<{ text: string; u
         max_output_tokens: AI_MAX_OUTPUT_TOKENS,
         stream: false,
       },
-      { signal: abortController.signal },
+      { signal },
     );
 
     return {
@@ -404,20 +444,17 @@ export async function callAIWithUsage(prompt: string): Promise<{ text: string; u
       usage: extractUsageFromResponse(response),
     };
   } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error("AI call timed out after 90s");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
+    rethrowAIAbort(error, timeoutSignal, options.signal);
   }
 }
 
 /** Stream AI response with text deltas and final usage metadata */
-export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk> {
+export async function* callAIStream(
+  prompt: string,
+  options: { signal?: AbortSignal } = {},
+): AsyncIterable<AIStreamChunk> {
   const client = await createOpenRouterClient();
-  const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
+  const { signal, timeoutSignal } = createAIRequestSignal(options.signal);
 
   let completedResponse: any = null;
   let sawTextDelta = false;
@@ -431,7 +468,7 @@ export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk
         max_output_tokens: AI_MAX_OUTPUT_TOKENS,
         stream: true,
       },
-      { signal: abortController.signal },
+      { signal },
     );
 
     let terminalReason: string | null = null;
@@ -460,6 +497,15 @@ export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk
     }
 
     if (!completedResponse) {
+      if (sawTextDelta) {
+        yield {
+          type: "warning",
+          warning:
+            "OpenRouter ended the stream before sending final response metadata. Partial analysis was preserved, but usage/cost data was unavailable, so this run was not billed or auto-saved.",
+        };
+        return;
+      }
+
       throw new Error("OpenRouter stream finished without a terminal response event");
     }
 
@@ -470,12 +516,7 @@ export async function* callAIStream(prompt: string): AsyncIterable<AIStreamChunk
 
     yield { type: "usage", usage: extractUsageFromResponse(completedResponse) };
   } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error("AI call timed out after 90s");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
+    rethrowAIAbort(error, timeoutSignal, options.signal);
   }
 }
 

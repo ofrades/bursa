@@ -1,7 +1,11 @@
+import { randomUUID } from "crypto";
+import { toServerSentEventsResponse, type StreamChunk } from "@tanstack/ai";
 import { createFileRoute } from "@tanstack/react-router";
 import { format, startOfWeek, endOfWeek } from "date-fns";
+import { AI_MODEL } from "../../../lib/ai-model";
 import { getSessionFromRequest } from "../../../lib/session";
 import {
+  AIRequestAbortedError,
   gatherStockData,
   buildPrompt,
   readMemory,
@@ -9,7 +13,9 @@ import {
   chargeUserForUsage,
   type AIUsage,
 } from "../../../server/recommend";
+
 const MIN_WALLET_BALANCE_CENTS = 10; // require at least €0.10 to start
+const STREAM_HEARTBEAT_MS = 15_000;
 
 // POST /api/analyze/stream
 // Streams AI analysis via Server-Sent Events.
@@ -22,6 +28,8 @@ export const Route = createFileRoute("/api/analyze/stream")({
         if (!session) {
           return new Response("Unauthorized", { status: 401 });
         }
+        const sessionSub = session.sub;
+        const sessionEmail = session.email.toLowerCase();
 
         const body = (await request.json().catch(() => ({}))) as {
           symbol?: string;
@@ -30,13 +38,14 @@ export const Route = createFileRoute("/api/analyze/stream")({
         if (!symbol) {
           return new Response("Missing symbol", { status: 400 });
         }
+        const analysisSymbol = symbol;
 
         const { getDb } = await import("../../../lib/db");
         const { user } = await import("../../../lib/schema");
         const { eq } = await import("drizzle-orm");
         const db = await getDb();
 
-        const isAdmin = session.email.toLowerCase() === "mig.silva@gmail.com";
+        const isAdmin = sessionEmail === "mig.silva@gmail.com";
 
         if (!isAdmin) {
           const [u] = await db
@@ -53,8 +62,8 @@ export const Route = createFileRoute("/api/analyze/stream")({
         const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
 
         const [stockData, memory] = await Promise.all([
-          gatherStockData(symbol),
-          readMemory(symbol),
+          gatherStockData(analysisSymbol),
+          readMemory(analysisSymbol),
         ]);
 
         const setupContext = [
@@ -65,65 +74,176 @@ export const Route = createFileRoute("/api/analyze/stream")({
 
         const prompt = buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd);
 
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          async start(controller) {
-            let accumulatedText = "";
-            let usage: AIUsage | null = null;
+        const abortController = new AbortController();
+        request.signal.addEventListener(
+          "abort",
+          () => abortController.abort(request.signal.reason),
+          { once: true },
+        );
 
-            try {
-              for await (const chunk of callAIStream(prompt)) {
-                if (chunk.type === "delta") {
-                  accumulatedText += chunk.delta;
-                  controller.enqueue(
-                    encoder.encode(`data: ${JSON.stringify({ delta: chunk.delta })}
+        async function* createAnalysisStream(): AsyncIterable<StreamChunk> {
+          const runId = randomUUID();
+          const messageId = randomUUID();
+          let usage: AIUsage | null = null;
+          let startedTextMessage = false;
+          let partialWarning: string | null = null;
 
-`),
-                  );
-                }
-                if (chunk.type === "usage") {
-                  usage = chunk.usage;
-                }
+          yield {
+            type: "RUN_STARTED",
+            runId,
+            model: AI_MODEL,
+            timestamp: Date.now(),
+          };
+
+          try {
+            const iterator = callAIStream(prompt, { signal: abortController.signal })[
+              Symbol.asyncIterator
+            ]();
+            let nextChunk = iterator.next();
+
+            while (!abortController.signal.aborted) {
+              let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+              const heartbeat = new Promise<{ kind: "heartbeat" }>((resolve) => {
+                heartbeatTimer = setTimeout(
+                  () => resolve({ kind: "heartbeat" }),
+                  STREAM_HEARTBEAT_MS,
+                );
+              });
+
+              const result = await Promise.race([
+                nextChunk.then((value) => ({ kind: "chunk" as const, value })),
+                heartbeat,
+              ]);
+
+              if (heartbeatTimer) {
+                clearTimeout(heartbeatTimer);
               }
 
-              // Calculate and deduct cost
-              if (!isAdmin && usage) {
-                const billing = await chargeUserForUsage(db, session.sub, symbol, usage);
-
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ done: true, costCents: billing.billedCents })}
-
-`,
-                  ),
-                );
-              } else {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ done: true })}
-
-`),
-                );
+              if (result.kind === "heartbeat") {
+                yield {
+                  type: "CUSTOM",
+                  name: "heartbeat",
+                  model: AI_MODEL,
+                  timestamp: Date.now(),
+                };
+                continue;
               }
 
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              controller.close();
-            } catch (err) {
-              const message = err instanceof Error ? err.message : "Stream error";
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ error: message })}
+              if (result.value.done) {
+                break;
+              }
 
-`),
-              );
-              controller.close();
+              const chunk = result.value.value;
+              nextChunk = iterator.next();
+
+              if (chunk.type === "delta") {
+                if (!startedTextMessage) {
+                  startedTextMessage = true;
+                  yield {
+                    type: "TEXT_MESSAGE_START",
+                    messageId,
+                    role: "assistant",
+                    model: AI_MODEL,
+                    timestamp: Date.now(),
+                  };
+                }
+
+                yield {
+                  type: "TEXT_MESSAGE_CONTENT",
+                  messageId,
+                  delta: chunk.delta,
+                  model: AI_MODEL,
+                  timestamp: Date.now(),
+                };
+                continue;
+              }
+
+              if (chunk.type === "warning") {
+                partialWarning = chunk.warning;
+                continue;
+              }
+
+              usage = chunk.usage;
             }
-          },
-        });
 
-        return new Response(stream, {
+            if (startedTextMessage) {
+              yield {
+                type: "TEXT_MESSAGE_END",
+                messageId,
+                model: usage?.model ?? AI_MODEL,
+                timestamp: Date.now(),
+              };
+            }
+
+            let billedCents: number | null = null;
+            if (!isAdmin && usage) {
+              const billing = await chargeUserForUsage(db, sessionSub, analysisSymbol, usage);
+              billedCents = billing.billedCents;
+            }
+
+            if (usage) {
+              yield {
+                type: "CUSTOM",
+                name: "openrouter-usage",
+                model: usage.model,
+                timestamp: Date.now(),
+                value: {
+                  ...usage,
+                  billedCents,
+                },
+              };
+            }
+
+            if (partialWarning) {
+              yield {
+                type: "CUSTOM",
+                name: "analysis-warning",
+                model: AI_MODEL,
+                timestamp: Date.now(),
+                value: {
+                  message: partialWarning,
+                  kind: "partial-output",
+                },
+              };
+            }
+
+            yield {
+              type: "RUN_FINISHED",
+              runId,
+              model: usage?.model ?? AI_MODEL,
+              timestamp: Date.now(),
+              finishReason: partialWarning ? null : "stop",
+              usage: usage
+                ? {
+                    promptTokens: usage.promptTokens,
+                    completionTokens: usage.completionTokens,
+                    totalTokens: usage.totalTokens,
+                  }
+                : undefined,
+            };
+          } catch (error) {
+            if (error instanceof AIRequestAbortedError || abortController.signal.aborted) {
+              return;
+            }
+
+            yield {
+              type: "RUN_ERROR",
+              runId,
+              model: AI_MODEL,
+              timestamp: Date.now(),
+              error: {
+                message: error instanceof Error ? error.message : "Stream error",
+              },
+            };
+          }
+        }
+
+        return toServerSentEventsResponse(createAnalysisStream(), {
+          abortController,
           headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
           },
         });
       },
