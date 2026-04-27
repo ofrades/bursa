@@ -143,7 +143,7 @@ function findClosestPriceOnOrBefore(
   return candidate;
 }
 
-async function getSimpleAnalysisForSymbol(symbol: string) {
+export async function getSimpleAnalysisForSymbol(symbol: string) {
   const { default: YahooFinance } = await import("yahoo-finance2");
   const yf = new YahooFinance({
     suppressNotices: ["ripHistorical", "yahooSurvey"],
@@ -157,7 +157,7 @@ async function getSimpleAnalysisForSymbol(symbol: string) {
   const [quote, summary, financialsRaw, cashFlowRaw, historicalRaw] = await Promise.all([
     yf.quote(symbol),
     yf.quoteSummary(symbol, {
-      modules: ["financialData"],
+      modules: ["financialData", "defaultKeyStatistics"],
     }),
     yf.fundamentalsTimeSeries(symbol, {
       period1,
@@ -211,6 +211,18 @@ async function getSimpleAnalysisForSymbol(symbol: string) {
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  const shareCountHistory = financials
+    .filter((row: any) => row?.date)
+    .map((row: any) => {
+      const date = new Date(row.date).toISOString();
+      return {
+        label: yearLabel(date),
+        date,
+        value: asNumber(row.dilutedAverageShares ?? row.shareIssued ?? row.ordinarySharesNumber),
+      };
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   const anchors = salesHistory.length ? salesHistory : cashHistory;
   const priceHistory = anchors.map((point) => ({
     label: point.label,
@@ -218,18 +230,31 @@ async function getSimpleAnalysisForSymbol(symbol: string) {
     value: findClosestPriceOnOrBefore(historical, point.date),
   }));
 
+  const financialData = (summary as any)?.financialData ?? {};
+  const defaultStats = (summary as any)?.defaultKeyStatistics ?? {};
+
   return buildSimpleAnalysisEvidence({
     symbol,
     salesHistory,
     cashHistory,
     priceHistory,
+    shareCountHistory,
     currentPrice: asNumber((quote as any)?.regularMarketPrice),
     marketCap: asNumber((quote as any)?.marketCap),
-    totalDebt: asNumber((summary as any)?.financialData?.totalDebt),
-    totalCash: asNumber((summary as any)?.financialData?.totalCash),
-    freeCashflow: asNumber((summary as any)?.financialData?.freeCashflow),
-    profitMargin: asNumber((summary as any)?.financialData?.profitMargins),
-    revenueGrowth: asNumber((summary as any)?.financialData?.revenueGrowth),
+    totalDebt: asNumber(financialData?.totalDebt),
+    totalCash: asNumber(financialData?.totalCash),
+    freeCashflow: asNumber(financialData?.freeCashflow),
+    profitMargin: asNumber(financialData?.profitMargins),
+    revenueGrowth: asNumber(financialData?.revenueGrowth),
+    operatingMargin: asNumber(financialData?.operatingMargins),
+    grossMargin: asNumber(financialData?.grossMargins),
+    returnOnEquity: asNumber(financialData?.returnOnEquity ?? defaultStats?.returnOnEquity),
+    returnOnAssets: asNumber(financialData?.returnOnAssets ?? defaultStats?.returnOnAssets),
+    earningsGrowth: asNumber(
+      financialData?.earningsGrowth ?? defaultStats?.earningsQuarterlyGrowth,
+    ),
+    peRatio: asNumber((quote as any)?.trailingPE),
+    forwardPE: asNumber((quote as any)?.forwardPE),
   });
 }
 
@@ -240,7 +265,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
     const db = await getDb();
     const symbol = data.symbol.toUpperCase();
 
-    const [stockRow, analysisRows, simpleAnalysis] = await Promise.all([
+    const [stockRow, analysisRows, simpleAnalysis, marketContext] = await Promise.all([
       db.select().from(stock).where(eq(stock.symbol, symbol)),
       db
         .select()
@@ -249,6 +274,9 @@ export const getStockPageData = createServerFn({ method: "GET" })
         .orderBy(desc(stockAnalysis.weekStart), desc(stockAnalysis.updatedAt))
         .limit(6),
       getSimpleAnalysisForSymbol(symbol).catch(() => null),
+      import("./recommend")
+        .then(({ gatherStockData }) => gatherStockData(symbol))
+        .catch(() => null),
     ]);
 
     const latestAnalysis = analysisRows[0] ?? null;
@@ -276,6 +304,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
       dailySignals: dailySignalsForLatest,
       supervisorAlerts: supervisorAlertsForLatest,
       simpleAnalysis,
+      marketContext,
     };
   });
 

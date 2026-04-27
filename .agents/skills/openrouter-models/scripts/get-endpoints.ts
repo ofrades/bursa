@@ -21,7 +21,7 @@ if (!modelId) {
       "Examples:\n" +
       '  npx tsx get-endpoints.ts "anthropic/claude-sonnet-4"\n' +
       '  npx tsx get-endpoints.ts "anthropic/claude-sonnet-4" --sort throughput\n' +
-      '  npx tsx get-endpoints.ts "openai/gpt-4o" --sort latency'
+      '  npx tsx get-endpoints.ts "openai/gpt-4o" --sort latency',
   );
   process.exit(1);
 }
@@ -37,20 +37,19 @@ if (!data?.endpoints?.length) {
 let endpoints = data.endpoints;
 
 if (sortBy === "throughput") {
-  endpoints.sort((a: any, b: any) =>
-    (b.throughput_last_30m?.p50 ?? 0) - (a.throughput_last_30m?.p50 ?? 0)
+  endpoints.sort(
+    (a: any, b: any) => (b.throughput_last_30m?.p50 ?? 0) - (a.throughput_last_30m?.p50 ?? 0),
   );
 } else if (sortBy === "latency") {
-  endpoints.sort((a: any, b: any) =>
-    (a.latency_last_30m?.p50 ?? Infinity) - (b.latency_last_30m?.p50 ?? Infinity)
+  endpoints.sort(
+    (a: any, b: any) =>
+      (a.latency_last_30m?.p50 ?? Infinity) - (b.latency_last_30m?.p50 ?? Infinity),
   );
 } else if (sortBy === "uptime") {
-  endpoints.sort((a: any, b: any) =>
-    (b.uptime_last_30m ?? 0) - (a.uptime_last_30m ?? 0)
-  );
+  endpoints.sort((a: any, b: any) => (b.uptime_last_30m ?? 0) - (a.uptime_last_30m ?? 0));
 } else if (sortBy === "price") {
-  endpoints.sort((a: any, b: any) =>
-    parseFloat(a.pricing?.prompt ?? "0") - parseFloat(b.pricing?.prompt ?? "0")
+  endpoints.sort(
+    (a: any, b: any) => parseFloat(a.pricing?.prompt ?? "0") - parseFloat(b.pricing?.prompt ?? "0"),
   );
 }
 

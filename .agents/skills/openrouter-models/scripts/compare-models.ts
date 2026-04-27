@@ -22,7 +22,7 @@ if (modelIds.length < 2) {
       "  price      - Sort by prompt cost (cheapest first)\n" +
       "  context    - Sort by context length (largest first)\n" +
       "  speed      - Sort by max completion tokens (largest first)\n" +
-      "  throughput - Alias for speed"
+      "  throughput - Alias for speed",
   );
   process.exit(1);
 }
@@ -46,7 +46,10 @@ for (const id of modelIds) {
     } else {
       console.error(
         `Warning: "${id}" matched ${partial.length} models. Using closest match: ${partial[0].id}\n` +
-          `  Other matches: ${partial.slice(1, 4).map((m: any) => m.id).join(", ")}${partial.length > 4 ? "..." : ""}`
+          `  Other matches: ${partial
+            .slice(1, 4)
+            .map((m: any) => m.id)
+            .join(", ")}${partial.length > 4 ? "..." : ""}`,
       );
       matched.push(partial[0]);
     }
@@ -59,13 +62,15 @@ if (matched.length < 2) {
 }
 
 if (sortBy === "price") {
-  matched.sort((a: any, b: any) => parseFloat(a.pricing?.prompt ?? "0") - parseFloat(b.pricing?.prompt ?? "0"));
+  matched.sort(
+    (a: any, b: any) => parseFloat(a.pricing?.prompt ?? "0") - parseFloat(b.pricing?.prompt ?? "0"),
+  );
 } else if (sortBy === "context") {
   matched.sort((a: any, b: any) => (b.context_length ?? 0) - (a.context_length ?? 0));
 } else if (sortBy === "speed" || sortBy === "throughput") {
   matched.sort(
     (a: any, b: any) =>
-      (b.top_provider?.max_completion_tokens ?? 0) - (a.top_provider?.max_completion_tokens ?? 0)
+      (b.top_provider?.max_completion_tokens ?? 0) - (a.top_provider?.max_completion_tokens ?? 0),
   );
 }
 

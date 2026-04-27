@@ -27,6 +27,8 @@ function runMigrations(sqlite: any) {
   addCol("stock_analysis", "cycle", "text");
   addCol("stock_analysis", "cycle_timeframe", "text");
   addCol("stock_analysis", "cycle_strength", "real");
+  addCol("stock_analysis", "thesis_json", "text");
+  addCol("stock_analysis", "thesis_version", "text");
 
   // daily_signal — cycle
   addCol("daily_signal", "cycle", "text");

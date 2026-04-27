@@ -243,8 +243,8 @@ const tx = db.transaction(() => {
   // 4a. Insert analyses that don't exist in prod (by symbol+week_start)
   const insertedAnalyses = db
     .prepare(
-      `INSERT INTO stock_analysis (id, symbol, week_start, week_end, signal, cycle, cycle_timeframe, cycle_strength, confidence, reasoning, price_at_analysis, last_triggered_by_user_id, created_at, updated_at)
-     SELECT a.id, a.symbol, a.week_start, a.week_end, a.signal, a.cycle, a.cycle_timeframe, a.cycle_strength, a.confidence, a.reasoning, a.price_at_analysis, a.last_triggered_by_user_id, a.created_at, a.updated_at
+      `INSERT INTO stock_analysis (id, symbol, week_start, week_end, signal, cycle, cycle_timeframe, cycle_strength, confidence, reasoning, thesis_json, thesis_version, price_at_analysis, last_triggered_by_user_id, created_at, updated_at)
+     SELECT a.id, a.symbol, a.week_start, a.week_end, a.signal, a.cycle, a.cycle_timeframe, a.cycle_strength, a.confidence, a.reasoning, a.thesis_json, a.thesis_version, a.price_at_analysis, a.last_triggered_by_user_id, a.created_at, a.updated_at
      FROM local.stock_analysis a
      LEFT JOIN stock_analysis p ON p.symbol = a.symbol AND p.week_start = a.week_start
      WHERE p.id IS NULL`,
@@ -264,6 +264,8 @@ const tx = db.transaction(() => {
          cycle_strength      = a.cycle_strength,
          confidence          = a.confidence,
          reasoning           = a.reasoning,
+         thesis_json         = a.thesis_json,
+         thesis_version      = a.thesis_version,
          price_at_analysis   = a.price_at_analysis,
          last_triggered_by_user_id = a.last_triggered_by_user_id,
          updated_at          = a.updated_at

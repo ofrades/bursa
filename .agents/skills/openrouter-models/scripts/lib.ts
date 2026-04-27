@@ -3,7 +3,7 @@ export function requireApiKey(): string {
   if (!apiKey) {
     console.error(
       "Error: OPENROUTER_API_KEY environment variable is not set.\n" +
-        "Get your API key at https://openrouter.ai/keys"
+        "Get your API key at https://openrouter.ai/keys",
     );
     process.exit(1);
   }

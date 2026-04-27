@@ -70,6 +70,80 @@ export type RecommendationResult = {
 
 // ─── Yahoo Finance data gathering ─────────────────────────────────────────────
 
+const SECTOR_BENCHMARKS: Record<string, string> = {
+  technology: "XLK",
+  "financial services": "XLF",
+  healthcare: "XLV",
+  "consumer cyclical": "XLY",
+  "consumer defensive": "XLP",
+  industrials: "XLI",
+  energy: "XLE",
+  utilities: "XLU",
+  "real estate": "XLRE",
+  "basic materials": "XLB",
+  "communication services": "XLC",
+};
+
+function sectorBenchmarkSymbol(sector: string | null | undefined) {
+  if (!sector) return null;
+  return SECTOR_BENCHMARKS[sector.trim().toLowerCase()] ?? null;
+}
+
+function relativeReturn(
+  stockCloses: number[],
+  benchmarkCloses: number[],
+  lookbackDays: number,
+): number | null {
+  if (stockCloses.length <= lookbackDays || benchmarkCloses.length <= lookbackDays) return null;
+  const stockNow = stockCloses[stockCloses.length - 1];
+  const stockThen = stockCloses[stockCloses.length - 1 - lookbackDays];
+  const benchmarkNow = benchmarkCloses[benchmarkCloses.length - 1];
+  const benchmarkThen = benchmarkCloses[benchmarkCloses.length - 1 - lookbackDays];
+  if (!stockThen || !benchmarkThen) return null;
+
+  const stockReturn = ((stockNow - stockThen) / stockThen) * 100;
+  const benchmarkReturn = ((benchmarkNow - benchmarkThen) / benchmarkThen) * 100;
+  return stockReturn - benchmarkReturn;
+}
+
+function revisionTrendFromEarnings(summary: any) {
+  const trendRows = summary?.earningsTrend?.trend;
+  const next = Array.isArray(trendRows) ? trendRows[0] : null;
+  const epsTrend = next?.epsTrend ?? null;
+  const epsRevisions = next?.epsRevisions ?? null;
+
+  const current = typeof epsTrend?.current === "number" ? epsTrend.current : null;
+  const d30 = typeof epsTrend?.["30daysAgo"] === "number" ? epsTrend["30daysAgo"] : null;
+  const d90 = typeof epsTrend?.["90daysAgo"] === "number" ? epsTrend["90daysAgo"] : null;
+
+  const pct30 =
+    current != null && d30 != null && Math.abs(d30) > 0
+      ? ((current - d30) / Math.abs(d30)) * 100
+      : null;
+  const pct90 =
+    current != null && d90 != null && Math.abs(d90) > 0
+      ? ((current - d90) / Math.abs(d90)) * 100
+      : null;
+
+  const up30 = typeof epsRevisions?.upLast30days === "number" ? epsRevisions.upLast30days : 0;
+  const down30 = typeof epsRevisions?.downLast30days === "number" ? epsRevisions.downLast30days : 0;
+  const revisionBalance30d = up30 - down30;
+
+  return {
+    earningsEstimateCurrent: current,
+    earningsEstimateDelta30dPct: pct30,
+    earningsEstimateDelta90dPct: pct90,
+    revisionBalance30d,
+  };
+}
+
+function daysUntil(dateValue: unknown) {
+  if (!dateValue) return null;
+  const date = new Date(dateValue as string | number | Date);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+}
+
 export async function gatherStockData(symbol: string) {
   const { default: YahooFinance } = await import("yahoo-finance2");
   const yf = new YahooFinance({
@@ -80,7 +154,15 @@ export async function gatherStockData(symbol: string) {
   const period1 = new Date();
   period1.setDate(period1.getDate() - 150);
 
-  const [historical, summary] = await Promise.all([
+  const sectorSummary = await (
+    yf.quoteSummary(symbol, {
+      modules: ["assetProfile"],
+    }) as Promise<any>
+  ).catch(() => null);
+  const sector = sectorSummary?.assetProfile?.sector ?? null;
+  const sectorBenchmark = sectorBenchmarkSymbol(sector);
+
+  const [historical, summary, marketBenchmarkRaw, sectorBenchmarkRaw] = await Promise.all([
     (
       yf.historical(symbol, {
         period1,
@@ -90,17 +172,53 @@ export async function gatherStockData(symbol: string) {
     ).catch(() => []),
     (
       yf.quoteSummary(symbol, {
-        modules: ["financialData", "defaultKeyStatistics", "calendarEvents", "assetProfile"],
+        modules: [
+          "financialData",
+          "defaultKeyStatistics",
+          "calendarEvents",
+          "assetProfile",
+          "earningsTrend",
+        ],
       }) as Promise<any>
     ).catch(() => null),
+    (
+      yf.historical("SPY", {
+        period1,
+        period2: new Date(),
+        interval: "1d",
+      }) as Promise<any[]>
+    ).catch(() => []),
+    sectorBenchmark
+      ? (
+          yf.historical(sectorBenchmark, {
+            period1,
+            period2: new Date(),
+            interval: "1d",
+          }) as Promise<any[]>
+        ).catch(() => [])
+      : Promise.resolve([]),
   ]);
+
+  const financialData = summary?.financialData ?? null;
+  const defaultKeyStatistics = summary?.defaultKeyStatistics ?? null;
+  const revisionTrend = revisionTrendFromEarnings(summary);
 
   const hist = (historical as any[])
     .filter((h: any) => h.close != null && h.date != null)
     .map((h: any) => ({ date: new Date(h.date), close: h.close as number }))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const marketBenchmarkHist = (marketBenchmarkRaw as any[])
+    .filter((h: any) => h.close != null && h.date != null)
+    .map((h: any) => ({ date: new Date(h.date), close: h.close as number }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const sectorBenchmarkHist = (sectorBenchmarkRaw as any[])
+    .filter((h: any) => h.close != null && h.date != null)
+    .map((h: any) => ({ date: new Date(h.date), close: h.close as number }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const closes = hist.map((h) => h.close);
+  const marketBenchmarkCloses = marketBenchmarkHist.map((h) => h.close);
+  const sectorBenchmarkCloses = sectorBenchmarkHist.map((h) => h.close);
   const volumes = (historical as any[]).map((h: any) => h.volume).filter(Boolean) as number[];
 
   const sma20 = closes.length >= 20 ? closes.slice(-20).reduce((a, b) => a + b, 0) / 20 : null;
@@ -133,6 +251,27 @@ export async function gatherStockData(symbol: string) {
   const priceNow: number = quote.regularMarketPrice ?? 0;
   const price5d = closes[closes.length - 6] ?? priceNow;
   const price20d = closes[closes.length - 21] ?? priceNow;
+  const relativeStrengthVsMarket20d = relativeReturn(closes, marketBenchmarkCloses, 20);
+  const relativeStrengthVsMarket60d = relativeReturn(closes, marketBenchmarkCloses, 60);
+  const relativeStrengthVsSector20d = sectorBenchmarkCloses.length
+    ? relativeReturn(closes, sectorBenchmarkCloses, 20)
+    : null;
+  const relativeStrengthVsSector60d = sectorBenchmarkCloses.length
+    ? relativeReturn(closes, sectorBenchmarkCloses, 60)
+    : null;
+
+  const earningsDate = summary?.calendarEvents?.earnings?.earningsDate?.[0] ?? null;
+  const daysToEarnings = daysUntil(earningsDate);
+  const earningsEventRisk =
+    daysToEarnings == null
+      ? "unknown"
+      : daysToEarnings < 0
+        ? "passed"
+        : daysToEarnings <= 7
+          ? "imminent"
+          : daysToEarnings <= 21
+            ? "near"
+            : "clear";
 
   return {
     symbol,
@@ -155,12 +294,31 @@ export async function gatherStockData(symbol: string) {
     priceVsSMA50: sma50 ? ((priceNow - sma50) / sma50) * 100 : null,
     priceVsEMA21: ema21Daily ? ((priceNow - ema21Daily) / ema21Daily) * 100 : null,
     priceVsWeeklyEMA21: weeklyEma21 ? ((priceNow - weeklyEma21) / weeklyEma21) * 100 : null,
-    earningsDate: summary?.calendarEvents?.earnings?.earningsDate?.[0] ?? null,
-    revenueGrowth: summary?.financialData?.revenueGrowth ?? null,
-    profitMargin: summary?.financialData?.profitMargins ?? null,
-    returnOnEquity: summary?.financialData?.returnOnEquity ?? null,
-    debtToEquity: summary?.financialData?.debtToEquity ?? null,
-    freeCashflow: summary?.financialData?.freeCashflow ?? null,
+    relativeStrengthVsMarket20d,
+    relativeStrengthVsMarket60d,
+    relativeStrengthVsSector20d,
+    relativeStrengthVsSector60d,
+    sectorBenchmark,
+    earningsDate,
+    daysToEarnings,
+    earningsEventRisk,
+    revenueGrowth: financialData?.revenueGrowth ?? null,
+    earningsGrowth:
+      financialData?.earningsGrowth ?? defaultKeyStatistics?.earningsQuarterlyGrowth ?? null,
+    profitMargin: financialData?.profitMargins ?? null,
+    operatingMargin: financialData?.operatingMargins ?? null,
+    grossMargin: financialData?.grossMargins ?? null,
+    returnOnEquity: financialData?.returnOnEquity ?? defaultKeyStatistics?.returnOnEquity ?? null,
+    returnOnAssets: financialData?.returnOnAssets ?? defaultKeyStatistics?.returnOnAssets ?? null,
+    debtToEquity: financialData?.debtToEquity ?? null,
+    ebitda: financialData?.ebitda ?? null,
+    ebitdaMargin: financialData?.ebitdaMargins ?? null,
+    operatingCashflow: financialData?.operatingCashflow ?? null,
+    currentRatio: financialData?.currentRatio ?? null,
+    quickRatio: financialData?.quickRatio ?? null,
+    freeCashflow: financialData?.freeCashflow ?? null,
+    sharesOutstanding: quote.sharesOutstanding ?? defaultKeyStatistics?.sharesOutstanding ?? null,
+    ...revisionTrend,
     sector: summary?.assetProfile?.sector ?? null,
     industry: summary?.assetProfile?.industry ?? null,
   };
@@ -196,10 +354,14 @@ MARKET CAP: ${d.marketCap ? "$" + (d.marketCap / 1e9).toFixed(1) + "B" : "N/A"} 
 Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
 Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
 MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
+RELATIVE STRENGTH: vs SPY 20d ${fmt(d.relativeStrengthVsMarket20d, 1)} pts | vs SPY 60d ${fmt(d.relativeStrengthVsMarket60d, 1)} pts | vs sector (${d.sectorBenchmark ?? "N/A"}) 20d ${fmt(d.relativeStrengthVsSector20d, 1)} pts
 P/E: ${fmt(d.peRatio, 1)} | Fwd P/E: ${fmt(d.forwardPE, 1)} | D/E: ${fmt(d.debtToEquity, 1)}
-Profit margin: ${d.profitMargin != null ? (d.profitMargin * 100).toFixed(1) + "%" : "N/A"} | ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"}
-Revenue growth: ${d.revenueGrowth != null ? (d.revenueGrowth * 100).toFixed(1) + "%" : "N/A"} | FCF: ${d.freeCashflow ? "$" + (d.freeCashflow / 1e9).toFixed(2) + "B" : "N/A"}
-Next earnings: ${d.earningsDate ? new Date(d.earningsDate).toDateString() : "N/A"}
+Profit margin: ${d.profitMargin != null ? (d.profitMargin * 100).toFixed(1) + "%" : "N/A"} | Op margin: ${d.operatingMargin != null ? (d.operatingMargin * 100).toFixed(1) + "%" : "N/A"} | Gross margin: ${d.grossMargin != null ? (d.grossMargin * 100).toFixed(1) + "%" : "N/A"}
+ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"} | ROA: ${d.returnOnAssets != null ? (d.returnOnAssets * 100).toFixed(1) + "%" : "N/A"} | Earnings growth: ${d.earningsGrowth != null ? (d.earningsGrowth * 100).toFixed(1) + "%" : "N/A"}
+Debt service: EBITDA ${d.ebitda ? "$" + (d.ebitda / 1e9).toFixed(2) + "B" : "N/A"} | Op cash ${d.operatingCashflow ? "$" + (d.operatingCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Current ratio ${fmt(d.currentRatio, 1)} | Quick ratio ${fmt(d.quickRatio, 1)}
+Revision trend: est vs 30d ${fmt(d.earningsEstimateDelta30dPct, 1)}% | est vs 90d ${fmt(d.earningsEstimateDelta90dPct, 1)}% | rev balance 30d ${fmt(d.revisionBalance30d, 0)}
+Revenue growth: ${d.revenueGrowth != null ? (d.revenueGrowth * 100).toFixed(1) + "%" : "N/A"} | FCF: ${d.freeCashflow ? "$" + (d.freeCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Shares out: ${d.sharesOutstanding ? (d.sharesOutstanding / 1e6).toFixed(1) + "M" : "N/A"}
+Next earnings: ${d.earningsDate ? new Date(d.earningsDate).toDateString() : "N/A"} | Days to earnings: ${fmt(d.daysToEarnings, 0)} | Earnings event risk: ${d.earningsEventRisk ?? "N/A"}
 
 ${
   isDaily
@@ -231,21 +393,25 @@ RECONCILE SETUP VS FUNDAMENTALS:
 - Do not present the weekly signal as a broad business verdict when the evidence is mixed.
 ────────────────────────────────────────────────────────────────
 
-Respond with EXACTLY these four sections, nothing else:
+Respond with EXACTLY these five sections, nothing else:
 
-1. SIGNAL_JSON:
+1. OPPORTUNITY_JSON:
+Domain expert lens: secular trends, dependency chains, demand gaps, adoption curves. Think like a sector specialist mapping macro forces to this specific company — follow physical and structural implications the way Aschenbrenner traced AI compute demand to semiconductors and energy. Be specific about what the company actually sells and who buys it. Use NONE for sCurvePosition only if the company is clearly in decline.
+{"secularBet":"<2-sentence thesis about where the world is going and why this company is positioned for it>","dependencyChain":["<If A grows, B must also grow, company owns C of that chain>"],"demandGap":"<where current capacity/infrastructure sits vs. projected need in 2-5 years>","sCurvePosition":"early_adopter"|"crossing_chasm"|"mainstream"|"mature","timeHorizon":"2y"|"5y"|"10y+","loadBearingAssumptions":["<must be true for thesis to hold>","<second assumption>"],"falsificationSignals":["<observable event that would break the thesis>","<second signal>"],"opportunityScore":<0-100>}
+
+2. SIGNAL_JSON:
 {"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
 
-2. TALEB_JSON:
+3. TALEB_JSON:
 Nassim Taleb's lens: tail risk, fragility, convexity, black swans. Only fire BLACK_SWAN_BUY or BLACK_SWAN_SELL if something is truly extreme. Use NONE for severity LOW when nothing is extreme.
 {"alertType":"BLACK_SWAN_BUY"|"BLACK_SWAN_SELL"|"FRAGILE"|"ANTIFRAGILE"|"NONE","severity":"LOW"|"MEDIUM"|"HIGH"|"EXTREME","title":"<10 words max>","content":"<2-3 sentences in Taleb's direct, probabilistic voice>"}
 
-3. BUFFETT_JSON:
+4. BUFFETT_JSON:
 Warren Buffett's lens: moat, margin of safety, rationality, long-term value. Always opine. If momentum is strong but fundamentals are weak, say so directly in his grandfather voice.
 {"alertType":"MARGIN_OF_SAFETY"|"OVERPRICED"|"STRONG_MOAT"|"NO_MOAT"|"RATIONAL_HOLD"|"RATIONAL_AVOID","severity":"LOW"|"MEDIUM"|"HIGH","title":"<10 words max>","content":"<2-3 sentences in Buffett's plain, patient voice>"}
 
-4. MEMORY_UPDATE:
-<updated full memory markdown — include today's signal, cycle, and any new observations>`;
+5. MEMORY_UPDATE:
+<updated full memory markdown — include today's signal, cycle, opportunity score, and any new observations>`;
 }
 
 export function buildJsonOnlyRetryPrompt(
@@ -262,7 +428,11 @@ STOCK: ${d.symbol} | PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today)
 Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
 Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
 MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
-P/E: ${fmt(d.peRatio, 1)} | D/E: ${fmt(d.debtToEquity, 1)} | ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"}
+RELATIVE STRENGTH: vs SPY 20d ${fmt(d.relativeStrengthVsMarket20d, 1)} pts | vs sector 20d ${fmt(d.relativeStrengthVsSector20d, 1)} pts
+P/E: ${fmt(d.peRatio, 1)} | D/E: ${fmt(d.debtToEquity, 1)} | ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"} | ROA: ${d.returnOnAssets != null ? (d.returnOnAssets * 100).toFixed(1) + "%" : "N/A"}
+Op margin: ${d.operatingMargin != null ? (d.operatingMargin * 100).toFixed(1) + "%" : "N/A"} | Gross margin: ${d.grossMargin != null ? (d.grossMargin * 100).toFixed(1) + "%" : "N/A"} | Earnings growth: ${d.earningsGrowth != null ? (d.earningsGrowth * 100).toFixed(1) + "%" : "N/A"}
+Debt service: EBITDA ${d.ebitda ? "$" + (d.ebitda / 1e9).toFixed(2) + "B" : "N/A"} | Op cash ${d.operatingCashflow ? "$" + (d.operatingCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Current ratio ${fmt(d.currentRatio, 1)}
+Revision trend: est vs 30d ${fmt(d.earningsEstimateDelta30dPct, 1)}% | rev balance 30d ${fmt(d.revisionBalance30d, 0)} | Days to earnings ${fmt(d.daysToEarnings, 0)}
 SETUP CONTEXT: ${setupContext}
 CONTEXT: ${isDaily ? `Daily update ${weekStart}–${weekEnd}.` : `Weekly rec ${weekStart}–${weekEnd}.`}
 If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat weekly signals as timing calls, not blanket business verdicts.
@@ -630,9 +800,16 @@ function parseFullResponse(raw: string): {
   >;
   talebreview: SupervisorReview | null;
   buffettReview: SupervisorReview | null;
+  opportunityJson: Record<string, unknown> | null;
   memoryUpdate: string | null;
 } {
-  const { signalJson, talebJson, buffettJson, memoryUpdate } = parseSupervisorResponse(raw);
+  const {
+    signalJson,
+    talebJson,
+    buffettJson,
+    opportunityJson: rawOpportunityJson,
+    memoryUpdate,
+  } = parseSupervisorResponse(raw);
 
   if (!signalJson) throw new Error(`No SIGNAL_JSON found in response: ${raw.slice(0, 300)}`);
 
@@ -656,7 +833,65 @@ function parseFullResponse(raw: string): {
     }
   }
 
-  return { signal, talebreview, buffettReview, memoryUpdate };
+  let opportunityJson: Record<string, unknown> | null = null;
+  if (rawOpportunityJson) {
+    try {
+      opportunityJson = parseAiJson<Record<string, unknown>>(rawOpportunityJson);
+    } catch {
+      // Non-fatal — opportunity optional
+    }
+  }
+
+  return { signal, talebreview, buffettReview, opportunityJson, memoryUpdate };
+}
+
+async function buildPersistedThesisJson(
+  symbol: string,
+  parsedSignal: any,
+  stockData: StockData,
+  options?: { hasExtremeRisk?: boolean; macroThesis?: Record<string, unknown> | null },
+) {
+  const [{ buildStockThesis, STOCK_THESIS_VERSION }, { getSimpleAnalysisForSymbol }] =
+    await Promise.all([import("../lib/stock-thesis"), import("./stocks")]);
+
+  const simpleAnalysis = await getSimpleAnalysisForSymbol(symbol).catch(() => null);
+
+  let macroThesis = null;
+  if (options?.macroThesis) {
+    const { parseMacroThesis } = await import("../lib/simple-analysis");
+    macroThesis = parseMacroThesis(JSON.stringify(options.macroThesis));
+  }
+
+  const thesis = buildStockThesis(
+    {
+      signal: parsedSignal.signal as "BUY" | "SELL",
+      cycle: parsedSignal.cycle ?? null,
+      cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
+      confidence: parsedSignal.confidence ?? null,
+      riskLevel: parsedSignal.riskLevel,
+      weeklyTrend: parsedSignal.weeklyTrend,
+      pullbackTo21EMA: parsedSignal.pullbackTo21EMA,
+      consolidationBreakout21EMA: parsedSignal.consolidationBreakout21EMA,
+      weeklyOutlook: parsedSignal.weeklyOutlook,
+      reasoning: parsedSignal.reasoning,
+      keyBullishFactors: parsedSignal.keyBullishFactors,
+      keyBearishFactors: parsedSignal.keyBearishFactors,
+      relativeStrengthVsMarket20d: stockData.relativeStrengthVsMarket20d ?? null,
+      relativeStrengthVsSector20d: stockData.relativeStrengthVsSector20d ?? null,
+      daysToEarnings: stockData.daysToEarnings ?? null,
+      earningsEventRisk: stockData.earningsEventRisk ?? null,
+      earningsEstimateDelta30dPct: stockData.earningsEstimateDelta30dPct ?? null,
+      earningsEstimateDelta90dPct: stockData.earningsEstimateDelta90dPct ?? null,
+      revisionBalance30d: stockData.revisionBalance30d ?? null,
+    },
+    simpleAnalysis,
+    { hasExtremeRisk: options?.hasExtremeRisk, macroThesis },
+  );
+
+  return {
+    thesisJson: thesis ? JSON.stringify(thesis) : null,
+    thesisVersion: thesis?.version ?? STOCK_THESIS_VERSION,
+  };
 }
 
 // ─── Server functions ─────────────────────────────────────────────────────────
@@ -709,10 +944,33 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       );
       usage = mergeUsages([usage, retry.usage]);
       const signalOnly = parseAiJson<any>(retry.text);
-      parsed = { signal: signalOnly, talebreview: null, buffettReview: null, memoryUpdate: null };
+      parsed = {
+        signal: signalOnly,
+        talebreview: null,
+        buffettReview: null,
+        opportunityJson: null,
+        memoryUpdate: null,
+      };
     }
 
-    const { signal: parsedSignal, talebreview, buffettReview, memoryUpdate } = parsed;
+    const {
+      signal: parsedSignal,
+      talebreview,
+      buffettReview,
+      opportunityJson,
+      memoryUpdate,
+    } = parsed;
+    const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
+      data.symbol,
+      parsedSignal,
+      stockData,
+      {
+        hasExtremeRisk: [talebreview, buffettReview].some(
+          (review) => review?.severity === "EXTREME",
+        ),
+        macroThesis: opportunityJson ?? null,
+      },
+    );
 
     // Upsert global analysis
     const existing = await db
@@ -730,6 +988,9 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       cycleStrength: parsedSignal.cycleStrength ?? null,
       confidence: parsedSignal.confidence,
       reasoning: JSON.stringify(parsedSignal),
+      thesisJson,
+      thesisVersion,
+      macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
       priceAtAnalysis: stockData.currentPrice,
       lastTriggeredByUserId: ctx.session.sub,
       updatedAt: now,
@@ -828,11 +1089,34 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       );
       usage = mergeUsages([usage, retry.usage]);
       const signalOnly = parseAiJson<any>(retry.text);
-      parsed = { signal: signalOnly, talebreview: null, buffettReview: null, memoryUpdate: null };
+      parsed = {
+        signal: signalOnly,
+        talebreview: null,
+        buffettReview: null,
+        opportunityJson: null,
+        memoryUpdate: null,
+      };
     }
 
-    const { signal: parsedSignal, talebreview, buffettReview, memoryUpdate } = parsed;
+    const {
+      signal: parsedSignal,
+      talebreview,
+      buffettReview,
+      opportunityJson,
+      memoryUpdate,
+    } = parsed;
     const changed = parsedSignal.signal !== analysis.signal;
+    const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
+      data.symbol,
+      parsedSignal,
+      stockData,
+      {
+        hasExtremeRisk: [talebreview, buffettReview].some(
+          (review) => review?.severity === "EXTREME",
+        ),
+        macroThesis: opportunityJson ?? null,
+      },
+    );
 
     await db
       .update(stockAnalysis)
@@ -843,6 +1127,9 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
         cycleStrength: parsedSignal.cycleStrength ?? null,
         confidence: parsedSignal.confidence,
         reasoning: JSON.stringify(parsedSignal),
+        thesisJson,
+        thesisVersion,
+        macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
         priceAtAnalysis: stockData.currentPrice,
         lastTriggeredByUserId: ctx.session.sub,
         updatedAt: new Date(),
@@ -916,7 +1203,24 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
       throw new Error("Failed to parse streamed analysis");
     }
 
-    const { signal: parsedSignal, talebreview, buffettReview, memoryUpdate } = parsed;
+    const {
+      signal: parsedSignal,
+      talebreview,
+      buffettReview,
+      opportunityJson,
+      memoryUpdate,
+    } = parsed;
+    const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
+      data.symbol,
+      parsedSignal,
+      stockData,
+      {
+        hasExtremeRisk: [talebreview, buffettReview].some(
+          (review) => review?.severity === "EXTREME",
+        ),
+        macroThesis: opportunityJson ?? null,
+      },
+    );
 
     // Upsert global analysis
     const existing = await db
@@ -934,6 +1238,9 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
       cycleStrength: parsedSignal.cycleStrength ?? null,
       confidence: parsedSignal.confidence,
       reasoning: JSON.stringify(parsedSignal),
+      thesisJson,
+      thesisVersion,
+      macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
       priceAtAnalysis: stockData.currentPrice,
       lastTriggeredByUserId: ctx.session.sub,
       updatedAt: now,

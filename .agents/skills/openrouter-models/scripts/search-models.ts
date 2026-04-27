@@ -10,8 +10,8 @@ if (!query && !modality) {
     "Usage: search-models.ts <query> [--modality <modality>]\n\n" +
       "Examples:\n" +
       '  npx tsx search-models.ts "claude"\n' +
-      '  npx tsx search-models.ts --modality image\n' +
-      '  npx tsx search-models.ts "gpt" --modality text'
+      "  npx tsx search-models.ts --modality image\n" +
+      '  npx tsx search-models.ts "gpt" --modality text',
   );
   process.exit(1);
 }

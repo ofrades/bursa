@@ -120,6 +120,9 @@ export const stockAnalysis = sqliteTable(
     cycleStrength: real("cycle_strength"), // 0–100 conviction in cycle phase
     confidence: real("confidence"),
     reasoning: text("reasoning"), // full JSON from AI
+    thesisJson: text("thesis_json"), // persisted derived thesis snapshot
+    thesisVersion: text("thesis_version"),
+    macroThesisJson: text("macro_thesis_json"), // persisted macro opportunity thesis
     priceAtAnalysis: real("price_at_analysis"),
     lastTriggeredByUserId: text("last_triggered_by_user_id").references(() => user.id, {
       onDelete: "set null",

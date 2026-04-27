@@ -86,17 +86,19 @@ export function parseSupervisorResponse(raw: string): {
   signalJson: string | null;
   talebJson: string | null;
   buffettJson: string | null;
+  opportunityJson: string | null;
   memoryUpdate: string | null;
 } {
   const signalJson = extractBlockAfterLabel(raw, "SIGNAL_JSON:");
   const talebJson = extractBlockAfterLabel(raw, "TALEB_JSON:");
   const buffettJson = extractBlockAfterLabel(raw, "BUFFETT_JSON:");
+  const opportunityJson = extractBlockAfterLabel(raw, "OPPORTUNITY_JSON:");
 
   const memoryIdx = raw.indexOf("MEMORY_UPDATE:");
   const memoryUpdate =
     memoryIdx !== -1 ? raw.slice(memoryIdx + "MEMORY_UPDATE:".length).trim() : null;
 
-  return { signalJson, talebJson, buffettJson, memoryUpdate };
+  return { signalJson, talebJson, buffettJson, opportunityJson, memoryUpdate };
 }
 
 export function parseAiJson<T = unknown>(raw: string): T {

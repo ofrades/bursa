@@ -24,13 +24,30 @@ function createInput(overrides: Partial<SimpleAnalysisInputs> = {}): SimpleAnaly
       { label: "2024", date: "2024-12-31", value: 33 },
       { label: "2025", date: "2025-12-31", value: 28 },
     ],
+    shareCountHistory: [
+      { label: "2022", date: "2022-12-31", value: 100_000_000 },
+      { label: "2023", date: "2023-12-31", value: 102_000_000 },
+      { label: "2024", date: "2024-12-31", value: 103_000_000 },
+      { label: "2025", date: "2025-12-31", value: 104_000_000 },
+    ],
     currentPrice: 28,
     marketCap: 1_400_000_000,
     totalDebt: 500_000_000,
     totalCash: 200_000_000,
     freeCashflow: 140_000_000,
+    ebitda: 220_000_000,
+    operatingCashflow: 180_000_000,
+    currentRatio: 1.3,
+    quickRatio: 1.1,
     profitMargin: 0.085,
     revenueGrowth: 0.03,
+    operatingMargin: 0.11,
+    grossMargin: 0.33,
+    returnOnEquity: 0.14,
+    returnOnAssets: 0.05,
+    earningsGrowth: 0.04,
+    peRatio: 22,
+    forwardPE: 20,
     ...overrides,
   };
 }
@@ -41,9 +58,9 @@ describe("simple analysis context framing", () => {
 
     expect(evidence).not.toBeNull();
     expect(evidence).toMatchObject({
-      title: "Business + valuation context",
+      title: "Business backdrop",
     });
-    expect(evidence?.summary).toContain("not a separate buy or sell verdict");
+    expect(evidence?.summary).toBe("Sales, cash, margins, dilution, balance sheet, and valuation.");
     expect(evidence && "headline" in evidence).toBe(false);
     expect(evidence && "status" in evidence).toBe(false);
   });
@@ -60,8 +77,8 @@ describe("simple analysis context framing", () => {
     expect(spec.elements["context-card"]).toEqual({
       type: "ContextCard",
       props: {
-        title: "Business + valuation context",
-        summary: expect.stringContaining("not a separate buy or sell verdict"),
+        title: "Business backdrop",
+        summary: "Sales, cash, margins, dilution, balance sheet, and valuation.",
       },
     });
     expect(spec.elements["charts-grid"]).toEqual({

@@ -4,27 +4,34 @@ import { parseSections } from "../lib/stream-parsing";
 import type { StreamingState } from "../hooks/useStreamingAnalysis";
 import { Badge, SignalBadge } from "./ui/badge";
 import type { Signal } from "./ui/badge";
+import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
+import type { MacroThesis } from "../lib/simple-analysis";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
 const STREAM_SECTION_MARKERS = [
   {
-    marker: "1. SIGNAL_JSON:",
-    label: "Main view",
+    marker: "1. OPPORTUNITY_JSON:",
+    label: "Macro thesis",
+    tone: "text-violet-700 dark:text-violet-300",
+  },
+  {
+    marker: "2. SIGNAL_JSON:",
+    label: "Weekly signal",
     tone: "text-emerald-700 dark:text-emerald-300",
   },
   {
-    marker: "2. TALEB_JSON:",
+    marker: "3. TALEB_JSON:",
     label: "Stress check",
     tone: "text-amber-700 dark:text-amber-300",
   },
   {
-    marker: "3. BUFFETT_JSON:",
+    marker: "4. BUFFETT_JSON:",
     label: "Price check",
     tone: "text-blue-700 dark:text-blue-300",
   },
   {
-    marker: "4. MEMORY_UPDATE:",
+    marker: "5. MEMORY_UPDATE:",
     label: "Memory update",
     tone: "text-fuchsia-700 dark:text-fuchsia-300",
   },
@@ -114,13 +121,24 @@ export function StreamingAnalysis({
   const sections = useMemo(() => parseSections(state.text), [state.text]);
   const streamSections = useMemo(() => splitStreamSections(state.text), [state.text]);
 
+  const opportunity = sections.opportunityJson;
   const signal = sections.signalJson;
   const taleb = sections.talebJson;
   const buffett = sections.buffettJson;
 
+  const hasOpportunity = opportunity != null;
   const hasSignal = signal != null;
   const hasTaleb = taleb != null;
   const hasBuffett = buffett != null;
+
+  const macroThesisSpec = useMemo(() => {
+    if (!hasOpportunity) return null;
+    try {
+      return buildMacroThesisSpec(opportunity as unknown as MacroThesis);
+    } catch {
+      return null;
+    }
+  }, [hasOpportunity, opportunity]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -162,16 +180,19 @@ export function StreamingAnalysis({
         </Card>
       )}
 
-      {/* Signal card — progressively appears */}
+      {/* ─── CORNERSTONE: Macro Thesis ─── */}
+      {macroThesisSpec && <JsonSpecRenderer spec={macroThesisSpec} />}
+
+      {/* ─── WEEKLY SIGNAL — flows from thesis ─── */}
       {hasSignal && (
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
-                  Near-term read
+                  Timing to act on the thesis
                 </CardDescription>
-                <CardTitle className="text-xl">This week&apos;s setup</CardTitle>
+                <CardTitle className="text-xl">This week’s setup</CardTitle>
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <SignalBadge signal={(signal.signal as Signal) ?? "HOLD"} />
@@ -208,7 +229,7 @@ export function StreamingAnalysis({
             {Boolean(signal.weeklyOutlook) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Short summary
+                  Setup
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {String(signal.weeklyOutlook)}
@@ -219,7 +240,7 @@ export function StreamingAnalysis({
             {Boolean(signal.reasoning) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Why the model thinks that
+                  Read
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {String(signal.reasoning)}
@@ -273,7 +294,7 @@ export function StreamingAnalysis({
         </div>
       )}
 
-      {/* Supervisors */}
+      {/* ─── SUPERVISORS: Taleb + Buffett ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {hasTaleb && taleb && (
           <Card>
@@ -327,7 +348,7 @@ export function StreamingAnalysis({
       </div>
 
       {/* Progressive transcript before the structured cards can take over. */}
-      {state.text.length > 0 && !hasSignal && (
+      {state.text.length > 0 && !hasOpportunity && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3 flex-wrap">
