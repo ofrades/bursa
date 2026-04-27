@@ -23,7 +23,7 @@ import {
 } from "recharts";
 
 import { cn } from "#/lib/utils";
-import type { SimpleAnalysisEvidence, ValueKind } from "./simple-analysis";
+import type { ValueKind } from "./simple-analysis";
 import {
   Card as UICard,
   CardContent,
@@ -61,13 +61,12 @@ const catalog = defineCatalog(schema, {
       }),
       description: "Responsive grid layout",
     },
-    VerdictCard: {
+    ContextCard: {
       props: z.object({
-        status: z.enum(["good", "watch", "avoid"]),
-        headline: z.string(),
+        title: z.string(),
         summary: z.string(),
       }),
-      description: "Plain-language verdict card",
+      description: "Context-setting card for supporting evidence",
     },
     StatTile: {
       props: z.object({
@@ -136,17 +135,6 @@ function toneClasses(tone: "good" | "caution" | "bad" | "neutral") {
   }
 }
 
-function statusClasses(status: "good" | "watch" | "avoid") {
-  switch (status) {
-    case "good":
-      return "border-emerald-200/80 dark:border-emerald-800/50";
-    case "avoid":
-      return "border-red-200/80 dark:border-red-800/50";
-    default:
-      return "border-amber-200/80 dark:border-amber-800/50";
-  }
-}
-
 function trendSymbol(trend: "up" | "down" | "flat" | "mixed") {
   switch (trend) {
     case "up":
@@ -177,7 +165,7 @@ const { registry } = defineRegistry(catalog, {
             "grid gap-4",
             columns === 1 && "grid-cols-1",
             columns === 2 && "grid-cols-1 md:grid-cols-2",
-            columns === 3 && "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",
+            columns === 3 && "grid-cols-1 lg:grid-cols-3",
             columns === 4 && "grid-cols-1 md:grid-cols-2 xl:grid-cols-4",
           )}
         >
@@ -185,13 +173,13 @@ const { registry } = defineRegistry(catalog, {
         </div>
       );
     },
-    VerdictCard: ({ props }) => (
-      <UICard className={cn("border", statusClasses(props.status))}>
+    ContextCard: ({ props }) => (
+      <UICard className="border border-border/70">
         <CardHeader>
           <CardDescription className="text-xs uppercase tracking-wider">
-            Simple view
+            Support view
           </CardDescription>
-          <CardTitle className="text-xl text-balance">{props.headline}</CardTitle>
+          <CardTitle className="text-xl text-balance">{props.title}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm leading-relaxed text-muted-foreground">{props.summary}</p>
@@ -308,7 +296,7 @@ const { registry } = defineRegistry(catalog, {
       <UICard>
         <CardHeader>
           <CardTitle className="text-base">{props.title}</CardTitle>
-          <CardDescription>Short plain-English reasons behind the view.</CardDescription>
+          <CardDescription>Plain-English observations from the supporting evidence below.</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col gap-2 pl-4 text-sm leading-relaxed text-muted-foreground list-disc">
@@ -421,69 +409,3 @@ export function buildAnalysisSpec(recData: any, community = false) {
   };
 }
 
-export function buildSimpleAnalysisSpec(evidence: SimpleAnalysisEvidence) {
-  const topChartIds = evidence.charts.slice(0, 2).map((_, index) => `chart-${index}`);
-  const bottomChartIds = evidence.charts.slice(2).map((_, index) => `chart-${index + 2}`);
-
-  const rootChildren = ["verdict", "stats-grid"];
-  if (topChartIds.length) rootChildren.push("charts-grid-top");
-  if (bottomChartIds.length) rootChildren.push("charts-stack-bottom");
-  rootChildren.push("takeaways");
-
-  const elements: Record<string, any> = {
-    root: {
-      type: "Stack",
-      props: { direction: "vertical", gap: "lg" },
-      children: rootChildren,
-    },
-    verdict: {
-      type: "VerdictCard",
-      props: {
-        status: evidence.status,
-        headline: evidence.headline,
-        summary: evidence.summary,
-      },
-    },
-    "stats-grid": {
-      type: "GridLayout",
-      props: { columns: 4 },
-      children: evidence.stats.map((_, index) => `stat-${index}`),
-    },
-    "charts-grid-top": {
-      type: "GridLayout",
-      props: { columns: 2 },
-      children: topChartIds,
-    },
-    "charts-stack-bottom": {
-      type: "Stack",
-      props: { direction: "vertical", gap: "md" },
-      children: bottomChartIds,
-    },
-    takeaways: {
-      type: "TakeawayList",
-      props: {
-        title: "What stands out",
-        items: evidence.takeaways,
-      },
-    },
-  };
-
-  evidence.stats.forEach((stat, index) => {
-    elements[`stat-${index}`] = {
-      type: "StatTile",
-      props: stat,
-    };
-  });
-
-  evidence.charts.forEach((chart, index) => {
-    elements[`chart-${index}`] = {
-      type: "EvidenceChart",
-      props: chart,
-    };
-  });
-
-  return {
-    root: "root",
-    elements,
-  };
-}

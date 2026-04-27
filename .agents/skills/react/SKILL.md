@@ -74,7 +74,9 @@ The React schema uses an element tree format:
   "root": {
     "type": "Card",
     "props": { "title": "Hello" },
-    "children": [{ "type": "Button", "props": { "label": "Click me" } }]
+    "children": [
+      { "type": "Button", "props": { "label": "Click me" } }
+    ]
   }
 }
 ```
@@ -85,12 +87,12 @@ Use `visible` on elements to show/hide based on state. New syntax: `{ "$state": 
 
 ## Providers
 
-| Provider             | Purpose                                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `StateProvider`      | Share state across components (JSON Pointer paths). Accepts optional `store` prop for controlled mode. |
-| `ActionProvider`     | Handle actions dispatched via the event system                                                         |
-| `VisibilityProvider` | Enable conditional rendering based on state                                                            |
-| `ValidationProvider` | Form field validation                                                                                  |
+| Provider | Purpose |
+|----------|---------|
+| `StateProvider` | Share state across components (JSON Pointer paths). Accepts optional `store` prop for controlled mode. |
+| `ActionProvider` | Handle actions dispatched via the event system |
+| `VisibilityProvider` | Enable conditional rendering based on state |
+| `ValidationProvider` | Form field validation |
 
 ### External Store (Controlled Mode)
 
@@ -101,7 +103,7 @@ import { createStateStore, type StateStore } from "@json-render/react";
 
 const store = createStateStore({ count: 0 });
 
-<StateProvider store={store}>{children}</StateProvider>;
+<StateProvider store={store}>{children}</StateProvider>
 
 // Mutate from anywhere — React re-renders automatically:
 store.set("/count", 1);
@@ -243,20 +245,20 @@ const Card = ({ props, children }: BaseComponentProps<{ title?: string }>) => (
 
 ## Key Exports
 
-| Export                  | Purpose                                                                                               |
-| ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| `defineRegistry`        | Create a type-safe component registry from a catalog                                                  |
-| `Renderer`              | Render a spec using a registry                                                                        |
-| `schema`                | Element tree schema (includes built-in state actions: setState, pushState, removeState, validateForm) |
-| `useStateStore`         | Access state context                                                                                  |
-| `useStateValue`         | Get single value from state                                                                           |
-| `useBoundProp`          | Two-way binding for `$bindState`/`$bindItem` expressions                                              |
-| `useActions`            | Access actions context                                                                                |
-| `useAction`             | Get a single action dispatch function                                                                 |
-| `useOptionalValidation` | Non-throwing variant of useValidation (returns null if no provider)                                   |
-| `useUIStream`           | Stream specs from an API endpoint                                                                     |
-| `createStateStore`      | Create a framework-agnostic in-memory `StateStore`                                                    |
-| `StateStore`            | Interface for plugging in external state management                                                   |
-| `BaseComponentProps`    | Catalog-agnostic base type for reusable component libraries                                           |
-| `EventHandle`           | Event handle type (`emit`, `shouldPreventDefault`, `bound`)                                           |
-| `ComponentContext`      | Typed component context (catalog-aware)                                                               |
+| Export | Purpose |
+|--------|---------|
+| `defineRegistry` | Create a type-safe component registry from a catalog |
+| `Renderer` | Render a spec using a registry |
+| `schema` | Element tree schema (includes built-in state actions: setState, pushState, removeState, validateForm) |
+| `useStateStore` | Access state context |
+| `useStateValue` | Get single value from state |
+| `useBoundProp` | Two-way binding for `$bindState`/`$bindItem` expressions |
+| `useActions` | Access actions context |
+| `useAction` | Get a single action dispatch function |
+| `useOptionalValidation` | Non-throwing variant of useValidation (returns null if no provider) |
+| `useUIStream` | Stream specs from an API endpoint |
+| `createStateStore` | Create a framework-agnostic in-memory `StateStore` |
+| `StateStore` | Interface for plugging in external state management |
+| `BaseComponentProps` | Catalog-agnostic base type for reusable component libraries |
+| `EventHandle` | Event handle type (`emit`, `shouldPreventDefault`, `bound`) |
+| `ComponentContext` | Typed component context (catalog-aware) |

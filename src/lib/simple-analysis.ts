@@ -1,6 +1,5 @@
 export type EvidenceTone = "good" | "caution" | "bad" | "neutral";
 export type TrendDirection = "up" | "down" | "flat" | "mixed";
-export type EvidenceStatus = "good" | "watch" | "avoid";
 export type ChartKind = "bar" | "line";
 export type ValueKind = "currency" | "percent" | "ratio" | "index";
 
@@ -38,10 +37,18 @@ export type SimpleAnalysisStat = {
   tone: EvidenceTone;
 };
 
+export type FundamentalPosture = "supportive" | "mixed" | "strained";
+export type FundamentalBusinessView = "strong" | "mixed" | "weak";
+export type FundamentalValuationView = "attractive" | "fair" | "stretched" | "unclear";
+export type FundamentalBalanceSheetView = "strong" | "manageable" | "weak" | "unknown";
+
 export type SimpleAnalysisEvidence = {
-  headline: string;
+  title: string;
   summary: string;
-  status: EvidenceStatus;
+  posture: FundamentalPosture;
+  businessView: FundamentalBusinessView;
+  valuationView: FundamentalValuationView;
+  balanceSheetView: FundamentalBalanceSheetView;
   stats: SimpleAnalysisStat[];
   charts: SimpleAnalysisChart[];
   takeaways: string[];
@@ -198,26 +205,37 @@ export function buildSimpleAnalysisEvidence(
           ? "behind"
           : "in step";
 
-  const businessStrong =
-    salesTrend === "up" && (cashTrend === "up" || (latestCash != null && latestCash > 0));
-  const priceRich =
-    (cashReturnAtPrice != null && cashReturnAtPrice < 3) ||
-    (priceGap != null && priceGap > 25 && cashTrend !== "up");
-  const safetyWeak = debtLoad.tone === "bad";
+  const businessView: FundamentalBusinessView =
+    salesTrend === "up" && (cashTrend === "up" || (latestCash != null && latestCash > 0))
+      ? "strong"
+      : salesTrend === "down" && (cashTrend === "down" || (latestCash != null && latestCash < 0))
+        ? "weak"
+        : "mixed";
 
-  const status: EvidenceStatus =
-    businessStrong && !priceRich && !safetyWeak
-      ? "good"
-      : !businessStrong && (priceRich || safetyWeak)
-        ? "avoid"
-        : "watch";
+  const valuationView: FundamentalValuationView =
+    cashReturnAtPrice == null && priceVsBusinessLabel === "hard to tell"
+      ? "unclear"
+      : (cashReturnAtPrice != null && cashReturnAtPrice >= 6) || priceVsBusinessLabel === "behind"
+        ? "attractive"
+        : (cashReturnAtPrice != null && cashReturnAtPrice < 3) || priceVsBusinessLabel === "ahead"
+          ? "stretched"
+          : "fair";
 
-  const headline =
-    status === "good"
-      ? "Business is improving and the price still looks grounded."
-      : status === "avoid"
-        ? "The price is asking for more than the business is giving."
-        : "Some pieces look healthy, but the full picture is mixed.";
+  const balanceSheetView: FundamentalBalanceSheetView =
+    debtLoad.tone === "good"
+      ? "strong"
+      : debtLoad.tone === "bad"
+        ? "weak"
+        : debtLoad.tone === "caution"
+          ? "manageable"
+          : "unknown";
+
+  const posture: FundamentalPosture =
+    businessView === "strong" && valuationView !== "stretched" && balanceSheetView !== "weak"
+      ? "supportive"
+      : businessView === "weak" && (valuationView === "stretched" || balanceSheetView === "weak")
+        ? "strained"
+        : "mixed";
 
   const businessPhrase =
     salesTrend === "up" && cashTrend === "up"
@@ -379,9 +397,13 @@ export function buildSimpleAnalysisEvidence(
   }
 
   return {
-    headline,
-    summary: `${businessPhrase}, ${pricePhrase}, and ${safetyPhrase}.`,
-    status,
+    title: "Business + valuation context",
+    summary:
+      "This section shows the underlying business, balance-sheet, and valuation evidence. It supports the weekly AI read, but it is not a separate buy or sell verdict.",
+    posture,
+    businessView,
+    valuationView,
+    balanceSheetView,
     stats,
     charts: [salesChart, cashChart, priceVsBusinessChart].filter(
       (chart): chart is SimpleAnalysisChart => chart != null,

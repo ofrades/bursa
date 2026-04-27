@@ -223,6 +223,12 @@ STRATEGY SETUP (evaluate and include in SIGNAL_JSON):
 1. Weekly trend — is price in a weekly uptrend above the 21-week EMA?
 2. Pullback to 21 EMA — has price pulled back to or consolidated around the daily 21 EMA?
 3. Consolidation breakout near 21 EMA — is there a strong daily candle breaking above recent consolidation/high away from the 21 EMA?
+
+RECONCILE SETUP VS FUNDAMENTALS:
+- A weekly recommendation can be tactical, but it must still respect fundamentals.
+- If the near-term setup is bullish while revenue / cash flow / debt / valuation look weak, you may still return BUY only as a tactical setup: lower confidence, say clearly that it is a shorter-term timing call, and mention the weak fundamentals in keyBearishFactors and reasoning.
+- If fundamentals look decent but the setup is weak, you may still return SELL for this week: explain that it is a timing / risk-management call, not a claim that the business is bad, and mention the stronger fundamentals in keyBullishFactors or reasoning.
+- Do not present the weekly signal as a broad business verdict when the evidence is mixed.
 ────────────────────────────────────────────────────────────────
 
 Respond with EXACTLY these four sections, nothing else:
@@ -259,6 +265,7 @@ MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fm
 P/E: ${fmt(d.peRatio, 1)} | D/E: ${fmt(d.debtToEquity, 1)} | ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"}
 SETUP CONTEXT: ${setupContext}
 CONTEXT: ${isDaily ? `Daily update ${weekStart}–${weekEnd}.` : `Weekly rec ${weekStart}–${weekEnd}.`}
+If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat weekly signals as timing calls, not blanket business verdicts.
 
 Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 {"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;

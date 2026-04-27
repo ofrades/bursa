@@ -12,9 +12,9 @@
       "computedHash": "67d6daabd85c23cc58eeabea56f25b899723932dfb69c55ddae4990b43c918d2"
     },
     "shadcn": {
-      "source": "shadcn/ui",
+      "source": "vercel-labs/json-render",
       "sourceType": "github",
-      "computedHash": "873c67922d80775a9fdf596db7964b579f0408c30ec6e3d11989f6055bbec89f"
+      "computedHash": "d6a9be8eeedea18343b5b15d6ac481a55436fe40db4b65d59858388072c239c4"
     }
   }
 }

@@ -15,7 +15,9 @@ import { getStockPageData } from "../server/stocks";
 import { saveWeeklyAnalysis } from "../server/recommend";
 import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
 import { StreamingAnalysis } from "../components/StreamingAnalysis";
-import { JsonSpecRenderer, buildSimpleAnalysisSpec } from "../lib/json-render";
+import { JsonSpecRenderer } from "../lib/json-render";
+import { reconcileWeeklyWithFundamentals } from "../lib/analysis-reconciliation";
+import { buildSimpleAnalysisSpec } from "../lib/simple-analysis-spec";
 
 export const Route = createFileRoute("/$symbol")({
   validateSearch: (search): { analyze?: boolean } => ({
@@ -109,6 +111,17 @@ function confidenceLabel(confidence: number | null | undefined) {
   return "Low";
 }
 
+function reconciliationToneClasses(tone: "supportive" | "balanced" | "cautious") {
+  switch (tone) {
+    case "supportive":
+      return "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800/40 dark:bg-emerald-950/20";
+    case "cautious":
+      return "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-950/20";
+    default:
+      return "border-amber-200 bg-amber-50/50 dark:border-amber-800/40 dark:bg-amber-950/20";
+  }
+}
+
 function StockPage() {
   const data = Route.useLoaderData();
   const params = Route.useParams();
@@ -197,6 +210,22 @@ function StockPage() {
   const simpleAnalysisSpec = data.simpleAnalysis
     ? buildSimpleAnalysisSpec(data.simpleAnalysis)
     : null;
+  const reconciliation =
+    latestAnalysis && data.simpleAnalysis
+      ? reconcileWeeklyWithFundamentals(
+          {
+            signal: latestAnalysis.signal as "BUY" | "SELL",
+            cycle: latestAnalysis.cycle ?? null,
+            cycleTimeframe:
+              (latestAnalysis.cycleTimeframe as "SHORT" | "MEDIUM" | "LONG" | null) ?? null,
+            confidence: latestAnalysis.confidence ?? null,
+            weeklyTrend: recommendation?.weeklyTrend,
+            pullbackTo21EMA: recommendation?.pullbackTo21EMA,
+            consolidationBreakout21EMA: recommendation?.consolidationBreakout21EMA,
+          },
+          data.simpleAnalysis,
+        )
+      : null;
 
   return (
     <div className="min-h-screen">
@@ -292,6 +321,27 @@ function StockPage() {
         ) : latestAnalysis ? (
           <>
             {simpleAnalysisSpec && <JsonSpecRenderer spec={simpleAnalysisSpec} />}
+
+            {reconciliation && (
+              <Card className={reconciliationToneClasses(reconciliation.tone)}>
+                <CardHeader>
+                  <CardDescription className="text-xs uppercase tracking-wider">
+                    Weekly call vs fundamentals
+                  </CardDescription>
+                  <CardTitle className="text-lg text-balance">{reconciliation.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {reconciliation.summary}
+                  </p>
+                  <ul className="flex flex-col gap-2 pl-4 text-sm leading-relaxed text-muted-foreground list-disc">
+                    {reconciliation.bullets.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <Card>
