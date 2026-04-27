@@ -68,23 +68,18 @@ async function upsertUserStockState(
 export const getMultipleMetrics = createServerFn({ method: "GET" })
   .inputValidator((data: { symbols: string[] }) => data)
   .handler(async ({ data }) => {
-    if (!data.symbols.length) return [];
+    const symbols = Array.from(new Set(data.symbols.filter(Boolean)));
+    if (!symbols.length) return [];
+
     const { getDb } = await import("../lib/db");
     const { refreshStockMetrics } = await import("../lib/metrics");
     const db = await getDb();
-    const existing = await db
-      .select()
-      .from(stockMetrics)
-      .where(inArray(stockMetrics.symbol, data.symbols));
-    const existingBySymbol = new Map(existing.map((m) => [m.symbol, m]));
-    const staleOrMissing = data.symbols.filter((symbol) => {
-      const row = existingBySymbol.get(symbol);
-      return !row || row.perfDay == null || row.perfWtd == null || row.perfMtd == null;
-    });
-    if (staleOrMissing.length) {
-      await Promise.allSettled(staleOrMissing.map((s) => refreshStockMetrics(s)));
-    }
-    return db.select().from(stockMetrics).where(inArray(stockMetrics.symbol, data.symbols));
+
+    // Keep table day/week/month metrics fresh on every load. We still tolerate
+    // individual provider failures and fall back to the last persisted values.
+    await Promise.allSettled(symbols.map((symbol) => refreshStockMetrics(symbol)));
+
+    return db.select().from(stockMetrics).where(inArray(stockMetrics.symbol, symbols));
   });
 
 // ─── Analysis (global — shared across all users) ─────────────────────────────
