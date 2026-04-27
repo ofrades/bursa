@@ -2,19 +2,27 @@ import { useMemo } from "react";
 import { Loader2, CircleAlert } from "lucide-react";
 import { parseSections } from "../lib/stream-parsing";
 import type { StreamingState } from "../hooks/useStreamingAnalysis";
-import { Badge, SignalBadge, CycleBadge, SupervisorBadge } from "./ui/badge";
-import type { Signal, Cycle, SupervisorSeverity } from "./ui/badge";
+import { Badge, SignalBadge } from "./ui/badge";
+import type { Signal } from "./ui/badge";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
 const STREAM_SECTION_MARKERS = [
   {
     marker: "1. SIGNAL_JSON:",
-    label: "Signal JSON",
+    label: "Main view",
     tone: "text-emerald-700 dark:text-emerald-300",
   },
-  { marker: "2. TALEB_JSON:", label: "Taleb JSON", tone: "text-amber-700 dark:text-amber-300" },
-  { marker: "3. BUFFETT_JSON:", label: "Buffett JSON", tone: "text-blue-700 dark:text-blue-300" },
+  {
+    marker: "2. TALEB_JSON:",
+    label: "Stress check",
+    tone: "text-amber-700 dark:text-amber-300",
+  },
+  {
+    marker: "3. BUFFETT_JSON:",
+    label: "Price check",
+    tone: "text-blue-700 dark:text-blue-300",
+  },
   {
     marker: "4. MEMORY_UPDATE:",
     label: "Memory update",
@@ -81,65 +89,17 @@ function moneyStr(v: number | null | undefined) {
   }).format(v);
 }
 
-function CycleStrengthBar({ strength }: { strength: number | null }) {
-  if (strength == null) return null;
-  const pct = Math.max(0, Math.min(100, strength));
-  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-400" : "bg-red-400";
-  return (
-    <div className="flex items-center gap-2 mt-1">
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${color}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
-    </div>
-  );
-}
-
-function SetupChecklistPartial({
-  weeklyTrend,
-  pullback,
-  breakout,
-}: {
-  weeklyTrend?: string;
-  pullback?: boolean;
-  breakout?: boolean;
-}) {
-  const items = [
-    { label: "Weekly trend", value: weeklyTrend ?? "—", ok: weeklyTrend === "uptrend" },
-    {
-      label: "Pullback to 21 EMA",
-      value: pullback === true ? "Yes" : pullback === false ? "No" : "—",
-      ok: pullback === true,
-    },
-    {
-      label: "Consolidation breakout",
-      value: breakout === true ? "Yes" : breakout === false ? "No" : "—",
-      ok: breakout === true,
-    },
-  ];
-
-  return (
-    <div className="flex flex-col gap-2">
-      {items.map((item) => (
-        <div key={item.label} className="flex items-center justify-between">
-          <span className="text-sm">{item.label}</span>
-          <Badge
-            variant="outline"
-            className={
-              item.ok
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40"
-                : undefined
-            }
-          >
-            {item.value}
-          </Badge>
-        </div>
-      ))}
-    </div>
-  );
+function severityClasses(severity: string | undefined) {
+  switch (severity) {
+    case "EXTREME":
+      return "border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-300";
+    case "HIGH":
+      return "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800/40 dark:bg-orange-950/40 dark:text-orange-300";
+    case "MEDIUM":
+      return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300";
+    default:
+      return "border-border bg-muted text-muted-foreground";
+  }
 }
 
 export function StreamingAnalysis({
@@ -194,18 +154,12 @@ export function StreamingAnalysis({
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
-                  AI analysis
+                  Near-term read
                 </CardDescription>
-                <CardTitle className="text-xl">Weekly recommendation</CardTitle>
+                <CardTitle className="text-xl">This week&apos;s setup</CardTitle>
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <SignalBadge signal={(signal.signal as Signal) ?? "HOLD"} />
-                {Boolean(signal.cycle) && (
-                  <CycleBadge
-                    cycle={signal.cycle as Cycle}
-                    timeframe={(signal.cycleTimeframe as string) ?? null}
-                  />
-                )}
               </div>
             </div>
           </CardHeader>
@@ -236,29 +190,10 @@ export function StreamingAnalysis({
               ))}
             </div>
 
-            {typeof signal.cycleStrength === "number" && (
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Cycle phase
-                </p>
-                <div className="flex items-center gap-2 mb-1">
-                  <CycleBadge cycle={signal.cycle as Cycle} />
-                </div>
-                <CycleStrengthBar strength={signal.cycleStrength as number} />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {signal.cycleTimeframe === "SHORT" && "Days to 2 weeks — price action driven"}
-                  {signal.cycleTimeframe === "MEDIUM" &&
-                    "Weeks to a quarter — SMA & earnings driven"}
-                  {signal.cycleTimeframe === "LONG" &&
-                    "Quarters to a year — fundamentals & macro driven"}
-                </p>
-              </div>
-            )}
-
             {Boolean(signal.weeklyOutlook) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Weekly outlook
+                  Short summary
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {String(signal.weeklyOutlook)}
@@ -269,30 +204,24 @@ export function StreamingAnalysis({
             {Boolean(signal.reasoning) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Reasoning
+                  Why the model thinks that
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {String(signal.reasoning)}
                 </p>
               </div>
             )}
-
-            <SetupChecklistPartial
-              weeklyTrend={signal.weeklyTrend as string | undefined}
-              pullback={signal.pullbackTo21EMA as boolean | undefined}
-              breakout={signal.consolidationBreakout21EMA as boolean | undefined}
-            />
           </CardContent>
         </Card>
       )}
 
-      {/* Bullish / Bearish factors */}
+      {/* What helps / what to watch */}
       {hasSignal && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardHeader>
               <CardDescription className="text-xs uppercase tracking-wider">
-                Bullish factors
+                What helps
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -303,7 +232,7 @@ export function StreamingAnalysis({
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">No bullish factors yet.</p>
+                <p className="text-sm text-muted-foreground">No clear helpers yet.</p>
               )}
             </CardContent>
           </Card>
@@ -311,7 +240,7 @@ export function StreamingAnalysis({
           <Card>
             <CardHeader>
               <CardDescription className="text-xs uppercase tracking-wider">
-                Bearish factors
+                What to watch
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -322,7 +251,7 @@ export function StreamingAnalysis({
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">No bearish factors yet.</p>
+                <p className="text-sm text-muted-foreground">No clear watch-outs yet.</p>
               )}
             </CardContent>
           </Card>
@@ -332,42 +261,25 @@ export function StreamingAnalysis({
       {/* Supervisors */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {hasTaleb && taleb && (
-          <Card
-            className={
-              taleb.severity === "EXTREME"
-                ? "border-red-300 dark:border-red-700"
-                : taleb.severity === "HIGH"
-                  ? "border-orange-200 dark:border-orange-800"
-                  : ""
-            }
-          >
+          <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🦢</span>
-                    <CardDescription className="text-xs uppercase tracking-wider">
-                      Nassim Taleb
-                    </CardDescription>
-                  </div>
+                  <CardDescription className="text-xs uppercase tracking-wider">
+                    Stress check
+                  </CardDescription>
                   <CardTitle className="text-base leading-tight">
                     {String(taleb.title ?? "")}
                   </CardTitle>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <SupervisorBadge
-                    supervisor="TALEB"
-                    severity={(taleb.severity as SupervisorSeverity) ?? "LOW"}
-                  />
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                    {(taleb.alertType as string) ?? ""}
-                  </span>
-                </div>
+                <Badge variant="outline" className={severityClasses(taleb.severity as string)}>
+                  {String(taleb.severity ?? "LOW")}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground leading-relaxed italic">
-                "{String(taleb.content ?? "")}"
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {String(taleb.content ?? "")}
               </p>
             </CardContent>
           </Card>
@@ -378,30 +290,21 @@ export function StreamingAnalysis({
             <CardHeader>
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🎩</span>
-                    <CardDescription className="text-xs uppercase tracking-wider">
-                      Warren Buffett
-                    </CardDescription>
-                  </div>
+                  <CardDescription className="text-xs uppercase tracking-wider">
+                    Price check
+                  </CardDescription>
                   <CardTitle className="text-base leading-tight">
                     {String(buffett.title ?? "")}
                   </CardTitle>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <SupervisorBadge
-                    supervisor="BUFFETT"
-                    severity={(buffett.severity as SupervisorSeverity) ?? "LOW"}
-                  />
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                    {(buffett.alertType as string) ?? ""}
-                  </span>
-                </div>
+                <Badge variant="outline" className={severityClasses(buffett.severity as string)}>
+                  {String(buffett.severity ?? "LOW")}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground leading-relaxed italic">
-                "{String(buffett.content ?? "")}"
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {String(buffett.content ?? "")}
               </p>
             </CardContent>
           </Card>

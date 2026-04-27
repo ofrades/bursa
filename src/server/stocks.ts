@@ -8,6 +8,7 @@ import {
   supervisorAlert,
   watchlist,
 } from "../lib/schema";
+import { buildSimpleAnalysisEvidence } from "../lib/simple-analysis";
 import { authMiddleware } from "./middleware";
 
 // ─── Ensure stock exists in catalog ──────────────────────────────────────────
@@ -118,6 +119,125 @@ export const getDailySignals = createServerFn({ method: "GET" })
       .where(eq(dailySignal.stockAnalysisId, data.stockAnalysisId));
   });
 
+function yearLabel(value: Date | string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : `${date.getUTCFullYear()}`;
+}
+
+function asNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function findClosestPriceOnOrBefore(
+  history: Array<{ date: Date; close: number | null }>,
+  targetDate: string,
+): number | null {
+  const target = new Date(targetDate).getTime();
+  if (Number.isNaN(target)) return null;
+
+  let candidate: number | null = null;
+  for (const point of history) {
+    if (point.close == null) continue;
+    if (point.date.getTime() <= target) {
+      candidate = point.close;
+      continue;
+    }
+    break;
+  }
+
+  return candidate;
+}
+
+async function getSimpleAnalysisForSymbol(symbol: string) {
+  const { default: YahooFinance } = await import("yahoo-finance2");
+  const yf = new YahooFinance({
+    suppressNotices: ["ripHistorical", "yahooSurvey"],
+  });
+
+  const period1 = new Date();
+  period1.setUTCFullYear(period1.getUTCFullYear() - 6);
+  period1.setUTCMonth(0, 1);
+  period1.setUTCHours(0, 0, 0, 0);
+
+  const [quote, summary, financialsRaw, cashFlowRaw, historicalRaw] = await Promise.all([
+    yf.quote(symbol),
+    yf.quoteSummary(symbol, {
+      modules: ["financialData"],
+    }),
+    yf.fundamentalsTimeSeries(symbol, {
+      period1,
+      period2: new Date(),
+      type: "annual",
+      module: "financials",
+    }),
+    yf.fundamentalsTimeSeries(symbol, {
+      period1,
+      period2: new Date(),
+      type: "annual",
+      module: "cash-flow",
+    }),
+    yf.historical(symbol, {
+      period1,
+      period2: new Date(),
+      interval: "1mo",
+    }),
+  ]);
+
+  const financials = Array.isArray(financialsRaw) ? financialsRaw : [];
+  const cashFlow = Array.isArray(cashFlowRaw) ? cashFlowRaw : [];
+  const historical = Array.isArray(historicalRaw)
+    ? historicalRaw
+        .filter((point: any) => point?.date && point?.close != null)
+        .map((point: any) => ({ date: new Date(point.date), close: asNumber(point.close) }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+    : [];
+
+  const salesHistory = financials
+    .filter((row: any) => row?.date)
+    .map((row: any) => {
+      const date = new Date(row.date).toISOString();
+      return {
+        label: yearLabel(date),
+        date,
+        value: asNumber(row.totalRevenue),
+      };
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const cashHistory = cashFlow
+    .filter((row: any) => row?.date)
+    .map((row: any) => {
+      const date = new Date(row.date).toISOString();
+      return {
+        label: yearLabel(date),
+        date,
+        value: asNumber(row.freeCashFlow),
+      };
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const anchors = salesHistory.length ? salesHistory : cashHistory;
+  const priceHistory = anchors.map((point) => ({
+    label: point.label,
+    date: point.date,
+    value: findClosestPriceOnOrBefore(historical, point.date),
+  }));
+
+  return buildSimpleAnalysisEvidence({
+    symbol,
+    salesHistory,
+    cashHistory,
+    priceHistory,
+    currentPrice: asNumber((quote as any)?.regularMarketPrice),
+    marketCap: asNumber((quote as any)?.marketCap),
+    totalDebt: asNumber((summary as any)?.financialData?.totalDebt),
+    totalCash: asNumber((summary as any)?.financialData?.totalCash),
+    freeCashflow: asNumber((summary as any)?.financialData?.freeCashflow),
+    profitMargin: asNumber((summary as any)?.financialData?.profitMargins),
+    revenueGrowth: asNumber((summary as any)?.financialData?.revenueGrowth),
+  });
+}
+
 export const getStockPageData = createServerFn({ method: "GET" })
   .inputValidator((data: { symbol: string }) => data)
   .handler(async ({ data }) => {
@@ -125,7 +245,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
     const db = await getDb();
     const symbol = data.symbol.toUpperCase();
 
-    const [stockRow, analysisRows] = await Promise.all([
+    const [stockRow, analysisRows, simpleAnalysis] = await Promise.all([
       db.select().from(stock).where(eq(stock.symbol, symbol)),
       db
         .select()
@@ -133,6 +253,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
         .where(eq(stockAnalysis.symbol, symbol))
         .orderBy(desc(stockAnalysis.weekStart), desc(stockAnalysis.updatedAt))
         .limit(6),
+      getSimpleAnalysisForSymbol(symbol).catch(() => null),
     ]);
 
     const latestAnalysis = analysisRows[0] ?? null;
@@ -159,6 +280,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
       analysisHistory: analysisRows,
       dailySignals: dailySignalsForLatest,
       supervisorAlerts: supervisorAlertsForLatest,
+      simpleAnalysis,
     };
   });
 

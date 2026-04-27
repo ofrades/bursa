@@ -1,23 +1,7 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
-import {
-  BarChart3,
-  CalendarDays,
-  ChevronLeft,
-  CircleAlert,
-  Loader2,
-  Sparkles,
-  ShieldAlert,
-} from "lucide-react";
-import { cn } from "#/lib/utils";
-import {
-  Badge,
-  SignalBadge,
-  CycleBadge,
-  SupervisorBadge,
-  type Cycle,
-  type SupervisorSeverity,
-} from "../components/ui/badge";
+import { BarChart3, ChevronLeft, CircleAlert, Loader2, Sparkles, ShieldAlert } from "lucide-react";
+import { Badge, SignalBadge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -27,20 +11,22 @@ import {
   CardTitle,
   CardAction,
 } from "../components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../components/ui/table";
 import { getStockPageData } from "../server/stocks";
 import { saveWeeklyAnalysis } from "../server/recommend";
 import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
 import { StreamingAnalysis } from "../components/StreamingAnalysis";
+import { JsonSpecRenderer, buildSimpleAnalysisSpec } from "../lib/json-render";
 
 export const Route = createFileRoute("/$symbol")({
+  validateSearch: (search): { analyze?: boolean } => ({
+    analyze:
+      search.analyze === true ||
+      search.analyze === "true" ||
+      search.analyze === 1 ||
+      search.analyze === "1"
+        ? true
+        : undefined,
+  }),
   loader: async ({ params }) => {
     const symbol = params.symbol.toUpperCase();
     return getStockPageData({ data: { symbol } });
@@ -86,133 +72,49 @@ function dateStr(v: string | Date | null | undefined, withTime = false) {
   return withTime ? d.toLocaleString() : d.toLocaleDateString();
 }
 
-// ─── Supervisor card ──────────────────────────────────────────────────────────
+function weekRangeStr(start: string | null | undefined, end: string | null | undefined) {
+  if (!start) return "—";
+  const startDate = new Date(start);
+  const endDate = end ? new Date(end) : null;
 
-function SupervisorCard({
-  supervisor,
-  alertType,
-  severity,
-  title,
-  content,
-}: {
-  supervisor: "TALEB" | "BUFFETT";
-  alertType: string;
-  severity: SupervisorSeverity;
-  title: string;
-  content: string;
-}) {
-  const isTaleb = supervisor === "TALEB";
-  const borderClass =
-    severity === "EXTREME"
-      ? "border-red-300 dark:border-red-700"
-      : severity === "HIGH"
-        ? "border-orange-200 dark:border-orange-800"
-        : "";
+  if (Number.isNaN(startDate.getTime())) return start;
+  if (!endDate || Number.isNaN(endDate.getTime())) return dateStr(startDate);
 
-  return (
-    <Card className={cn("transition-colors", borderClass)}>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="text-base">{isTaleb ? "🦢" : "🎩"}</span>
-              <CardDescription className="text-xs uppercase tracking-wider">
-                {isTaleb ? "Nassim Taleb" : "Warren Buffett"}
-              </CardDescription>
-            </div>
-            <CardTitle className="text-base leading-tight">{title}</CardTitle>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <SupervisorBadge supervisor={supervisor} severity={severity} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              {alertType.replaceAll("_", " ")}
-            </span>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground leading-relaxed italic">"{content}"</p>
-      </CardContent>
-    </Card>
-  );
+  const sameYear = startDate.getFullYear() === endDate.getFullYear();
+  const startLabel = startDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  const endLabel = endDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return `${startLabel} – ${endLabel}`;
 }
 
-// ─── Cycle strength bar ───────────────────────────────────────────────────────
-
-function CycleStrengthBar({ strength }: { strength: number | null }) {
-  if (strength == null) return null;
-  const pct = Math.max(0, Math.min(100, strength));
-  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-400" : "bg-red-400";
-  return (
-    <div className="flex items-center gap-2 mt-1">
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn("h-full rounded-full transition-all", color)}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
-    </div>
-  );
+function confidenceTone(confidence: number | null | undefined) {
+  if (confidence == null) return "bg-muted";
+  if (confidence >= 75) return "bg-emerald-500";
+  if (confidence >= 55) return "bg-amber-400";
+  return "bg-red-400";
 }
 
-function SetupChecklist({ rec }: { rec: ParsedRecommendation | null }) {
-  if (!rec) return null;
-  const items = [
-    {
-      label: "Weekly trend",
-      value: rec.weeklyTrend ?? "—",
-      ok: rec.weeklyTrend === "uptrend",
-    },
-    {
-      label: "Pullback to 21 EMA",
-      value: rec.pullbackTo21EMA === true ? "Yes" : rec.pullbackTo21EMA === false ? "No" : "—",
-      ok: rec.pullbackTo21EMA === true,
-    },
-    {
-      label: "Consolidation breakout near 21 EMA",
-      value:
-        rec.consolidationBreakout21EMA === true
-          ? "Yes"
-          : rec.consolidationBreakout21EMA === false
-            ? "No"
-            : "—",
-      ok: rec.consolidationBreakout21EMA === true,
-    },
-  ];
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription className="text-xs uppercase tracking-wider">
-          Setup checklist
-        </CardDescription>
-        <CardTitle className="text-lg">Strategy criteria</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {items.map((item) => (
-          <div key={item.label} className="flex items-center justify-between">
-            <span className="text-sm">{item.label}</span>
-            <Badge
-              variant="outline"
-              className={
-                item.ok
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40"
-                  : undefined
-              }
-            >
-              {item.value}
-            </Badge>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
+function confidenceLabel(confidence: number | null | undefined) {
+  if (confidence == null) return "Unknown";
+  if (confidence >= 75) return "High";
+  if (confidence >= 55) return "Medium";
+  return "Low";
 }
 
 function StockPage() {
   const data = Route.useLoaderData();
   const params = Route.useParams();
+  const search = Route.useSearch();
   const { session } = Route.useRouteContext();
+  const navigate = useNavigate({ from: Route.fullPath });
   const router = useRouter();
   const symbol = params.symbol.toUpperCase();
 
@@ -227,6 +129,16 @@ function StockPage() {
     setSaveError(null);
     startStream(symbol);
   };
+
+  useEffect(() => {
+    if (!search.analyze || !session || streamState.isLoading) return;
+
+    navigate({
+      search: (prev) => ({ ...prev, analyze: undefined }),
+      replace: true,
+    });
+    handleAnalyze();
+  }, [handleAnalyze, navigate, search.analyze, session, streamState.isLoading]);
 
   // Auto-save streamed analysis to DB when complete
   useEffect(() => {
@@ -272,12 +184,11 @@ function StockPage() {
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
   const bullishFactors = recommendation?.keyBullishFactors ?? [];
   const bearishFactors = recommendation?.keyBearishFactors ?? [];
-
-  // Supervisor alerts: pick the latest per supervisor
   const alerts = data.supervisorAlerts ?? [];
-  const talebAlert = alerts.find((a) => a.supervisor === "TALEB") ?? null;
-  const buffettAlert = alerts.find((a) => a.supervisor === "BUFFETT") ?? null;
   const hasExtreme = alerts.some((a) => a.severity === "EXTREME");
+  const simpleAnalysisSpec = data.simpleAnalysis
+    ? buildSimpleAnalysisSpec(data.simpleAnalysis)
+    : null;
 
   return (
     <div className="min-h-screen">
@@ -295,12 +206,6 @@ function StockPage() {
               <div className="flex items-center gap-1.5">
                 <Sparkles className="size-3 text-muted-foreground" />
                 <SignalBadge signal={latestAnalysis.signal} />
-                {latestAnalysis.cycle && (
-                  <CycleBadge
-                    cycle={latestAnalysis.cycle as Cycle}
-                    timeframe={latestAnalysis.cycleTimeframe}
-                  />
-                )}
               </div>
             ) : (
               <Badge variant="outline">No analysis yet</Badge>
@@ -350,12 +255,6 @@ function StockPage() {
                     {[stock?.name, stock?.sector, stock?.industry].filter(Boolean).join(" · ") ||
                       "Stock detail page"}
                   </CardDescription>
-                  {latestAnalysis?.cycle && (
-                    <div className="mt-2 flex flex-col gap-0.5">
-                      <p className="text-xs text-muted-foreground">Cycle conviction</p>
-                      <CycleStrengthBar strength={latestAnalysis.cycleStrength} />
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -384,27 +283,19 @@ function StockPage() {
           <StreamingAnalysis state={streamState} saveState={saveState} saveError={saveError} />
         ) : latestAnalysis ? (
           <>
-            <SetupChecklist rec={recommendation} />
+            {simpleAnalysisSpec && <JsonSpecRenderer spec={simpleAnalysisSpec} />}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-              {/* AI analysis card */}
               <Card>
                 <CardHeader>
                   <div>
                     <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
-                      AI analysis
+                      Near-term read
                     </CardDescription>
-                    <CardTitle className="text-xl">Weekly recommendation</CardTitle>
+                    <CardTitle className="text-xl">This week&apos;s setup</CardTitle>
                   </div>
                   <CardAction>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <SignalBadge signal={latestAnalysis.signal} />
-                      {latestAnalysis.cycle && (
-                        <CycleBadge
-                          cycle={latestAnalysis.cycle as Cycle}
-                          timeframe={latestAnalysis.cycleTimeframe}
-                        />
-                      )}
-                    </div>
+                    <SignalBadge signal={latestAnalysis.signal} />
                   </CardAction>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-5">
@@ -435,30 +326,10 @@ function StockPage() {
                     ))}
                   </div>
 
-                  {latestAnalysis.cycle && (
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                        Cycle phase
-                      </p>
-                      <div className="flex items-center gap-2 mb-1">
-                        <CycleBadge cycle={latestAnalysis.cycle as Cycle} />
-                      </div>
-                      <CycleStrengthBar strength={latestAnalysis.cycleStrength} />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {latestAnalysis.cycleTimeframe === "SHORT" &&
-                          "Days to 2 weeks — price action driven"}
-                        {latestAnalysis.cycleTimeframe === "MEDIUM" &&
-                          "Weeks to a quarter — SMA & earnings driven"}
-                        {latestAnalysis.cycleTimeframe === "LONG" &&
-                          "Quarters to a year — fundamentals & macro driven"}
-                      </p>
-                    </div>
-                  )}
-
                   {recommendation?.weeklyOutlook && (
                     <div>
                       <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                        Weekly outlook
+                        Short summary
                       </p>
                       <p className="text-sm text-muted-foreground leading-relaxed">
                         {recommendation.weeklyOutlook}
@@ -469,7 +340,7 @@ function StockPage() {
                   {recommendation?.reasoning && (
                     <div>
                       <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                        Reasoning
+                        Why the model thinks that
                       </p>
                       <p className="text-sm text-muted-foreground leading-relaxed">
                         {recommendation.reasoning}
@@ -479,12 +350,11 @@ function StockPage() {
                 </CardContent>
               </Card>
 
-              {/* Bullish / Bearish */}
               <div className="flex flex-col gap-4">
                 <Card>
                   <CardHeader>
                     <CardDescription className="text-xs uppercase tracking-wider">
-                      Bullish factors
+                      What helps
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -495,7 +365,7 @@ function StockPage() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No bullish factors saved.</p>
+                      <p className="text-sm text-muted-foreground">No clear helpers saved yet.</p>
                     )}
                   </CardContent>
                 </Card>
@@ -503,7 +373,7 @@ function StockPage() {
                 <Card>
                   <CardHeader>
                     <CardDescription className="text-xs uppercase tracking-wider">
-                      Bearish factors
+                      What to watch
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -514,7 +384,9 @@ function StockPage() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No bearish factors saved.</p>
+                      <p className="text-sm text-muted-foreground">
+                        No clear watch-outs saved yet.
+                      </p>
                     )}
                   </CardContent>
                 </Card>
@@ -536,139 +408,85 @@ function StockPage() {
           </Card>
         )}
 
-        {/* ── Board of Supervisors ───────────────────────────────────────────── */}
-        {(talebAlert || buffettAlert) && (
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <ShieldAlert className="size-4 text-muted-foreground" />
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Board of supervisors
-                </p>
-                <h3 className="text-base font-semibold">Independent perspectives</h3>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {talebAlert && (
-                <SupervisorCard
-                  supervisor="TALEB"
-                  alertType={talebAlert.alertType}
-                  severity={talebAlert.severity as SupervisorSeverity}
-                  title={talebAlert.title}
-                  content={talebAlert.content}
-                />
-              )}
-              {buffettAlert && (
-                <SupervisorCard
-                  supervisor="BUFFETT"
-                  alertType={buffettAlert.alertType}
-                  severity={buffettAlert.severity as SupervisorSeverity}
-                  title={buffettAlert.title}
-                  content={buffettAlert.content}
-                />
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* History + signals */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          {/* Analysis history table */}
-          <Card className="p-0 overflow-hidden gap-0">
-            <CardHeader className="border-b px-5 py-4">
+        {/* History */}
+        <Card className="p-0 overflow-hidden gap-0">
+          <CardHeader className="border-b px-5 py-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <BarChart3 className="size-4 text-muted-foreground" />
                 <div>
                   <CardDescription className="text-xs uppercase tracking-wider">
                     History
                   </CardDescription>
-                  <CardTitle className="text-base">Recent analysis runs</CardTitle>
+                  <CardTitle className="text-base">Analysis timeline</CardTitle>
                 </div>
               </div>
-            </CardHeader>
-            {data.analysisHistory.length === 0 ? (
-              <CardContent className="py-6">
-                <p className="text-sm text-muted-foreground">No previous analysis runs yet.</p>
-              </CardContent>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Week</TableHead>
-                    <TableHead className="text-center">Signal</TableHead>
-                    <TableHead className="text-center">Cycle</TableHead>
-                    <TableHead className="text-center">Conf.</TableHead>
-                    <TableHead className="text-center">Price</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.analysisHistory.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-medium text-xs">{row.weekStart}</TableCell>
-                      <TableCell className="text-center">
-                        <SignalBadge signal={row.signal} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {row.cycle ? (
-                          <CycleBadge cycle={row.cycle as Cycle} />
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center text-muted-foreground text-xs">
-                        {row.confidence != null ? `${row.confidence}%` : "—"}
-                      </TableCell>
-                      <TableCell className="text-center text-xs">
-                        {moneyStr(row.priceAtAnalysis)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Card>
-
-          {/* Daily signal log */}
-          <Card className="p-0 overflow-hidden gap-0">
-            <CardHeader className="border-b px-5 py-4">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="size-4 text-muted-foreground" />
-                <div>
-                  <CardDescription className="text-xs uppercase tracking-wider">
-                    Signals
-                  </CardDescription>
-                  <CardTitle className="text-base">Daily signal log</CardTitle>
-                </div>
-              </div>
-            </CardHeader>
-            {data.dailySignals.length === 0 ? (
-              <CardContent className="py-6">
-                <p className="text-sm text-muted-foreground">
-                  No daily signal updates for the latest analysis yet.
-                </p>
-              </CardContent>
-            ) : (
+              <Badge variant="outline">{data.analysisHistory.length} runs</Badge>
+            </div>
+          </CardHeader>
+          {data.analysisHistory.length === 0 ? (
+            <CardContent className="py-6">
+              <p className="text-sm text-muted-foreground">No previous analysis runs yet.</p>
+            </CardContent>
+          ) : (
+            <CardContent className="px-0 py-0">
               <div>
-                {data.dailySignals.map((row) => (
-                  <div key={row.id} className="px-5 py-4 border-b last:border-0">
-                    <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-                      <span className="text-sm font-medium">{row.date}</span>
-                      <div className="flex items-center gap-1.5">
+                {data.analysisHistory.map((row, index) => {
+                  const isLatest = index === 0;
+                  return (
+                    <div
+                      key={row.id}
+                      className="border-b last:border-b-0 px-5 py-4 transition-colors hover:bg-muted/30"
+                    >
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-foreground">
+                              {weekRangeStr(row.weekStart, row.weekEnd)}
+                            </p>
+                            {isLatest && <Badge variant="secondary">Latest</Badge>}
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Updated {dateStr(row.updatedAt, true)}
+                          </p>
+                        </div>
                         <SignalBadge signal={row.signal} />
-                        {row.cycle && <CycleBadge cycle={row.cycle as Cycle} />}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="rounded-lg bg-muted/50 px-3 py-3">
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="text-xs text-muted-foreground">Confidence</span>
+                            <span className="text-xs font-medium text-foreground">
+                              {row.confidence != null
+                                ? `${Math.round(row.confidence)}% · ${confidenceLabel(row.confidence)}`
+                                : "—"}
+                            </span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-background">
+                            <div
+                              className={`h-full rounded-full ${confidenceTone(row.confidence)}`}
+                              style={{
+                                width: `${Math.max(0, Math.min(100, row.confidence ?? 0))}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg bg-muted/50 px-3 py-3">
+                          <p className="text-xs text-muted-foreground">Price at review</p>
+                          <p className="mt-1 text-sm font-semibold text-foreground">
+                            {moneyStr(row.priceAtAnalysis)}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      <span>Trigger: {row.trigger}</span>
-                      <span>Price: {moneyStr(row.priceAtUpdate)}</span>
-                      {row.note && <span className="leading-relaxed">{row.note}</span>}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            )}
-          </Card>
-        </div>
+            </CardContent>
+          )}
+        </Card>
       </div>
     </div>
   );

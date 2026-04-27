@@ -7,11 +7,19 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Bookmark, Search as SearchIcon } from "lucide-react";
+import {
+  ArrowUpDown,
+  Bookmark,
+  Check,
+  RefreshCcw,
+  Search as SearchIcon,
+  Sparkles,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "#/lib/utils";
 
 import { type Signal, SignalBadge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 export type SharedAnalysisRow = {
@@ -26,6 +34,10 @@ export type SharedAnalysisRow = {
   isSaved?: boolean;
   isWatching?: boolean;
 };
+
+const ANALYSIS_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
+
+type AnalysisStatus = "missing" | "stale" | "recent";
 
 function formatPct(value: number | null | undefined) {
   if (value == null || Number.isNaN(value)) return "—";
@@ -48,6 +60,46 @@ function getStateRank(row: SharedAnalysisRow) {
 
 function compareNullableNumber(a: number | null | undefined, b: number | null | undefined) {
   return (a ?? Number.NEGATIVE_INFINITY) - (b ?? Number.NEGATIVE_INFINITY);
+}
+
+function getSignalRank(signal: string) {
+  if (signal === "BUY" || signal === "STRONG_BUY") return 2;
+  if (signal === "HOLD") return 1;
+  if (signal === "SELL" || signal === "STRONG_SELL") return 0;
+  return -1;
+}
+
+function getAnalysisTime(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function getAnalysisStatus(row: SharedAnalysisRow): AnalysisStatus {
+  const time = getAnalysisTime(row.updatedAt);
+  if (time == null) return "missing";
+  return Date.now() - time >= ANALYSIS_FRESH_MS ? "stale" : "recent";
+}
+
+function getAnalysisRank(row: SharedAnalysisRow) {
+  const status = getAnalysisStatus(row);
+  if (status === "recent") return 2;
+  if (status === "stale") return 1;
+  return 0;
+}
+
+function formatAnalysisDate(value: Date | string | null | undefined) {
+  const time = getAnalysisTime(value);
+  if (time == null) return "—";
+  return new Date(time).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function analyzeHref(symbol: string) {
+  return `/${symbol}?analyze=1`;
 }
 
 function SortableHeader({
@@ -76,7 +128,72 @@ function SortableHeader({
   );
 }
 
-export function SharedAnalysisTable({
+function AnalysisCell({
+  row,
+  canTriggerAnalysis,
+}: {
+  row: SharedAnalysisRow;
+  canTriggerAnalysis: boolean;
+}) {
+  const status = getAnalysisStatus(row);
+  const dateLabel = formatAnalysisDate(row.updatedAt);
+
+  if (status === "missing") {
+    return (
+      <div className="flex justify-center">
+        {canTriggerAnalysis ? (
+          <Button asChild size="icon-xs" variant="outline" className="cursor-pointer">
+            <a
+              href={analyzeHref(row.symbol)}
+              title="Start analysis"
+              aria-label={`Start analysis for ${row.symbol}`}
+            >
+              <Sparkles className="size-3.5" />
+            </a>
+          </Button>
+        ) : (
+          <Sparkles className="size-3.5 text-muted-foreground/50" aria-hidden="true" />
+        )}
+      </div>
+    );
+  }
+
+  if (status === "stale") {
+    return (
+      <div className="flex flex-col items-center gap-1 text-center">
+        <span className="text-xs text-muted-foreground tabular-nums">{dateLabel}</span>
+        {canTriggerAnalysis ? (
+          <Button asChild size="icon-xs" variant="outline" className="cursor-pointer">
+            <a
+              href={analyzeHref(row.symbol)}
+              title="Analyze again"
+              aria-label={`Analyze ${row.symbol} again`}
+            >
+              <RefreshCcw className="size-3.5" />
+            </a>
+          </Button>
+        ) : (
+          <RefreshCcw className="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1 text-center">
+      <span className="text-xs text-muted-foreground tabular-nums">{dateLabel}</span>
+      <span
+        className="inline-flex size-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+        title="Analysis is fresh"
+        aria-label="Analysis is fresh"
+      >
+        <Check className="size-3" />
+      </span>
+    </div>
+  );
+}
+
+function SharedAnalysisTable({
   rows,
   onToggleSave,
   onToggleWatch,
@@ -192,11 +309,36 @@ export function SharedAnalysisTable({
         ),
       },
       {
-        accessorKey: "signal",
-        header: ({ column }) => <SortableHeader column={column} title="Signal" align="center" />,
+        id: "updatedAt",
+        accessorFn: (row) => getAnalysisTime(row.updatedAt) ?? 0,
+        header: ({ column }) => <SortableHeader column={column} title="Analysis" align="center" />,
+        sortingFn: (a, b) => {
+          const rankDelta = getAnalysisRank(a.original) - getAnalysisRank(b.original);
+          if (rankDelta !== 0) return rankDelta;
+          return (
+            (getAnalysisTime(a.original.updatedAt) ?? 0) -
+            (getAnalysisTime(b.original.updatedAt) ?? 0)
+          );
+        },
         cell: ({ row }) => (
-          <div className="flex justify-center">
+          <AnalysisCell row={row.original} canTriggerAnalysis={hasStateControls} />
+        ),
+      },
+      {
+        id: "signal",
+        accessorFn: (row) => row.signal,
+        header: ({ column }) => <SortableHeader column={column} title="Signal" align="center" />,
+        sortingFn: (a, b) => {
+          const rankDelta = getSignalRank(a.original.signal) - getSignalRank(b.original.signal);
+          if (rankDelta !== 0) return rankDelta;
+          return compareNullableNumber(a.original.confidence, b.original.confidence);
+        },
+        cell: ({ row }) => (
+          <div className="flex flex-col items-center gap-1 text-center">
             <SignalBadge signal={row.original.signal as Signal} />
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {row.original.confidence != null ? `${row.original.confidence}%` : "—"}
+            </span>
           </div>
         ),
       },
@@ -236,29 +378,6 @@ export function SharedAnalysisTable({
             className={cn("text-center font-medium tabular-nums", changeTone(row.original.perfMtd))}
           >
             {formatPct(row.original.perfMtd)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "confidence",
-        header: ({ column }) => <SortableHeader column={column} title="Conf." align="center" />,
-        cell: ({ row }) => (
-          <div className="text-center text-muted-foreground">
-            {row.original.confidence != null ? `${row.original.confidence}%` : "—"}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "updatedAt",
-        header: ({ column }) => <SortableHeader column={column} title="Updated" align="center" />,
-        sortingFn: (a, b, id) => {
-          const av = a.getValue<Date | null>(id);
-          const bv = b.getValue<Date | null>(id);
-          return (av ? new Date(av).getTime() : 0) - (bv ? new Date(bv).getTime() : 0);
-        },
-        cell: ({ row }) => (
-          <div className="text-center text-muted-foreground">
-            {row.original.updatedAt ? new Date(row.original.updatedAt).toLocaleDateString() : "—"}
           </div>
         ),
       },
@@ -311,3 +430,5 @@ export function SharedAnalysisTable({
     </div>
   );
 }
+
+export { SharedAnalysisTable };
