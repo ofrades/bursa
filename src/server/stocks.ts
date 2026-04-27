@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, inArray, desc } from "drizzle-orm";
+import { and, eq, inArray, desc } from "drizzle-orm";
 import {
   stock,
   stockMetrics,
@@ -27,6 +27,41 @@ async function upsertStock(
     .onConflictDoNothing();
 }
 
+async function upsertUserStockState(
+  db: Awaited<ReturnType<typeof import("../lib/db").getDb>>,
+  userId: string,
+  params: {
+    symbol: string;
+    name?: string;
+    exchange?: string;
+    isSaved: boolean;
+    isWatching: boolean;
+  },
+) {
+  await upsertStock(db, params);
+
+  const existing = await db
+    .select({ id: watchlist.id })
+    .from(watchlist)
+    .where(and(eq(watchlist.userId, userId), eq(watchlist.symbol, params.symbol)))
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(watchlist)
+      .set({ isSaved: params.isSaved, isWatching: params.isWatching })
+      .where(eq(watchlist.id, existing[0].id));
+    return;
+  }
+
+  await db.insert(watchlist).values({
+    userId,
+    symbol: params.symbol,
+    isSaved: params.isSaved,
+    isWatching: params.isWatching,
+  });
+}
+
 // ─── Metrics ──────────────────────────────────────────────────────────────────
 
 export const getMultipleMetrics = createServerFn({ method: "GET" })
@@ -43,7 +78,7 @@ export const getMultipleMetrics = createServerFn({ method: "GET" })
     const existingBySymbol = new Map(existing.map((m) => [m.symbol, m]));
     const staleOrMissing = data.symbols.filter((symbol) => {
       const row = existingBySymbol.get(symbol);
-      return !row || row.perfWtd == null || row.perfMtd == null || row.perfYtd == null;
+      return !row || row.perfDay == null || row.perfWtd == null || row.perfMtd == null;
     });
     if (staleOrMissing.length) {
       await Promise.allSettled(staleOrMissing.map((s) => refreshStockMetrics(s)));
@@ -162,9 +197,9 @@ export const getRecentSharedAnalyses = createServerFn({
   return Array.from(latest.values());
 });
 
-// ─── User watchlist ───────────────────────────────────────────────────────────
+// ─── User stock states ───────────────────────────────────────────────────────
 
-export const getWatchlist = createServerFn({ method: "GET" })
+export const getTrackedStocks = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const ctx = (context ?? {}) as { session: { sub: string } | null };
@@ -172,20 +207,21 @@ export const getWatchlist = createServerFn({ method: "GET" })
     const db = await getDb();
     const { session } = ctx;
     if (!session) throw new Error("Unauthorized");
-    // Return symbol + name from stock catalog
-    const rows = await db
+
+    return db
       .select({
         symbol: watchlist.symbol,
         name: stock.name,
         exchange: stock.exchange,
+        isSaved: watchlist.isSaved,
+        isWatching: watchlist.isWatching,
       })
       .from(watchlist)
       .leftJoin(stock, eq(watchlist.symbol, stock.symbol))
       .where(eq(watchlist.userId, session.sub));
-    return rows;
   });
 
-export const addToWatchlist = createServerFn({ method: "POST" })
+export const saveStock = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .inputValidator((data: { symbol: string; name?: string; exchange?: string }) => data)
   .handler(async ({ data, context }) => {
@@ -194,15 +230,11 @@ export const addToWatchlist = createServerFn({ method: "POST" })
     const db = await getDb();
     const { session } = ctx;
     if (!session) throw new Error("Unauthorized");
-    await upsertStock(db, data);
-    await db
-      .insert(watchlist)
-      .values({ userId: session.sub, symbol: data.symbol })
-      .onConflictDoNothing();
+    await upsertUserStockState(db, session.sub, { ...data, isSaved: true, isWatching: false });
     return { ok: true };
   });
 
-export const removeFromWatchlist = createServerFn({ method: "POST" })
+export const unsaveStock = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .inputValidator((data: { symbol: string }) => data)
   .handler(async ({ data, context }) => {
@@ -211,9 +243,37 @@ export const removeFromWatchlist = createServerFn({ method: "POST" })
     const db = await getDb();
     const { session } = ctx;
     if (!session) throw new Error("Unauthorized");
-    const { and } = await import("drizzle-orm");
     await db
       .delete(watchlist)
+      .where(and(eq(watchlist.userId, session.sub), eq(watchlist.symbol, data.symbol)));
+    return { ok: true };
+  });
+
+export const watchStock = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((data: { symbol: string; name?: string; exchange?: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = (context ?? {}) as { session: { sub: string } | null };
+    const { getDb } = await import("../lib/db");
+    const db = await getDb();
+    const { session } = ctx;
+    if (!session) throw new Error("Unauthorized");
+    await upsertUserStockState(db, session.sub, { ...data, isSaved: true, isWatching: true });
+    return { ok: true };
+  });
+
+export const unwatchStock = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((data: { symbol: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = (context ?? {}) as { session: { sub: string } | null };
+    const { getDb } = await import("../lib/db");
+    const db = await getDb();
+    const { session } = ctx;
+    if (!session) throw new Error("Unauthorized");
+    await db
+      .update(watchlist)
+      .set({ isSaved: true, isWatching: false })
       .where(and(eq(watchlist.userId, session.sub), eq(watchlist.symbol, data.symbol)));
     return { ok: true };
   });

@@ -3,18 +3,16 @@ import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
-  getPaginationRowModel,
   type ColumnDef,
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Star } from "lucide-react";
+import { ArrowUpDown, Bookmark, Search as SearchIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "#/lib/utils";
 
 import { type Signal, SignalBadge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Pagination } from "./ui/pagination";
 
 export type SharedAnalysisRow = {
   symbol: string;
@@ -22,8 +20,35 @@ export type SharedAnalysisRow = {
   confidence: number | null;
   updatedAt: Date | null;
   name: string | null;
+  perfDay?: number | null;
+  perfWtd?: number | null;
+  perfMtd?: number | null;
   isSaved?: boolean;
+  isWatching?: boolean;
 };
+
+function formatPct(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return "—";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}%`;
+}
+
+function changeTone(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return "text-muted-foreground";
+  if (value > 0) return "text-emerald-600 dark:text-emerald-400";
+  if (value < 0) return "text-rose-600 dark:text-rose-400";
+  return "text-muted-foreground";
+}
+
+function getStateRank(row: SharedAnalysisRow) {
+  if (row.isWatching) return 2;
+  if (row.isSaved) return 1;
+  return 0;
+}
+
+function compareNullableNumber(a: number | null | undefined, b: number | null | undefined) {
+  return (a ?? Number.NEGATIVE_INFINITY) - (b ?? Number.NEGATIVE_INFINITY);
+}
 
 function SortableHeader({
   column,
@@ -40,7 +65,7 @@ function SortableHeader({
   return (
     <button
       className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
+        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground cursor-pointer",
         align === "center" && "mx-auto",
       )}
       onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
@@ -54,53 +79,94 @@ function SortableHeader({
 export function SharedAnalysisTable({
   rows,
   onToggleSave,
-  savingSymbol,
-  pageSize = 10,
+  onToggleWatch,
+  mutatingKey,
 }: {
   rows: SharedAnalysisRow[];
-  onToggleSave?: (symbol: string, isSaved: boolean) => void;
-  savingSymbol?: string | null;
-  pageSize?: number;
+  onToggleSave?: (row: SharedAnalysisRow) => void;
+  onToggleWatch?: (row: SharedAnalysisRow) => void;
+  mutatingKey?: string | null;
 }) {
-  const [sorting, setSorting] = React.useState<SortingState>([
-    { id: onToggleSave ? "favorite" : "updatedAt", desc: true },
-  ]);
+  const hasStateControls = !!onToggleSave || !!onToggleWatch;
+  const [sorting, setSorting] = React.useState<SortingState>(
+    hasStateControls
+      ? [
+          { id: "state", desc: true },
+          { id: "updatedAt", desc: true },
+        ]
+      : [{ id: "updatedAt", desc: true }],
+  );
 
   const columns = React.useMemo<ColumnDef<SharedAnalysisRow>[]>(
     () => [
-      ...(onToggleSave
+      ...(hasStateControls
         ? [
             {
-              id: "favorite",
+              id: "state",
               header: ({ column }: { column: any }) => (
-                <SortableHeader column={column} title="" align="center" />
+                <SortableHeader column={column} title="State" align="center" />
               ),
-              cell: ({ row }: { row: any }) => (
-                <div className="flex justify-center">
-                  <button
-                    className="cursor-pointer disabled:opacity-50"
-                    disabled={savingSymbol === row.original.symbol}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onToggleSave?.(row.original.symbol, !!row.original.isSaved);
-                    }}
-                  >
-                    <Star
-                      size={16}
+              cell: ({ row }: { row: any }) => {
+                const rowData = row.original as SharedAnalysisRow;
+                const isBusy = mutatingKey?.endsWith(`:${rowData.symbol}`) ?? false;
+
+                const isSavedOnly = !!rowData.isSaved && !rowData.isWatching;
+                const saveLabel = rowData.isWatching
+                  ? "Set to saved"
+                  : rowData.isSaved
+                    ? "Remove from saved"
+                    : "Save stock";
+
+                return (
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      title={saveLabel}
+                      aria-label={saveLabel}
                       className={cn(
-                        row.original.isSaved
-                          ? "text-amber-400"
-                          : "text-muted-foreground hover:text-foreground",
+                        "inline-flex size-8 items-center justify-center rounded-md border transition-colors disabled:opacity-50 cursor-pointer",
+                        isSavedOnly
+                          ? "border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-400"
+                          : rowData.isWatching
+                            ? "border-transparent text-amber-500/70 hover:bg-accent hover:text-amber-500"
+                            : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
                       )}
-                      fill={row.original.isSaved ? "currentColor" : "none"}
-                    />
-                  </button>
-                </div>
-              ),
-              sortingFn: (a: any, b: any) => {
-                return (b.original.isSaved ? 1 : 0) - (a.original.isSaved ? 1 : 0);
+                      disabled={isBusy}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggleSave?.(rowData);
+                      }}
+                    >
+                      <Bookmark
+                        size={15}
+                        fill={isSavedOnly ? "currentColor" : "none"}
+                        className={isSavedOnly ? "" : "opacity-80"}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      title={rowData.isWatching ? "Stop watching" : "Start watching"}
+                      aria-label={rowData.isWatching ? "Stop watching" : "Start watching"}
+                      className={cn(
+                        "inline-flex size-8 items-center justify-center rounded-md border transition-colors disabled:opacity-50 cursor-pointer",
+                        rowData.isWatching
+                          ? "border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-400"
+                          : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )}
+                      disabled={isBusy}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggleWatch?.(rowData);
+                      }}
+                    >
+                      <SearchIcon size={15} />
+                    </button>
+                  </div>
+                );
               },
+              sortingFn: (a: any, b: any) => getStateRank(a.original) - getStateRank(b.original),
             } as ColumnDef<SharedAnalysisRow>,
           ]
         : []),
@@ -135,6 +201,45 @@ export function SharedAnalysisTable({
         ),
       },
       {
+        accessorKey: "perfDay",
+        header: ({ column }) => <SortableHeader column={column} title="Day" align="center" />,
+        sortingFn: (a, b, id) =>
+          compareNullableNumber(a.getValue<number | null>(id), b.getValue<number | null>(id)),
+        cell: ({ row }) => (
+          <div
+            className={cn("text-center font-medium tabular-nums", changeTone(row.original.perfDay))}
+          >
+            {formatPct(row.original.perfDay)}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "perfWtd",
+        header: ({ column }) => <SortableHeader column={column} title="Week" align="center" />,
+        sortingFn: (a, b, id) =>
+          compareNullableNumber(a.getValue<number | null>(id), b.getValue<number | null>(id)),
+        cell: ({ row }) => (
+          <div
+            className={cn("text-center font-medium tabular-nums", changeTone(row.original.perfWtd))}
+          >
+            {formatPct(row.original.perfWtd)}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "perfMtd",
+        header: ({ column }) => <SortableHeader column={column} title="Month" align="center" />,
+        sortingFn: (a, b, id) =>
+          compareNullableNumber(a.getValue<number | null>(id), b.getValue<number | null>(id)),
+        cell: ({ row }) => (
+          <div
+            className={cn("text-center font-medium tabular-nums", changeTone(row.original.perfMtd))}
+          >
+            {formatPct(row.original.perfMtd)}
+          </div>
+        ),
+      },
+      {
         accessorKey: "confidence",
         header: ({ column }) => <SortableHeader column={column} title="Conf." align="center" />,
         cell: ({ row }) => (
@@ -158,7 +263,7 @@ export function SharedAnalysisTable({
         ),
       },
     ],
-    [],
+    [hasStateControls, mutatingKey, onToggleSave, onToggleWatch],
   );
 
   const table = useReactTable({
@@ -168,12 +273,7 @@ export function SharedAnalysisTable({
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize } },
   });
-
-  const pageCount = table.getPageCount();
-  const currentPage = table.getState().pagination.pageIndex + 1;
 
   return (
     <div className="flex flex-col">
@@ -203,17 +303,10 @@ export function SharedAnalysisTable({
           ))}
         </TableBody>
       </Table>
-      <div className="flex items-center justify-between border-t px-4 py-3">
-        <span className="text-xs text-muted-foreground">
-          {rows.length > 0
-            ? `Page ${currentPage} of ${pageCount} · ${rows.length} total`
-            : "No results"}
-        </span>
-        <Pagination
-          page={currentPage}
-          pageCount={pageCount}
-          onPageChange={(p) => table.setPageIndex(p - 1)}
-        />
+      <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+        {rows.length === 0
+          ? "No results"
+          : `${rows.length} ${rows.length === 1 ? "stock" : "stocks"}`}
       </div>
     </div>
   );

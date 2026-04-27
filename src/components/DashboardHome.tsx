@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TrendingUp, X } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import {
-  getWatchlist,
-  addToWatchlist,
-  removeFromWatchlist,
+  getTrackedStocks,
+  saveStock,
+  unsaveStock,
+  watchStock,
+  unwatchStock,
   getMultipleAnalyses,
+  getMultipleMetrics,
   getRecentSharedAnalyses,
 } from "../server/stocks";
 import { getSession } from "../server/session";
-import type { StockAnalysis } from "../lib/schema";
+import type { StockAnalysis, StockMetrics } from "../lib/schema";
 import { StockSearchBar } from "./StockSearchBar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -22,19 +25,31 @@ type SharedRow = {
   confidence: number | null;
   updatedAt: Date | null;
   name: string | null;
+  perfDay?: number | null;
+  perfWtd?: number | null;
+  perfMtd?: number | null;
 };
+
+type TrackedStock = {
+  symbol: string;
+  name: string | null;
+  exchange: string | null;
+  isSaved: boolean;
+  isWatching: boolean;
+};
+
+export type AnalysisFilter = "all" | "saved" | "watching";
 
 type Props = {
   session: { sub: string; image?: string | null } | null;
   walletBalance: number;
   isAdmin: boolean;
-  initialWatchlist: Array<{
-    symbol: string;
-    name: string | null;
-    exchange: string | null;
-  }>;
+  initialTrackedStocks: TrackedStock[];
   initialAnalyses: StockAnalysis[];
   initialShared: SharedRow[];
+  initialMetrics: StockMetrics[];
+  filter: AnalysisFilter;
+  onFilterChange: (filter: AnalysisFilter) => void;
 };
 
 function formatEuro(cents: number): string {
@@ -60,13 +75,17 @@ export function DashboardHome({
   session,
   walletBalance,
   isAdmin,
-  initialWatchlist,
+  initialTrackedStocks,
   initialAnalyses,
   initialShared,
+  initialMetrics,
+  filter,
+  onFilterChange,
 }: Props) {
-  const [watchlist, setWatchlist] = useState(initialWatchlist);
+  const [trackedStocks, setTrackedStocks] = useState(initialTrackedStocks);
   const [analyses, setAnalyses] = useState<StockAnalysis[]>(initialAnalyses);
   const [shared, setShared] = useState<SharedRow[]>(initialShared);
+  const [metrics, setMetrics] = useState<StockMetrics[]>(initialMetrics);
   const [balance, setBalance] = useState(walletBalance);
   const [showTopupToast, setShowTopupToast] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -83,16 +102,21 @@ export function DashboardHome({
   }, []);
 
   const reload = useCallback(async () => {
-    const wl = await getWatchlist();
-    const syms = wl.map((w) => w.symbol);
+    const wl = await getTrackedStocks();
+    const trackedSymbols = wl.map((w) => w.symbol);
     const [newAnalyses, newShared, freshSession] = await Promise.all([
-      getMultipleAnalyses({ data: { symbols: syms } }),
+      getMultipleAnalyses({ data: { symbols: trackedSymbols } }),
       getRecentSharedAnalyses(),
       getSession(),
     ]);
-    setWatchlist(wl);
+    const metricSymbols = Array.from(
+      new Set([...trackedSymbols, ...newShared.map((row) => row.symbol)]),
+    );
+    const newMetrics = await getMultipleMetrics({ data: { symbols: metricSymbols } });
+    setTrackedStocks(wl);
     setAnalyses(newAnalyses);
     setShared(newShared);
+    setMetrics(newMetrics);
     setBalance(freshSession?.walletBalance ?? 0);
   }, []);
 
@@ -110,23 +134,112 @@ export function DashboardHome({
     const { url } = await res.json();
     if (url) window.location.href = url;
   };
-  const handleToggleSave = async (symbol: string, isSaved: boolean) => {
-    setToggling(symbol);
+  const handleToggleSave = async (row: {
+    symbol: string;
+    isSaved?: boolean;
+    isWatching?: boolean;
+  }) => {
+    setToggling(`save:${row.symbol}`);
     try {
-      if (isSaved) {
-        await removeFromWatchlist({ data: { symbol } });
+      if (row.isWatching) {
+        await unwatchStock({ data: { symbol: row.symbol } });
+      } else if (row.isSaved) {
+        await unsaveStock({ data: { symbol: row.symbol } });
       } else {
         const name =
-          watchlist.find((w) => w.symbol === symbol)?.name ??
-          shared.find((s) => s.symbol === symbol)?.name ??
+          trackedStocks.find((w) => w.symbol === row.symbol)?.name ??
+          shared.find((s) => s.symbol === row.symbol)?.name ??
           undefined;
-        await addToWatchlist({ data: { symbol, name } });
+        const exchange = trackedStocks.find((w) => w.symbol === row.symbol)?.exchange ?? undefined;
+        await saveStock({ data: { symbol: row.symbol, name, exchange } });
       }
       await reload();
     } finally {
       setToggling(null);
     }
   };
+
+  const handleToggleWatch = async (row: {
+    symbol: string;
+    isSaved?: boolean;
+    isWatching?: boolean;
+  }) => {
+    setToggling(`watch:${row.symbol}`);
+    try {
+      if (row.isWatching) {
+        await unwatchStock({ data: { symbol: row.symbol } });
+      } else {
+        const name =
+          trackedStocks.find((w) => w.symbol === row.symbol)?.name ??
+          shared.find((s) => s.symbol === row.symbol)?.name ??
+          undefined;
+        const exchange = trackedStocks.find((w) => w.symbol === row.symbol)?.exchange ?? undefined;
+        await watchStock({ data: { symbol: row.symbol, name, exchange } });
+      }
+      await reload();
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const rows = useMemo(() => {
+    const trackedBySymbol = new Map(trackedStocks.map((item) => [item.symbol, item]));
+    const analysisBySymbol = new Map(analyses.map((item) => [item.symbol, item]));
+    const metricsBySymbol = new Map(metrics.map((item) => [item.symbol, item]));
+    const map = new Map<string, SharedRow & { isSaved: boolean; isWatching: boolean }>();
+
+    for (const w of trackedStocks) {
+      const a = analysisBySymbol.get(w.symbol);
+      const metric = metricsBySymbol.get(w.symbol);
+      map.set(w.symbol, {
+        symbol: w.symbol,
+        name: w.name ?? null,
+        signal: a?.signal ?? "HOLD",
+        confidence: a?.confidence ?? null,
+        updatedAt: a?.updatedAt ?? null,
+        perfDay: metric?.perfDay ?? null,
+        perfWtd: metric?.perfWtd ?? null,
+        perfMtd: metric?.perfMtd ?? null,
+        isSaved: w.isSaved,
+        isWatching: w.isWatching,
+      });
+    }
+
+    for (const s of shared) {
+      if (map.has(s.symbol)) continue;
+      const metric = metricsBySymbol.get(s.symbol);
+      map.set(s.symbol, {
+        ...s,
+        name: trackedBySymbol.get(s.symbol)?.name ?? s.name,
+        perfDay: metric?.perfDay ?? s.perfDay ?? null,
+        perfWtd: metric?.perfWtd ?? s.perfWtd ?? null,
+        perfMtd: metric?.perfMtd ?? s.perfMtd ?? null,
+        isSaved: false,
+        isWatching: false,
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [trackedStocks, analyses, metrics, shared]);
+
+  const counts = useMemo(
+    () => ({
+      all: rows.length,
+      watching: rows.filter((row) => row.isWatching).length,
+      saved: rows.filter((row) => row.isSaved).length,
+    }),
+    [rows],
+  );
+
+  const filteredRows = useMemo(() => {
+    if (filter === "watching") return rows.filter((row) => row.isWatching);
+    if (filter === "saved") return rows.filter((row) => row.isSaved);
+    return rows;
+  }, [filter, rows]);
 
   return (
     <div className="min-h-screen">
@@ -222,7 +335,7 @@ export function DashboardHome({
 
       <main className="max-w-5xl mx-auto w-full px-6 py-6">
         <div style={{ marginBottom: 24 }}>
-          <StockSearchBar onAdded={reload} watchlistSymbols={watchlist.map((w) => w.symbol)} />
+          <StockSearchBar onChanged={reload} trackedStocks={trackedStocks} />
         </div>
 
         <section>
@@ -248,48 +361,67 @@ export function DashboardHome({
               >
                 Stocks
               </div>
-              <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
-                Watchlist & community
-              </h2>
+              <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Your stocks</h2>
               <p style={{ color: "var(--fg-muted)", fontSize: 14 }}>
-                Star a stock to save it to your watchlist. Click a row to see the full breakdown.
+                Save stocks to store them here, then promote the important ones to watching.
               </p>
+            </div>
+            <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-1">
+              {(
+                [
+                  ["watching", "Watching"],
+                  ["saved", "Saved"],
+                  ["all", "All"],
+                ] as const
+              ).map(([value, label]) => {
+                const active = filter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onFilterChange(value)}
+                    className={[
+                      "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer",
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    <span>{label}</span>
+                    <span className="text-xs text-muted-foreground">{counts[value]}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <Card className="overflow-hidden p-0">
-            {(() => {
-              const map = new Map<string, SharedRow & { isSaved: boolean }>();
-              for (const w of watchlist) {
-                const a = analyses.find((x) => x.symbol === w.symbol);
-                map.set(w.symbol, {
-                  symbol: w.symbol,
-                  name: w.name ?? null,
-                  signal: a?.signal ?? "HOLD",
-                  confidence: a?.confidence ?? null,
-                  updatedAt: a?.updatedAt ?? null,
-                  isSaved: true,
-                });
-              }
-              for (const s of shared) {
-                if (map.has(s.symbol)) continue;
-                map.set(s.symbol, { ...s, isSaved: false });
-              }
-              const rows = Array.from(map.values());
-              return rows.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground">
-                  <TrendingUp className="size-8 text-muted-foreground/40" />
-                  <p className="font-medium">No stocks yet</p>
-                  <p className="text-sm">Search above to add or discover stocks.</p>
-                </div>
-              ) : (
-                <SharedAnalysisTable
-                  rows={rows}
-                  onToggleSave={handleToggleSave}
-                  savingSymbol={toggling}
-                />
-              );
-            })()}
+            {filteredRows.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground">
+                <TrendingUp className="size-8 text-muted-foreground/40" />
+                <p className="font-medium">
+                  {filter === "watching"
+                    ? "No watched stocks yet"
+                    : filter === "saved"
+                      ? "No saved stocks yet"
+                      : "No stocks yet"}
+                </p>
+                <p className="text-sm">
+                  {filter === "watching"
+                    ? "Use the magnifier to promote saved stocks into your active watch list."
+                    : filter === "saved"
+                      ? "Search above to save stocks. Watched stocks will appear here too."
+                      : "Search above to save new stocks or promote them to watching."}
+                </p>
+              </div>
+            ) : (
+              <SharedAnalysisTable
+                rows={filteredRows}
+                onToggleSave={handleToggleSave}
+                onToggleWatch={handleToggleWatch}
+                mutatingKey={toggling}
+              />
+            )}
           </Card>
         </section>
       </main>

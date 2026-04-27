@@ -32,6 +32,7 @@ function runMigrations(sqlite: any) {
   addCol("daily_signal", "cycle", "text");
 
   // stock_metrics — oscillators, volume, 52w position, extended fundamentals
+  addCol("stock_metrics", "perf_day", "real");
   addCol("stock_metrics", "sma200", "real");
   addCol("stock_metrics", "rsi14", "real");
   addCol("stock_metrics", "macd_line", "real");
@@ -70,6 +71,10 @@ function runMigrations(sqlite: any) {
 
   // wallet migration — additive
   addCol("user", "wallet_balance", "integer NOT NULL DEFAULT 0");
+
+  // watchlist -> saved/watching tiers
+  addCol("watchlist", "is_saved", "integer NOT NULL DEFAULT 1");
+  addCol("watchlist", "is_watching", "integer NOT NULL DEFAULT 1");
 
   // usage_log — per-analysis cost tracking
   sqlite.exec(`

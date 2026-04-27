@@ -1,29 +1,56 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { TrendingUp, Search } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
-import { getRecentSharedAnalyses, getWatchlist, getMultipleAnalyses } from "../server/stocks";
-import { DashboardHome } from "../components/DashboardHome";
+import {
+  getRecentSharedAnalyses,
+  getTrackedStocks,
+  getMultipleAnalyses,
+  getMultipleMetrics,
+} from "../server/stocks";
+import { DashboardHome, type AnalysisFilter } from "../components/DashboardHome";
+import type { StockMetrics } from "../lib/schema";
 import { SharedAnalysisTable } from "../components/SharedAnalysisTable";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 
+const FILTER_VALUES = new Set<AnalysisFilter>(["all", "saved", "watching"]);
+
+function uniqueSymbols(symbols: string[]) {
+  return Array.from(new Set(symbols));
+}
+
 export const Route = createFileRoute("/")({
+  validateSearch: (search): { filter?: AnalysisFilter } => ({
+    filter:
+      typeof search.filter === "string" && FILTER_VALUES.has(search.filter as AnalysisFilter)
+        ? (search.filter as AnalysisFilter)
+        : undefined,
+  }),
   loader: async ({ context }) => {
     const analyses = await getRecentSharedAnalyses();
+    const analysisSymbols = analyses.map((row) => row.symbol);
 
     if (!context.session) {
-      return { mode: "landing" as const, analyses };
+      const metrics = await getMultipleMetrics({
+        data: { symbols: uniqueSymbols(analysisSymbols) },
+      });
+      return { mode: "landing" as const, analyses, metrics };
     }
 
-    const watchlist = await getWatchlist();
-    const symbols = watchlist.map((w) => w.symbol);
-    const myAnalyses = await getMultipleAnalyses({ data: { symbols } });
+    const trackedStocks = await getTrackedStocks();
+    const trackedSymbols = trackedStocks.map((w) => w.symbol);
+    const myAnalyses = await getMultipleAnalyses({ data: { symbols: trackedSymbols } });
+    const metrics = await getMultipleMetrics({
+      data: { symbols: uniqueSymbols([...trackedSymbols, ...analysisSymbols]) },
+    });
 
     return {
       mode: "dashboard" as const,
       analyses,
-      watchlist,
+      trackedStocks,
       myAnalyses,
+      metrics,
     };
   },
   component: HomePage,
@@ -41,7 +68,17 @@ function WeekLabel() {
 
 function HomePage() {
   const data = Route.useLoaderData() as any;
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const { session, walletBalance, isAdmin } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (data.mode !== "dashboard" || search.filter) return;
+    navigate({
+      search: (prev) => ({ ...prev, filter: "watching" }),
+      replace: true,
+    });
+  }, [data.mode, navigate, search.filter]);
 
   if (data.mode === "dashboard") {
     return (
@@ -49,14 +86,30 @@ function HomePage() {
         session={session}
         walletBalance={walletBalance}
         isAdmin={isAdmin}
-        initialWatchlist={data.watchlist}
+        initialTrackedStocks={data.trackedStocks}
         initialAnalyses={data.myAnalyses}
         initialShared={data.analyses}
+        initialMetrics={data.metrics}
+        filter={search.filter ?? "watching"}
+        onFilterChange={(filter) =>
+          navigate({
+            search: (prev) => ({ ...prev, filter }),
+            replace: true,
+          })
+        }
       />
     );
   }
 
-  const analyses = data.analyses;
+  const metricsBySymbol = new Map<string, StockMetrics>(
+    data.metrics.map((metric: StockMetrics) => [metric.symbol, metric]),
+  );
+  const analyses = data.analyses.map((row: any) => ({
+    ...row,
+    perfDay: metricsBySymbol.get(row.symbol)?.perfDay ?? null,
+    perfWtd: metricsBySymbol.get(row.symbol)?.perfWtd ?? null,
+    perfMtd: metricsBySymbol.get(row.symbol)?.perfMtd ?? null,
+  }));
 
   return (
     <div style={{ minHeight: "100vh" }}>
@@ -88,7 +141,7 @@ function HomePage() {
           className="flex items-center gap-2.5 w-full h-9 px-3 rounded-md border border-border bg-muted text-muted-foreground text-sm hover:border-foreground/30 transition-colors no-underline"
         >
           <Search size={14} className="shrink-0" />
-          <span>Search stocks — sign in to save your watchlist</span>
+          <span>Search stocks — sign in to save and watch stocks</span>
         </a>
 
         {/* Shared analysis table — the actual product */}

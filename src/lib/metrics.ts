@@ -6,6 +6,7 @@
 
 export type SimpleManMetrics = {
   // Performance
+  perfDay: number | null;
   perfWtd: number | null;
   perfLastWeek: number | null;
   perfMtd: number | null;
@@ -156,6 +157,7 @@ export async function computeMetrics(symbol: string): Promise<SimpleManMetrics> 
   ]);
 
   const currentPrice: number = quote?.regularMarketPrice ?? null;
+  const previousClose: number | null = quote?.regularMarketPreviousClose ?? null;
   const marketCap: number | null = quote?.marketCap ?? null;
 
   // Sort ascending, require both close AND high/low
@@ -204,6 +206,7 @@ export async function computeMetrics(symbol: string): Promise<SimpleManMetrics> 
   const priceLastYearStart = priceAt(sortedSimple, lastYearStart);
   const priceLastYearEnd = priceAt(sortedSimple, lastYearEnd);
 
+  const perfDay = pct(previousClose, currentPrice);
   const perfWtd = pct(priceMonday, currentPrice);
   const perfLastWeek = pct(priceLastMonday, priceLastFriday);
   const perfMtd = pct(priceMonthStart, currentPrice);
@@ -217,7 +220,7 @@ export async function computeMetrics(symbol: string): Promise<SimpleManMetrics> 
   const sma200 = sma(closes, 200);
 
   // ── Momentum signal ──────────────────────────────────────────────────────────
-  const scores = [perfWtd, perfMtd, perfYtd].filter((v): v is number => v != null);
+  const scores = [perfDay, perfWtd, perfMtd].filter((v): v is number => v != null);
   const positiveCount = scores.filter((v) => v > 0).length;
   const momentumSignal: "up" | "mixed" | "down" =
     positiveCount >= 2 ? "up" : positiveCount === 0 ? "down" : "mixed";
@@ -258,6 +261,7 @@ export async function computeMetrics(symbol: string): Promise<SimpleManMetrics> 
   const nextEarningsDate = earningsRaw ? new Date(earningsRaw).toISOString().slice(0, 10) : null;
 
   return {
+    perfDay,
     perfWtd,
     perfLastWeek,
     perfMtd,

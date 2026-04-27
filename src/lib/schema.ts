@@ -51,6 +51,7 @@ export const stockMetrics = sqliteTable("stock_metrics", {
     .primaryKey()
     .references(() => stock.symbol, { onDelete: "cascade" }),
   // Performance %
+  perfDay: real("perf_day"), // day-over-day vs previous close
   perfWtd: real("perf_wtd"), // week-to-date (Mon → now)
   perfLastWeek: real("perf_last_week"), // last full Mon–Fri week
   perfMtd: real("perf_mtd"), // month-to-date
@@ -188,7 +189,7 @@ export const supervisorAlert = sqliteTable(
   ],
 );
 
-// ─── User watchlist ───────────────────────────────────────────────────────────
+// ─── User stock state ─────────────────────────────────────────────────────────
 
 export const watchlist = sqliteTable(
   "watchlist",
@@ -202,6 +203,8 @@ export const watchlist = sqliteTable(
     symbol: text("symbol")
       .notNull()
       .references(() => stock.symbol, { onDelete: "cascade" }),
+    isSaved: integer("is_saved", { mode: "boolean" }).notNull().default(true),
+    isWatching: integer("is_watching", { mode: "boolean" }).notNull().default(false),
     addedAt: integer("added_at", { mode: "timestamp" }).notNull().$defaultFn(now),
   },
   (t) => [unique("uq_watchlist_user_symbol").on(t.userId, t.symbol)],
