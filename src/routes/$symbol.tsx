@@ -24,7 +24,7 @@ import {
   getLongTermRecommendation,
   getWeeklyRecommendationDisplay,
 } from "../lib/recommendation-labels";
-import { parseStockThesis } from "../lib/stock-thesis";
+import { buildStockThesis, parseStockThesis } from "../lib/stock-thesis";
 
 export const Route = createFileRoute("/$symbol")({
   validateSearch: (search): { analyze?: boolean } => ({
@@ -159,12 +159,42 @@ function StockPage() {
   const bearishFactors = recommendation?.keyBearishFactors ?? [];
   const alerts = data.supervisorAlerts ?? [];
   const hasExtreme = alerts.some((a) => a.severity === "EXTREME");
-  const simpleAnalysisSpec = data.simpleAnalysis
-    ? buildSimpleAnalysisSpec(data.simpleAnalysis)
+  const simpleAnalysisEvidence = data.simpleAnalysis;
+  const simpleAnalysisSpec = simpleAnalysisEvidence
+    ? buildSimpleAnalysisSpec(simpleAnalysisEvidence)
     : null;
   const persistedThesis = parseStockThesis(latestAnalysis?.thesisJson ?? null);
   const persistedMacroThesis = parseMacroThesis(latestAnalysis?.macroThesisJson ?? null);
-  const longTermRecommendation = getLongTermRecommendation(persistedThesis, persistedMacroThesis);
+  const derivedThesis =
+    !persistedThesis &&
+    simpleAnalysisEvidence &&
+    latestAnalysis &&
+    (latestAnalysis.signal === "BUY" || latestAnalysis.signal === "SELL")
+      ? buildStockThesis(
+          {
+            signal: latestAnalysis.signal,
+            cycle: latestAnalysis.cycle ?? null,
+            cycleTimeframe:
+              (latestAnalysis.cycleTimeframe as "SHORT" | "MEDIUM" | "LONG" | null) ?? null,
+            confidence: latestAnalysis.confidence ?? null,
+            riskLevel:
+              (recommendation?.riskLevel as "LOW" | "MEDIUM" | "HIGH" | undefined) ?? undefined,
+            weeklyTrend:
+              (recommendation?.weeklyTrend as "uptrend" | "downtrend" | "sideways" | undefined) ??
+              undefined,
+            pullbackTo21EMA: recommendation?.pullbackTo21EMA,
+            consolidationBreakout21EMA: recommendation?.consolidationBreakout21EMA,
+            weeklyOutlook: recommendation?.weeklyOutlook,
+            reasoning: recommendation?.reasoning,
+            keyBullishFactors: recommendation?.keyBullishFactors,
+            keyBearishFactors: recommendation?.keyBearishFactors,
+          },
+          simpleAnalysisEvidence,
+          { hasExtremeRisk: hasExtreme, macroThesis: persistedMacroThesis },
+        )
+      : null;
+  const effectiveThesis = persistedThesis ?? derivedThesis;
+  const longTermRecommendation = getLongTermRecommendation(effectiveThesis, persistedMacroThesis);
   const macroThesisSpec = persistedMacroThesis ? buildMacroThesisSpec(persistedMacroThesis) : null;
 
   return (
@@ -270,7 +300,7 @@ function StockPage() {
 
         {/* Streaming analysis or saved analysis */}
         {streamState.isLoading || streamState.isComplete || streamState.text ? (
-          <StreamingAnalysis state={streamState} />
+          <StreamingAnalysis state={streamState} simpleAnalysis={simpleAnalysisEvidence} />
         ) : data.isAnalyzing ? (
           <Card>
             <CardContent className="flex items-center gap-3 pt-5">
@@ -290,7 +320,7 @@ function StockPage() {
 
             {simpleAnalysisSpec && <JsonSpecRenderer spec={simpleAnalysisSpec} />}
 
-            {persistedThesis && <StockThesisCard thesis={persistedThesis} />}
+            {effectiveThesis && <StockThesisCard thesis={effectiveThesis} />}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <Card>

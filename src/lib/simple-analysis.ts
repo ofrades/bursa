@@ -87,6 +87,16 @@ export type SimpleAnalysisEvidence = {
   takeaways: string[];
 };
 
+export function parseSimpleAnalysisEvidence(value: unknown): SimpleAnalysisEvidence | null {
+  if (!value || typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value) as SimpleAnalysisEvidence;
+    return parsed && typeof parsed === "object" && typeof parsed.title === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export type SimpleAnalysisInputs = {
   symbol: string;
   salesHistory: HistoryPoint[];

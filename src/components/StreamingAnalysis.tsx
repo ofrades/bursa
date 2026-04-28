@@ -4,8 +4,11 @@ import { parseSections } from "../lib/stream-parsing";
 import type { StreamingState } from "../hooks/useStreamingAnalysis";
 import { Badge, SignalBadge } from "./ui/badge";
 import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
+import { buildSimpleAnalysisSpec } from "../lib/simple-analysis-spec";
 import { getWeeklyRecommendationDisplay } from "../lib/recommendation-labels";
-import type { MacroThesis } from "../lib/simple-analysis";
+import type { MacroThesis, SimpleAnalysisEvidence } from "../lib/simple-analysis";
+import { buildStockThesis } from "../lib/stock-thesis";
+import { StockThesisCard } from "./StockThesisCard";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
@@ -111,10 +114,12 @@ function severityClasses(severity: string | undefined) {
 
 export function StreamingAnalysis({
   state,
+  simpleAnalysis = null,
   saveState = "idle",
   saveError = null,
 }: {
   state: StreamingState;
+  simpleAnalysis?: SimpleAnalysisEvidence | null;
   saveState?: "idle" | "saving" | "error";
   saveError?: string | null;
 }) {
@@ -146,6 +151,47 @@ export function StreamingAnalysis({
       return null;
     }
   }, [hasOpportunity, opportunity]);
+
+  const simpleAnalysisSpec = useMemo(() => {
+    if (!simpleAnalysis) return null;
+    try {
+      return buildSimpleAnalysisSpec(simpleAnalysis);
+    } catch {
+      return null;
+    }
+  }, [simpleAnalysis]);
+
+  const stockThesis = useMemo(() => {
+    if (!hasSignal || !simpleAnalysis) return null;
+    try {
+      return buildStockThesis(
+        {
+          signal: String(signal?.signal) as "BUY" | "SELL",
+          cycle: (signal?.cycle as string | null | undefined) ?? null,
+          cycleTimeframe:
+            (signal?.cycleTimeframe as "SHORT" | "MEDIUM" | "LONG" | null | undefined) ?? null,
+          confidence: (signal?.confidence as number | null | undefined) ?? null,
+          riskLevel: (signal?.riskLevel as "LOW" | "MEDIUM" | "HIGH" | undefined) ?? undefined,
+          weeklyTrend:
+            (signal?.weeklyTrend as "uptrend" | "downtrend" | "sideways" | undefined) ?? undefined,
+          pullbackTo21EMA: (signal?.pullbackTo21EMA as boolean | undefined) ?? undefined,
+          consolidationBreakout21EMA:
+            (signal?.consolidationBreakout21EMA as boolean | undefined) ?? undefined,
+          weeklyOutlook: (signal?.weeklyOutlook as string | undefined) ?? undefined,
+          reasoning: (signal?.reasoning as string | undefined) ?? undefined,
+          keyBullishFactors: (signal?.keyBullishFactors as string[] | undefined) ?? undefined,
+          keyBearishFactors: (signal?.keyBearishFactors as string[] | undefined) ?? undefined,
+        },
+        simpleAnalysis,
+        {
+          hasExtremeRisk: [taleb, buffett].some((review) => review?.severity === "EXTREME"),
+          macroThesis: (opportunity as MacroThesis | null | undefined) ?? null,
+        },
+      );
+    } catch {
+      return null;
+    }
+  }, [buffett, hasSignal, opportunity, signal, simpleAnalysis, taleb]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -189,6 +235,10 @@ export function StreamingAnalysis({
 
       {/* ─── CORNERSTONE: Macro Thesis ─── */}
       {macroThesisSpec && <JsonSpecRenderer spec={macroThesisSpec} />}
+
+      {simpleAnalysisSpec && <JsonSpecRenderer spec={simpleAnalysisSpec} />}
+
+      {stockThesis && <StockThesisCard thesis={stockThesis} />}
 
       {/* ─── SIGNAL — flows from thesis ─── */}
       {hasSignal && (

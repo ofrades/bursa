@@ -38,6 +38,7 @@ function runMigrations(sqlite: any) {
   addCol("stock_analysis", "cycle", "text");
   addCol("stock_analysis", "cycle_timeframe", "text");
   addCol("stock_analysis", "cycle_strength", "real");
+  addCol("stock_analysis", "simple_analysis_json", "text");
   addCol("stock_analysis", "thesis_json", "text");
   addCol("stock_analysis", "thesis_version", "text");
   addCol("stock_analysis", "macro_thesis_json", "text");
@@ -69,6 +70,7 @@ function runMigrations(sqlite: any) {
             cycle_strength real,
             confidence real,
             reasoning text,
+            simple_analysis_json text,
             thesis_json text,
             thesis_version text,
             macro_thesis_json text,
@@ -91,6 +93,7 @@ function runMigrations(sqlite: any) {
             cycle_strength,
             confidence,
             reasoning,
+            simple_analysis_json,
             thesis_json,
             thesis_version,
             macro_thesis_json,
@@ -109,6 +112,7 @@ function runMigrations(sqlite: any) {
             cycle_strength,
             confidence,
             reasoning,
+            simple_analysis_json,
             thesis_json,
             thesis_version,
             macro_thesis_json,

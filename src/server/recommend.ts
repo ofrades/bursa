@@ -915,6 +915,7 @@ async function buildPersistedThesisJson(
   );
 
   return {
+    simpleAnalysisJson: simpleAnalysis ? JSON.stringify(simpleAnalysis) : null,
     thesisJson: thesis ? JSON.stringify(thesis) : null,
     thesisVersion: thesis?.version ?? STOCK_THESIS_VERSION,
   };
@@ -957,7 +958,7 @@ export async function saveAnalysisFromStreamedText({
     memoryUpdate,
   } = parsed;
 
-  const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
+  const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
     symbol,
     parsedSignal,
     stockData,
@@ -980,6 +981,7 @@ export async function saveAnalysisFromStreamedText({
     cycleStrength: parsedSignal.cycleStrength ?? null,
     confidence: parsedSignal.confidence,
     reasoning: JSON.stringify(parsedSignal),
+    simpleAnalysisJson,
     thesisJson,
     thesisVersion,
     macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
@@ -1061,7 +1063,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       opportunityJson,
       memoryUpdate,
     } = parsed;
-    const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
+    const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
       data.symbol,
       parsedSignal,
       stockData,
@@ -1086,6 +1088,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       cycleStrength: parsedSignal.cycleStrength ?? null,
       confidence: parsedSignal.confidence,
       reasoning: JSON.stringify(parsedSignal),
+      simpleAnalysisJson,
       thesisJson,
       thesisVersion,
       macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
@@ -1190,7 +1193,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       memoryUpdate,
     } = parsed;
     const changed = parsedSignal.signal !== analysis.signal;
-    const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
+    const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
       data.symbol,
       parsedSignal,
       stockData,
@@ -1215,6 +1218,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       cycleStrength: parsedSignal.cycleStrength ?? null,
       confidence: parsedSignal.confidence,
       reasoning: JSON.stringify(parsedSignal),
+      simpleAnalysisJson,
       thesisJson,
       thesisVersion,
       macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,

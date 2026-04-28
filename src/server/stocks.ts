@@ -269,7 +269,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
     const db = await getDb();
     const symbol = data.symbol.toUpperCase();
 
-    const [stockRow, analysisRows, simpleAnalysis, marketContext] = await Promise.all([
+    const [stockRow, analysisRows, marketContext] = await Promise.all([
       db.select().from(stock).where(eq(stock.symbol, symbol)),
       db
         .select()
@@ -277,13 +277,16 @@ export const getStockPageData = createServerFn({ method: "GET" })
         .where(eq(stockAnalysis.symbol, symbol))
         .orderBy(desc(stockAnalysis.updatedAt), desc(stockAnalysis.createdAt))
         .limit(6),
-      getSimpleAnalysisForSymbol(symbol).catch(() => null),
       import("./recommend")
         .then(({ gatherStockData }) => gatherStockData(symbol))
         .catch(() => null),
     ]);
 
     const latestAnalysis = analysisRows[0] ?? null;
+    const { parseSimpleAnalysisEvidence } = await import("../lib/simple-analysis");
+    const simpleAnalysis =
+      parseSimpleAnalysisEvidence(latestAnalysis?.simpleAnalysisJson ?? null) ??
+      (await getSimpleAnalysisForSymbol(symbol).catch(() => null));
     const dailySignalsForLatest = latestAnalysis
       ? await db
           .select()

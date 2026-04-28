@@ -391,7 +391,6 @@ export function DashboardHome({
                     query={searchQuery}
                     onQueryChange={setSearchQuery}
                     onChanged={reload}
-                    trackedStocks={trackedStocks}
                     existingSymbols={rows.map((row) => row.symbol)}
                     maxWidth="100%"
                   />

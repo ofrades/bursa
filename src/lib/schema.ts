@@ -119,6 +119,7 @@ export const stockAnalysis = sqliteTable(
     cycleStrength: real("cycle_strength"), // 0–100 conviction in cycle phase
     confidence: real("confidence"),
     reasoning: text("reasoning"), // full JSON from AI
+    simpleAnalysisJson: text("simple_analysis_json"), // persisted generative evidence snapshot
     thesisJson: text("thesis_json"), // persisted derived thesis snapshot
     thesisVersion: text("thesis_version"),
     macroThesisJson: text("macro_thesis_json"), // persisted macro opportunity thesis
