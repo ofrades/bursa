@@ -167,6 +167,57 @@ export function StreamingAnalysis({
     }
   }, [hasSignal, opportunity, signal, simpleAnalysis]);
 
+  const liveTranscriptCard = showLiveTranscript ? (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardDescription className="text-xs uppercase tracking-wider mb-1">
+              Live transcript
+            </CardDescription>
+            <CardTitle className="text-base">Streaming model output</CardTitle>
+          </div>
+          <Badge variant="outline" className="font-mono text-[11px]">
+            {state.isLoading ? "streaming" : "final"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {streamSections.map((section, index) => {
+          const isActive = state.isLoading && index === streamSections.length - 1;
+          const content = formatStreamSectionBody(section.body);
+
+          return (
+            <div key={section.key} className="rounded-xl border bg-muted/25 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wider ${section.tone}`}
+                  >
+                    {section.label}
+                  </span>
+                  {isActive && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+                </div>
+                <span className="text-[10px] font-mono text-muted-foreground">
+                  {section.body.trim() ? `${section.body.trim().length} chars` : "pending"}
+                </span>
+              </div>
+              <div className="px-3 py-3">
+                {content ? (
+                  <pre className="text-[11px] leading-5 text-foreground/85 whitespace-pre-wrap break-words font-mono selection:bg-primary/15">
+                    {content}
+                  </pre>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Waiting for content…</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  ) : null;
+
   return (
     <div className="flex flex-col gap-4">
       {/* Loading indicator */}
@@ -178,6 +229,8 @@ export function StreamingAnalysis({
           </CardContent>
         </Card>
       )}
+
+      {liveTranscriptCard}
 
       {/* Error */}
       {state.error && (
@@ -323,61 +376,6 @@ export function StreamingAnalysis({
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {/* Keep the raw transcript visible while streaming so users can see progress
-          even after partial JSON becomes parseable enough for structured cards. */}
-      {showLiveTranscript && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <CardDescription className="text-xs uppercase tracking-wider mb-1">
-                  Live transcript
-                </CardDescription>
-                <CardTitle className="text-base">Streaming model output</CardTitle>
-              </div>
-              <Badge variant="outline" className="font-mono text-[11px]">
-                {state.isLoading ? "streaming" : "final"}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {streamSections.map((section, index) => {
-              const isActive = state.isLoading && index === streamSections.length - 1;
-              const content = formatStreamSectionBody(section.body);
-
-              return (
-                <div key={section.key} className="rounded-xl border bg-muted/25 overflow-hidden">
-                  <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider ${section.tone}`}
-                      >
-                        {section.label}
-                      </span>
-                      {isActive && (
-                        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                      )}
-                    </div>
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      {section.body.trim() ? `${section.body.trim().length} chars` : "pending"}
-                    </span>
-                  </div>
-                  <div className="px-3 py-3">
-                    {content ? (
-                      <pre className="text-[11px] leading-5 text-foreground/85 whitespace-pre-wrap break-words font-mono selection:bg-primary/15">
-                        {content}
-                      </pre>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic">Waiting for content…</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
       )}
 
       {/* Auto-save status */}
