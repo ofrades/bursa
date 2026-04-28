@@ -52,6 +52,5 @@ env:
     - OPENROUTER_API_KEY
     - STRIPE_SECRET_KEY
     - STRIPE_WEBHOOK_SECRET
-    - STRIPE_PRICE_CREDITS_10
 # Route bursa.mohshoo.com to http://127.0.0.1:80 on the VPS.
 # kamal-proxy is published on host port 80.
