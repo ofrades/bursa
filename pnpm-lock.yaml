@@ -99,8 +99,8 @@ importers:
         specifier: ^4.3.0
         version: 4.3.0(@types/node@22.19.17)(typescript@5.9.3)
       stripe:
-        specifier: ^22.0.2
-        version: 22.0.2(@types/node@22.19.17)
+        specifier: 22.2.0-beta.2
+        version: 22.2.0-beta.2(@types/node@22.19.17)
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
@@ -4575,8 +4575,8 @@ packages:
     resolution: {integrity: sha512-k55yxKHwaXnpYGsOzg4Vl8+tDrWylxDEpknGjhTiZB8dFRU5rTo9CAzeycivxV3s+zlTKwrs6WxMxR95n26kwg==}
     engines: {node: '>=0.10.0'}
 
-  stripe@22.0.2:
-    resolution: {integrity: sha512-2/BLrQ3oB1zlNfeL/LfHFjTGx6EQn0j+ztrrTJHuDjV5VVIpk92oSDaxyKLUr3pG3dnee2LZqhFUv2Bf0G1/3g==}
+  stripe@22.2.0-beta.2:
+    resolution: {integrity: sha512-oLNquw/nS4hk4U9pWZtmRZuxd4EDKxr0FNYpdtQXF5cTY8O4RGZGyflxdM/SQElzOc80nccZoVJbEcUWqkh3SA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': '>=18'
@@ -9399,7 +9399,7 @@ snapshots:
     dependencies:
       escape-string-regexp: 1.0.5
 
-  stripe@22.0.2(@types/node@22.19.17):
+  stripe@22.2.0-beta.2(@types/node@22.19.17):
     optionalDependencies:
       '@types/node': 22.19.17
 

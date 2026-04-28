@@ -32,6 +32,8 @@ proxy:
   host: bursa.mohshoo.com
   app_port: 3000
   response_timeout: 300 # Allow long OpenRouter streams over the VPS kamal-proxy.
+  buffering:
+    responses: false # Required for SSE streaming — buffer_responses breaks text/event-stream
   healthcheck:
     path: /api/health
 
@@ -43,8 +45,6 @@ env:
     DB_PATH: /app/data/stocktrack.sqlite
     AI_TIMEOUT_MS: 300000
     BILLING_MARKUP_MULTIPLIER: 1.8
-    BILLING_MIN_CENTS: 2
-    BILLING_USD_TO_EUR: 0.92
   secret:
     - AUTH_SECRET
     - GOOGLE_CLIENT_ID

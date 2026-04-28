@@ -17,7 +17,7 @@ export const Route = createFileRoute("/api/billing/webhook")({
         }
 
         const { default: Stripe } = await import("stripe");
-        const stripe = new Stripe(stripeSecret, { apiVersion: "2026-03-25.dahlia" });
+        const stripe = new Stripe(stripeSecret, { apiVersion: "2026-04-22.preview" });
 
         const payload = await request.text();
         const sig = request.headers.get("stripe-signature");

@@ -28,7 +28,7 @@ export const Route = createFileRoute("/api/billing/portal")({
         }
 
         const { default: Stripe } = await import("stripe");
-        const stripe = new Stripe(stripeSecret, { apiVersion: "2026-03-25.dahlia" });
+        const stripe = new Stripe(stripeSecret, { apiVersion: "2026-04-22.preview" });
 
         const url = new URL(request.url);
         const origin = process.env.BETTER_AUTH_URL ?? `${url.protocol}//${url.host}`;

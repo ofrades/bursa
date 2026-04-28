@@ -255,6 +255,10 @@ export async function getSimpleAnalysisForSymbol(symbol: string) {
     ),
     peRatio: asNumber((quote as any)?.trailingPE),
     forwardPE: asNumber((quote as any)?.forwardPE),
+    ebitda: asNumber(financialData?.ebitda),
+    operatingCashflow: asNumber(financialData?.operatingCashflow),
+    currentRatio: asNumber(financialData?.currentRatio),
+    quickRatio: asNumber(financialData?.quickRatio),
   });
 }
 

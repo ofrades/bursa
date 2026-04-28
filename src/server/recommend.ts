@@ -328,46 +328,18 @@ type StockData = Awaited<ReturnType<typeof gatherStockData>>;
 
 // ─── AI prompt ────────────────────────────────────────────────────────────────
 
-export function buildPrompt(
-  d: StockData,
-  memory: string,
-  setupContext: string,
-  isDaily: boolean,
-  weekStart: string,
-  weekEnd: string,
-) {
-  const fmt = (n: number | null | undefined, dec = 2) => (n != null ? n.toFixed(dec) : "N/A");
+/**
+ * Structured messages for every AI call.
+ * `system` is 100% static → Moonshot AI auto-caches it after the first request (0.25× price on reads).
+ * `user` is per-symbol dynamic data only.
+ */
+export type AIMessages = { system: string; user: string };
 
-  return `You are a senior equity analyst with a board of two legendary supervisors.
+// Static system prompt — identical across all symbols and all calls.
+// OpenRouter sticky-routes by hashing the first system message, so all requests
+// hit the same Moonshot AI endpoint and benefit from cached prefix tokens.
+const ANALYSIS_SYSTEM_PROMPT = `You are a senior equity analyst with a board of two legendary supervisors.
 Your job: produce a structured multi-section response. Follow the format exactly — no markdown fences, no extra commentary.
-
-## STOCK MEMORY (accumulated context)
-${memory}
-
-## SETUP CONTEXT
-${setupContext}
-
-## CURRENT MARKET DATA
-STOCK: ${d.symbol} | SECTOR: ${d.sector ?? "Unknown"} | INDUSTRY: ${d.industry ?? "Unknown"}
-PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today) | 52W: $${fmt(d.fiftyTwoWeekLow)}–$${fmt(d.fiftyTwoWeekHigh)}
-MARKET CAP: ${d.marketCap ? "$" + (d.marketCap / 1e9).toFixed(1) + "B" : "N/A"} | BETA: ${fmt(d.beta)}
-Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
-Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
-MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
-RELATIVE STRENGTH: vs SPY 20d ${fmt(d.relativeStrengthVsMarket20d, 1)} pts | vs SPY 60d ${fmt(d.relativeStrengthVsMarket60d, 1)} pts | vs sector (${d.sectorBenchmark ?? "N/A"}) 20d ${fmt(d.relativeStrengthVsSector20d, 1)} pts
-P/E: ${fmt(d.peRatio, 1)} | Fwd P/E: ${fmt(d.forwardPE, 1)} | D/E: ${fmt(d.debtToEquity, 1)}
-Profit margin: ${d.profitMargin != null ? (d.profitMargin * 100).toFixed(1) + "%" : "N/A"} | Op margin: ${d.operatingMargin != null ? (d.operatingMargin * 100).toFixed(1) + "%" : "N/A"} | Gross margin: ${d.grossMargin != null ? (d.grossMargin * 100).toFixed(1) + "%" : "N/A"}
-ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"} | ROA: ${d.returnOnAssets != null ? (d.returnOnAssets * 100).toFixed(1) + "%" : "N/A"} | Earnings growth: ${d.earningsGrowth != null ? (d.earningsGrowth * 100).toFixed(1) + "%" : "N/A"}
-Debt service: EBITDA ${d.ebitda ? "$" + (d.ebitda / 1e9).toFixed(2) + "B" : "N/A"} | Op cash ${d.operatingCashflow ? "$" + (d.operatingCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Current ratio ${fmt(d.currentRatio, 1)} | Quick ratio ${fmt(d.quickRatio, 1)}
-Revision trend: est vs 30d ${fmt(d.earningsEstimateDelta30dPct, 1)}% | est vs 90d ${fmt(d.earningsEstimateDelta90dPct, 1)}% | rev balance 30d ${fmt(d.revisionBalance30d, 0)}
-Revenue growth: ${d.revenueGrowth != null ? (d.revenueGrowth * 100).toFixed(1) + "%" : "N/A"} | FCF: ${d.freeCashflow ? "$" + (d.freeCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Shares out: ${d.sharesOutstanding ? (d.sharesOutstanding / 1e6).toFixed(1) + "M" : "N/A"}
-Next earnings: ${d.earningsDate ? new Date(d.earningsDate).toDateString() : "N/A"} | Days to earnings: ${fmt(d.daysToEarnings, 0)} | Earnings event risk: ${d.earningsEventRisk ?? "N/A"}
-
-${
-  isDaily
-    ? `CONTEXT: Daily update for week ${weekStart}–${weekEnd}. Only set signalChanged=true if something material shifted.`
-    : `CONTEXT: Weekly recommendation for ${weekStart}–${weekEnd}.`
-}
 
 ────────────────────────────────────────────────────────────────
 CYCLE DEFINITIONS (use these to pick the cycle):
@@ -412,6 +384,51 @@ Warren Buffett's lens: moat, margin of safety, rationality, long-term value. Alw
 
 5. MEMORY_UPDATE:
 <updated full memory markdown — include today's signal, cycle, opportunity score, and any new observations>`;
+
+const JSON_ONLY_SYSTEM_PROMPT = `You are an expert stock analyst. Return ONLY one valid JSON object. No markdown fences. No prose.
+If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat weekly signals as timing calls, not blanket business verdicts.
+
+Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
+{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
+
+export function buildPrompt(
+  d: StockData,
+  memory: string,
+  setupContext: string,
+  isDaily: boolean,
+  weekStart: string,
+  weekEnd: string,
+): AIMessages {
+  const fmt = (n: number | null | undefined, dec = 2) => (n != null ? n.toFixed(dec) : "N/A");
+
+  const user = `## STOCK MEMORY (accumulated context)
+${memory}
+
+## SETUP CONTEXT
+${setupContext}
+
+## CURRENT MARKET DATA
+STOCK: ${d.symbol} | SECTOR: ${d.sector ?? "Unknown"} | INDUSTRY: ${d.industry ?? "Unknown"}
+PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today) | 52W: $${fmt(d.fiftyTwoWeekLow)}–$${fmt(d.fiftyTwoWeekHigh)}
+MARKET CAP: ${d.marketCap ? "$" + (d.marketCap / 1e9).toFixed(1) + "B" : "N/A"} | BETA: ${fmt(d.beta)}
+Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
+Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
+MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
+RELATIVE STRENGTH: vs SPY 20d ${fmt(d.relativeStrengthVsMarket20d, 1)} pts | vs SPY 60d ${fmt(d.relativeStrengthVsMarket60d, 1)} pts | vs sector (${d.sectorBenchmark ?? "N/A"}) 20d ${fmt(d.relativeStrengthVsSector20d, 1)} pts
+P/E: ${fmt(d.peRatio, 1)} | Fwd P/E: ${fmt(d.forwardPE, 1)} | D/E: ${fmt(d.debtToEquity, 1)}
+Profit margin: ${d.profitMargin != null ? (d.profitMargin * 100).toFixed(1) + "%" : "N/A"} | Op margin: ${d.operatingMargin != null ? (d.operatingMargin * 100).toFixed(1) + "%" : "N/A"} | Gross margin: ${d.grossMargin != null ? (d.grossMargin * 100).toFixed(1) + "%" : "N/A"}
+ROE: ${d.returnOnEquity != null ? (d.returnOnEquity * 100).toFixed(1) + "%" : "N/A"} | ROA: ${d.returnOnAssets != null ? (d.returnOnAssets * 100).toFixed(1) + "%" : "N/A"} | Earnings growth: ${d.earningsGrowth != null ? (d.earningsGrowth * 100).toFixed(1) + "%" : "N/A"}
+Debt service: EBITDA ${d.ebitda ? "$" + (d.ebitda / 1e9).toFixed(2) + "B" : "N/A"} | Op cash ${d.operatingCashflow ? "$" + (d.operatingCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Current ratio ${fmt(d.currentRatio, 1)} | Quick ratio ${fmt(d.quickRatio, 1)}
+Revision trend: est vs 30d ${fmt(d.earningsEstimateDelta30dPct, 1)}% | est vs 90d ${fmt(d.earningsEstimateDelta90dPct, 1)}% | rev balance 30d ${fmt(d.revisionBalance30d, 0)}
+Revenue growth: ${d.revenueGrowth != null ? (d.revenueGrowth * 100).toFixed(1) + "%" : "N/A"} | FCF: ${d.freeCashflow ? "$" + (d.freeCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Shares out: ${d.sharesOutstanding ? (d.sharesOutstanding / 1e6).toFixed(1) + "M" : "N/A"}
+Next earnings: ${d.earningsDate ? new Date(d.earningsDate).toDateString() : "N/A"} | Days to earnings: ${fmt(d.daysToEarnings, 0)} | Earnings event risk: ${d.earningsEventRisk ?? "N/A"}
+
+${
+  isDaily
+    ? `CONTEXT: Daily update for week ${weekStart}–${weekEnd}. Only set signalChanged=true if something material shifted.`
+    : `CONTEXT: Weekly recommendation for ${weekStart}–${weekEnd}.`
+}`;
+  return { system: ANALYSIS_SYSTEM_PROMPT, user };
 }
 
 export function buildJsonOnlyRetryPrompt(
@@ -420,11 +437,9 @@ export function buildJsonOnlyRetryPrompt(
   isDaily: boolean,
   weekStart: string,
   weekEnd: string,
-) {
+): AIMessages {
   const fmt = (n: number | null | undefined, dec = 2) => (n != null ? n.toFixed(dec) : "N/A");
-  return `You are an expert stock analyst. Return ONLY one valid JSON object. No markdown fences. No prose.
-
-STOCK: ${d.symbol} | PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today)
+  const user = `STOCK: ${d.symbol} | PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today)
 Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
 Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
 MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
@@ -434,11 +449,8 @@ Op margin: ${d.operatingMargin != null ? (d.operatingMargin * 100).toFixed(1) + 
 Debt service: EBITDA ${d.ebitda ? "$" + (d.ebitda / 1e9).toFixed(2) + "B" : "N/A"} | Op cash ${d.operatingCashflow ? "$" + (d.operatingCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Current ratio ${fmt(d.currentRatio, 1)}
 Revision trend: est vs 30d ${fmt(d.earningsEstimateDelta30dPct, 1)}% | rev balance 30d ${fmt(d.revisionBalance30d, 0)} | Days to earnings ${fmt(d.daysToEarnings, 0)}
 SETUP CONTEXT: ${setupContext}
-CONTEXT: ${isDaily ? `Daily update ${weekStart}–${weekEnd}.` : `Weekly rec ${weekStart}–${weekEnd}.`}
-If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat weekly signals as timing calls, not blanket business verdicts.
-
-Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
-{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
+CONTEXT: ${isDaily ? `Daily update ${weekStart}–${weekEnd}.` : `Weekly rec ${weekStart}–${weekEnd}.`}`;
+  return { system: JSON_ONLY_SYSTEM_PROMPT, user };
 }
 
 // ─── AI call ──────────────────────────────────────────────────────────────────
@@ -528,21 +540,6 @@ async function createOpenRouterClient() {
   });
 }
 
-function extractTextFromResponse(response: any): string {
-  let text = "";
-
-  for (const item of response?.output ?? []) {
-    if (item?.type !== "message") continue;
-    for (const part of item.content ?? []) {
-      if (part?.type === "output_text" && typeof part.text === "string") {
-        text += part.text;
-      }
-    }
-  }
-
-  return text;
-}
-
 function requireVisibleText(text: string, reason?: string | null) {
   if (!text.trim()) {
     throw new Error(
@@ -552,6 +549,15 @@ function requireVisibleText(text: string, reason?: string | null) {
     );
   }
   return text;
+}
+
+/** Fallback cost estimate when OpenRouter omits `usage.cost` in a streaming chunk.
+ * Uses Kimi K2.6 non-cached rates ($0.20/M prompt + $0.20/M completion)
+ * so we never undercharge. A warning is yielded so the client knows.
+ */
+function estimateCostFromTokens(promptTokens: number, completionTokens: number): number {
+  const ratePerToken = 0.2 / 1_000_000; // $0.20 per million tokens
+  return (promptTokens + completionTokens) * ratePerToken;
 }
 
 function extractUsageFromResponse(response: any): AIUsage {
@@ -596,28 +602,32 @@ function mergeUsages(usages: AIUsage[]): AIUsage {
   );
 }
 
-/** Call AI and return text + usage/cost metadata */
+/** Call AI and return text + usage/cost metadata. System message is static and prompt-cached by Moonshot AI. */
 export async function callAIWithUsage(
-  prompt: string,
+  messages: AIMessages,
   options: { signal?: AbortSignal } = {},
 ): Promise<{ text: string; usage: AIUsage }> {
   const client = await createOpenRouterClient();
   const { signal, timeoutSignal } = createAIRequestSignal(options.signal);
 
   try {
-    const response = await client.responses.create(
+    const response = await (client.chat.completions.create as any)(
       {
         model: AI_MODEL,
-        input: prompt,
+        messages: [
+          { role: "system", content: messages.system },
+          { role: "user", content: messages.user },
+        ],
         reasoning: AI_REASONING,
-        max_output_tokens: AI_MAX_OUTPUT_TOKENS,
+        max_tokens: AI_MAX_OUTPUT_TOKENS,
         stream: false,
       },
       { signal },
     );
 
+    const text = response.choices?.[0]?.message?.content ?? "";
     return {
-      text: requireVisibleText(extractTextFromResponse(response)),
+      text: requireVisibleText(text),
       usage: extractUsageFromResponse(response),
     };
   } catch (error) {
@@ -625,55 +635,53 @@ export async function callAIWithUsage(
   }
 }
 
-/** Stream AI response with text deltas and final usage metadata */
+/** Stream AI response with text deltas and final usage metadata. System message is static and prompt-cached by Moonshot AI. */
 export async function* callAIStream(
-  prompt: string,
+  messages: AIMessages,
   options: { signal?: AbortSignal } = {},
 ): AsyncIterable<AIStreamChunk> {
   const client = await createOpenRouterClient();
   const { signal, timeoutSignal } = createAIRequestSignal(options.signal);
 
-  let completedResponse: any = null;
+  let usageChunk: any = null;
   let sawTextDelta = false;
+  let finishReason: string | null = null;
 
   try {
-    const stream = await client.responses.create(
+    const stream = await (client.chat.completions.create as any)(
       {
         model: AI_MODEL,
-        input: prompt,
+        messages: [
+          { role: "system", content: messages.system },
+          { role: "user", content: messages.user },
+        ],
         reasoning: AI_REASONING,
-        max_output_tokens: AI_MAX_OUTPUT_TOKENS,
+        max_tokens: AI_MAX_OUTPUT_TOKENS,
         stream: true,
+        stream_options: { include_usage: true },
       },
       { signal },
     );
 
-    let terminalReason: string | null = null;
-
-    for await (const event of stream as AsyncIterable<any>) {
-      if (
-        (event.type === "response.completed" || event.type === "response.incomplete") &&
-        event.response
-      ) {
-        completedResponse = event.response;
-        terminalReason =
-          event.type === "response.incomplete"
-            ? (event.response.incomplete_details?.reason ?? "response.incomplete")
-            : null;
+    for await (const chunk of stream as AsyncIterable<any>) {
+      // Final chunk carries usage when stream_options.include_usage=true
+      if (chunk.usage) {
+        usageChunk = chunk;
       }
 
-      if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
-        if (!event.delta) continue;
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta) {
         sawTextDelta = true;
-        yield { type: "delta", delta: event.delta };
+        yield { type: "delta", delta };
       }
 
-      if (event.type === "error") {
-        throw new Error(event.message ?? "AI stream error");
+      const reason = chunk.choices?.[0]?.finish_reason;
+      if (reason) {
+        finishReason = reason;
       }
     }
 
-    if (!completedResponse) {
+    if (!usageChunk) {
       if (sawTextDelta) {
         yield {
           type: "warning",
@@ -682,16 +690,33 @@ export async function* callAIStream(
         };
         return;
       }
-
-      throw new Error("OpenRouter stream finished without a terminal response event");
+      throw new Error("OpenRouter stream finished without any content or usage data");
     }
 
     if (!sawTextDelta) {
-      const text = requireVisibleText(extractTextFromResponse(completedResponse), terminalReason);
-      yield { type: "delta", delta: text };
+      throw new Error(
+        finishReason
+          ? `OpenRouter completed without visible output text (${finishReason})`
+          : "OpenRouter completed without visible output text",
+      );
     }
 
-    yield { type: "usage", usage: extractUsageFromResponse(completedResponse) };
+    // Defensive: OpenRouter sometimes omits usage.cost in the streaming final chunk.
+    // Patch in a token-based estimate so billing never crashes on a completed stream.
+    if (
+      usageChunk.usage &&
+      (usageChunk.usage.cost == null || Number.isNaN(usageChunk.usage.cost))
+    ) {
+      const pt = Number(usageChunk.usage.prompt_tokens ?? 0) || 0;
+      const ct = Number(usageChunk.usage.completion_tokens ?? 0) || 0;
+      usageChunk.usage.cost = estimateCostFromTokens(pt, ct);
+      yield {
+        type: "warning",
+        warning: `OpenRouter did not report usage.cost in the streaming chunk. Billed using an estimated cost (${usageChunk.usage.cost.toFixed(6)} USD) derived from token counts.`,
+      };
+    }
+
+    yield { type: "usage", usage: extractUsageFromResponse(usageChunk) };
   } catch (error) {
     rethrowAIAbort(error, timeoutSignal, options.signal);
   }
@@ -704,10 +729,12 @@ export async function chargeUserForUsage(
   usage: AIUsage,
 ) {
   const { user, usageLog } = await import("../lib/schema");
+  const { getUsdToEurRate } = await import("../lib/fx");
 
   const billing = calculateBilledCost({
     actualModel: usage.model,
     providerCostUsd: usage.costUsd,
+    usdToEurRate: await getUsdToEurRate(),
   });
 
   const [u] = await db
@@ -894,6 +921,95 @@ async function buildPersistedThesisJson(
   };
 }
 
+// ─── Shared save logic (used by stream handler + saveWeeklyAnalysis) ────────────
+
+/**
+ * Persists a completed AI analysis to the DB.
+ * Accepts pre-fetched stockData so callers don't need an extra Yahoo Finance round-trip.
+ * Returns the upserted analysis ID.
+ */
+export async function saveAnalysisFromStreamedText({
+  db,
+  symbol,
+  rawText,
+  stockData,
+  userId,
+  weekStart,
+  weekEnd,
+}: {
+  db: Awaited<ReturnType<typeof import("../lib/db").getDb>>;
+  symbol: string;
+  rawText: string;
+  stockData: Awaited<ReturnType<typeof gatherStockData>>;
+  userId: string;
+  weekStart: string;
+  weekEnd: string;
+}): Promise<string> {
+  let parsed: ReturnType<typeof parseFullResponse>;
+  try {
+    parsed = parseFullResponse(rawText);
+  } catch {
+    throw new Error("Failed to parse streamed analysis");
+  }
+
+  const {
+    signal: parsedSignal,
+    talebreview,
+    buffettReview,
+    opportunityJson,
+    memoryUpdate,
+  } = parsed;
+
+  const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
+    symbol,
+    parsedSignal,
+    stockData,
+    {
+      hasExtremeRisk: [talebreview, buffettReview].some((r) => r?.severity === "EXTREME"),
+      macroThesis: opportunityJson ?? null,
+    },
+  );
+
+  const existing = await db.select().from(stockAnalysis).where(eq(stockAnalysis.symbol, symbol));
+  const thisWeek = existing.find((r) => r.weekStart === weekStart);
+  const recId = thisWeek?.id ?? randomUUID();
+  const now = new Date();
+
+  const analysisPayload = {
+    signal: parsedSignal.signal as Signal,
+    cycle: parsedSignal.cycle ?? null,
+    cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
+    cycleStrength: parsedSignal.cycleStrength ?? null,
+    confidence: parsedSignal.confidence,
+    reasoning: JSON.stringify(parsedSignal),
+    thesisJson,
+    thesisVersion,
+    macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
+    priceAtAnalysis: stockData.currentPrice,
+    lastTriggeredByUserId: userId,
+    updatedAt: now,
+  };
+
+  if (thisWeek) {
+    await db.update(stockAnalysis).set(analysisPayload).where(eq(stockAnalysis.id, recId));
+  } else {
+    await db.insert(stockAnalysis).values({
+      id: recId,
+      symbol,
+      weekStart,
+      weekEnd,
+      ...analysisPayload,
+      createdAt: now,
+    });
+  }
+
+  await saveSupervisorAlerts(db, symbol, recId, talebreview, buffettReview);
+  await db.update(stock).set({ lastAnalyzedAt: now }).where(eq(stock.symbol, symbol));
+  if (memoryUpdate) await writeMemory(symbol, memoryUpdate);
+
+  return recId;
+}
+
 // ─── Server functions ─────────────────────────────────────────────────────────
 
 export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
@@ -930,8 +1046,8 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const prompt = buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd);
-    const initial = await callAIWithUsage(prompt);
+    const messages = buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd);
+    const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 
     let parsed: ReturnType<typeof parseFullResponse>;
@@ -1076,8 +1192,8 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const prompt = buildPrompt(stockData, memory, setupContext, true, weekStart, weekEnd);
-    const initial = await callAIWithUsage(prompt);
+    const messages = buildPrompt(stockData, memory, setupContext, true, weekStart, weekEnd);
+    const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 
     let parsed: ReturnType<typeof parseFullResponse>;
@@ -1196,74 +1312,19 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
 
     const stockData = await gatherStockData(data.symbol);
 
-    let parsed: ReturnType<typeof parseFullResponse>;
-    try {
-      parsed = parseFullResponse(data.rawText);
-    } catch {
-      throw new Error("Failed to parse streamed analysis");
-    }
-
-    const {
-      signal: parsedSignal,
-      talebreview,
-      buffettReview,
-      opportunityJson,
-      memoryUpdate,
-    } = parsed;
-    const { thesisJson, thesisVersion } = await buildPersistedThesisJson(
-      data.symbol,
-      parsedSignal,
+    const recId = await saveAnalysisFromStreamedText({
+      db,
+      symbol: data.symbol,
+      rawText: data.rawText,
       stockData,
-      {
-        hasExtremeRisk: [talebreview, buffettReview].some(
-          (review) => review?.severity === "EXTREME",
-        ),
-        macroThesis: opportunityJson ?? null,
-      },
-    );
+      userId: ctx.session.sub,
+      weekStart,
+      weekEnd,
+    });
 
-    // Upsert global analysis
-    const existing = await db
-      .select()
-      .from(stockAnalysis)
-      .where(eq(stockAnalysis.symbol, data.symbol));
-    const thisWeek = existing.find((r) => r.weekStart === weekStart);
-    const recId = thisWeek?.id ?? randomUUID();
-    const now = new Date();
-
-    const analysisPayload = {
-      signal: parsedSignal.signal as Signal,
-      cycle: parsedSignal.cycle ?? null,
-      cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
-      cycleStrength: parsedSignal.cycleStrength ?? null,
-      confidence: parsedSignal.confidence,
-      reasoning: JSON.stringify(parsedSignal),
-      thesisJson,
-      thesisVersion,
-      macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
-      priceAtAnalysis: stockData.currentPrice,
-      lastTriggeredByUserId: ctx.session.sub,
-      updatedAt: now,
-    };
-
-    if (thisWeek) {
-      await db.update(stockAnalysis).set(analysisPayload).where(eq(stockAnalysis.id, recId));
-    } else {
-      await db.insert(stockAnalysis).values({
-        id: recId,
-        symbol: data.symbol,
-        weekStart,
-        weekEnd,
-        ...analysisPayload,
-        createdAt: now,
-      });
-    }
-
-    await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
-
-    await db.update(stock).set({ lastAnalyzedAt: now }).where(eq(stock.symbol, data.symbol));
-
-    if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
+    // Re-parse just to build the return value the callers expect.
+    const parsed = parseFullResponse(data.rawText);
+    const { signal: parsedSignal, talebreview, buffettReview } = parsed;
 
     return {
       id: recId,

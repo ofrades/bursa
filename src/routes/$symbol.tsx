@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import React, { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { BarChart3, ChevronLeft, CircleAlert, Loader2, Sparkles, ShieldAlert } from "lucide-react";
 import { Badge, SignalBadge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -12,8 +12,9 @@ import {
   CardAction,
 } from "../components/ui/card";
 import { getStockPageData } from "../server/stocks";
-import { saveWeeklyAnalysis } from "../server/recommend";
+import { isAnalysisRunning } from "../server/active-analyses";
 import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
+import { analysisStreamStore } from "../lib/analysis-stream-store";
 import { StreamingAnalysis } from "../components/StreamingAnalysis";
 import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
 import { buildSimpleAnalysisSpec } from "../lib/simple-analysis-spec";
@@ -31,7 +32,8 @@ export const Route = createFileRoute("/$symbol")({
   }),
   loader: async ({ params }) => {
     const symbol = params.symbol.toUpperCase();
-    return getStockPageData({ data: { symbol } });
+    const [pageData] = await Promise.all([getStockPageData({ data: { symbol } })]);
+    return { ...pageData, isAnalyzing: isAnalysisRunning(symbol) };
   },
   component: StockPage,
 });
@@ -120,16 +122,20 @@ function StockPage() {
   const router = useRouter();
   const symbol = params.symbol.toUpperCase();
 
-  const { state: streamState, start: startStream, reset: resetStream } = useStreamingAnalysis();
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const lastSavedPayloadRef = React.useRef<string | null>(null);
+  // If a server-side analysis is running (e.g. after a page refresh), poll
+  // every 4 s until it finishes and the loader data includes the saved result.
+  useEffect(() => {
+    if (!data.isAnalyzing) return;
+    const id = setInterval(() => {
+      void router.invalidate();
+    }, 4_000);
+    return () => clearInterval(id);
+  }, [data.isAnalyzing, router]);
+
+  const { state: streamState, start: startStream } = useStreamingAnalysis(symbol);
 
   const handleAnalyze = () => {
-    lastSavedPayloadRef.current = null;
-    setSaveState("idle");
-    setSaveError(null);
-    startStream(symbol);
+    startStream();
   };
 
   useEffect(() => {
@@ -142,53 +148,14 @@ function StockPage() {
     handleAnalyze();
   }, [handleAnalyze, navigate, search.analyze, session, streamState.isLoading]);
 
-  // Auto-save streamed analysis to DB when complete
+  // Reload page data when the server signals the analysis has been persisted,
+  // then clear the store so the saved analysis view takes over.
   useEffect(() => {
-    const rawText = streamState.text.trim();
-    if (!streamState.isComplete || !streamState.canSave || !rawText || streamState.error) return;
-    if (lastSavedPayloadRef.current === rawText) return;
-
-    let cancelled = false;
-    lastSavedPayloadRef.current = rawText;
-    setSaveState("saving");
-    setSaveError(null);
-
-    void (async () => {
-      try {
-        await saveWeeklyAnalysis({ data: { symbol, rawText } });
-        if (cancelled) return;
-
-        await router.invalidate();
-        if (cancelled) return;
-
-        resetStream();
-        setSaveState("idle");
-        setSaveError(null);
-        lastSavedPayloadRef.current = null;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Save failed";
-        if (cancelled) return;
-
-        setSaveState("error");
-        setSaveError(msg);
-        lastSavedPayloadRef.current = null;
-        // eslint-disable-next-line no-console
-        console.error("Auto-save failed:", msg);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    resetStream,
-    router,
-    streamState.canSave,
-    streamState.error,
-    streamState.isComplete,
-    streamState.text,
-    symbol,
-  ]);
+    if (!streamState.analysisSaved) return;
+    void router.invalidate().then(() => {
+      analysisStreamStore.clear(symbol);
+    });
+  }, [streamState.analysisSaved, router, symbol]);
   const stock = data.stock;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
@@ -239,15 +206,15 @@ function StockPage() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={streamState.isLoading}
+                disabled={streamState.isLoading || data.isAnalyzing}
                 onClick={handleAnalyze}
               >
-                {streamState.isLoading ? (
+                {streamState.isLoading || data.isAnalyzing ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <Sparkles className="size-3.5" />
                 )}
-                {streamState.isLoading ? "Analyzing…" : "Analyze"}
+                {streamState.isLoading || data.isAnalyzing ? "Analyzing…" : "Analyze"}
               </Button>
             </div>
           )}
@@ -292,7 +259,20 @@ function StockPage() {
 
         {/* Streaming analysis or saved analysis */}
         {streamState.isLoading || streamState.isComplete || streamState.text ? (
-          <StreamingAnalysis state={streamState} saveState={saveState} saveError={saveError} />
+          <StreamingAnalysis state={streamState} />
+        ) : data.isAnalyzing ? (
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-5">
+              <Loader2 className="size-5 animate-spin text-muted-foreground shrink-0" />
+              <div>
+                <p className="font-semibold mb-1">Analysis in progress</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Analysing {symbol} in the background. The page will update automatically when
+                  done.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         ) : latestAnalysis ? (
           <>
             {macroThesisSpec && <JsonSpecRenderer spec={macroThesisSpec} />}
