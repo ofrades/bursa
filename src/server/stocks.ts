@@ -324,6 +324,9 @@ export const getRecentSharedAnalyses = createServerFn({
       signal: stockAnalysis.signal,
       confidence: stockAnalysis.confidence,
       updatedAt: stockAnalysis.updatedAt,
+      reasoning: stockAnalysis.reasoning,
+      thesisJson: stockAnalysis.thesisJson,
+      macroThesisJson: stockAnalysis.macroThesisJson,
       name: stock.name,
     })
     .from(stockAnalysis)
@@ -338,6 +341,9 @@ export const getRecentSharedAnalyses = createServerFn({
       signal: string;
       confidence: number | null;
       updatedAt: Date | null;
+      reasoning: string | null;
+      thesisJson: string | null;
+      macroThesisJson: string | null;
       name: string | null;
     }
   >();

@@ -41,14 +41,15 @@ function Badge({
   );
 }
 
-// ─── Signal badge — BUY | SELL only ──────────────────────────────────────────
+// ─── Signal badge — BUY | SELL | WAIT ────────────────────────────────────────
 // Legacy values (STRONG_BUY, HOLD, etc.) are mapped gracefully.
 
-export type Signal = "BUY" | "SELL";
+export type Signal = "BUY" | "SELL" | "WAIT" | "HOLD";
 
 const signalBadgeClasses: Record<string, string> = {
   BUY: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-400",
   SELL: "border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-400",
+  WAIT: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-400",
   // Legacy mappings
   STRONG_BUY:
     "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-400",
@@ -60,6 +61,7 @@ const signalBadgeClasses: Record<string, string> = {
 const signalLabel: Record<string, string> = {
   BUY: "BUY",
   SELL: "SELL",
+  WAIT: "WAIT",
   STRONG_BUY: "BUY", // legacy → normalised label
   HOLD: "HOLD",
   STRONG_SELL: "SELL",
@@ -68,6 +70,80 @@ const signalLabel: Record<string, string> = {
 function SignalBadge({ signal, className }: { signal: string; className?: string }) {
   const classes = signalBadgeClasses[signal] ?? signalBadgeClasses.HOLD;
   const label = signalLabel[signal] ?? signal.replaceAll("_", " ");
+  return (
+    <Badge variant="outline" className={cn(classes, className)}>
+      {label}
+    </Badge>
+  );
+}
+
+// ─── Stance badge — combines signal + long-term into one chip ────────────────
+// Shows BUY · Own, SELL · Avoid, BUY · Avoid (mixed), etc.
+// Color reflects alignment: aligned-bullish → green, aligned-bearish → red, mixed → amber.
+
+type StanceSignal = "BUY" | "SELL";
+type StanceLongTerm = "Own" | "Maybe own" | "Avoid";
+
+function stanceColor(signal: StanceSignal, longTerm: StanceLongTerm | null): string {
+  if (!longTerm) {
+    // No thesis — fall back to signal-only color
+    return signal === "BUY"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-400"
+      : "border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-400";
+  }
+  const aligned =
+    (signal === "BUY" && longTerm === "Own") || (signal === "SELL" && longTerm === "Avoid");
+  const cautious = longTerm === "Avoid";
+  if (aligned && signal === "BUY")
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-400";
+  if (aligned && signal === "SELL")
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-400";
+  if (cautious)
+    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-400";
+  // BUY + Maybe own, SELL + Own, etc — balanced/mixed
+  return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-400";
+}
+
+function StanceBadge({
+  signal,
+  longTerm,
+  className,
+}: {
+  signal: StanceSignal;
+  longTerm: StanceLongTerm | null;
+  className?: string;
+}) {
+  const color = stanceColor(signal, longTerm);
+  const shortLabel = signalLabel[signal] ?? signal;
+  const longLabel: Record<string, string> = { Own: "Own", "Maybe own": "Watch", Avoid: "Avoid" };
+  const text = longTerm ? `${shortLabel} · ${longLabel[longTerm] ?? longTerm}` : shortLabel;
+  return (
+    <Badge variant="outline" className={cn(color, className)}>
+      {text}
+    </Badge>
+  );
+}
+
+// ─── Long-term badge — OWN | MAYBE OWN | AVOID ───────────────────────────────
+// Used on the symbol detail page where there's room for separate badges.
+
+const longTermBadgeClasses: Record<string, string> = {
+  Own: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-400",
+  "Maybe own":
+    "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-400",
+  Avoid:
+    "border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-400",
+};
+
+const longTermLabel: Record<string, string> = {
+  Own: "OWN",
+  "Maybe own": "WATCH",
+  Avoid: "AVOID",
+};
+
+function LongTermBadge({ stance, className }: { stance: string; className?: string }) {
+  const classes = longTermBadgeClasses[stance] ?? "border-border bg-muted text-muted-foreground";
+  const label = longTermLabel[stance] ?? stance.toUpperCase();
   return (
     <Badge variant="outline" className={cn(classes, className)}>
       {label}
@@ -146,4 +222,12 @@ function SupervisorBadge({
   );
 }
 
-export { Badge, badgeVariants, SignalBadge, CycleBadge, SupervisorBadge };
+export {
+  Badge,
+  badgeVariants,
+  SignalBadge,
+  StanceBadge,
+  LongTermBadge,
+  CycleBadge,
+  SupervisorBadge,
+};

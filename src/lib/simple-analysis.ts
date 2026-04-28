@@ -57,6 +57,7 @@ export type MacroThesis = {
   loadBearingAssumptions: string[];
   falsificationSignals: string[];
   opportunityScore: number;
+  confidence?: number | null;
 };
 
 export function parseMacroThesis(value: unknown): MacroThesis | null {

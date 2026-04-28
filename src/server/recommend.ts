@@ -46,6 +46,7 @@ export type SupervisorReview = {
 export type RecommendationResult = {
   id: string;
   signal: Signal;
+  weeklyCall?: "BUY" | "SELL" | "WAIT";
   cycle: Cycle | null;
   cycleTimeframe: CycleTimeframe | null;
   cycleStrength: number | null;
@@ -367,11 +368,12 @@ RECONCILE SETUP VS FUNDAMENTALS:
 Respond with EXACTLY these five sections, nothing else:
 
 1. OPPORTUNITY_JSON:
-Domain expert lens: secular trends, dependency chains, demand gaps, adoption curves. Think like a sector specialist mapping macro forces to this specific company — follow physical and structural implications the way Aschenbrenner traced AI compute demand to semiconductors and energy. Be specific about what the company actually sells and who buys it. Use NONE for sCurvePosition only if the company is clearly in decline.
-{"secularBet":"<2-sentence thesis about where the world is going and why this company is positioned for it>","dependencyChain":["<If A grows, B must also grow, company owns C of that chain>"],"demandGap":"<where current capacity/infrastructure sits vs. projected need in 2-5 years>","sCurvePosition":"early_adopter"|"crossing_chasm"|"mainstream"|"mature","timeHorizon":"2y"|"5y"|"10y+","loadBearingAssumptions":["<must be true for thesis to hold>","<second assumption>"],"falsificationSignals":["<observable event that would break the thesis>","<second signal>"],"opportunityScore":<0-100>}
+Domain expert lens: secular trends, dependency chains, demand gaps, adoption curves. Think like a sector specialist mapping macro forces to this specific company — follow physical and structural implications the way Aschenbrenner traced AI compute demand to semiconductors and energy. Be specific about what the company actually sells and who buys it. Use NONE for sCurvePosition only if the company is clearly in decline. confidence should reflect your conviction in the long-term thesis over the stated horizon, not the weekly setup.
+{"secularBet":"<2-sentence thesis about where the world is going and why this company is positioned for it>","dependencyChain":["<If A grows, B must also grow, company owns C of that chain>"],"demandGap":"<where current capacity/infrastructure sits vs. projected need in 2-5 years>","sCurvePosition":"early_adopter"|"crossing_chasm"|"mainstream"|"mature","timeHorizon":"2y"|"5y"|"10y+","loadBearingAssumptions":["<must be true for thesis to hold>","<second assumption>"],"falsificationSignals":["<observable event that would break the thesis>","<second signal>"],"opportunityScore":<0-100>,"confidence":<0-100>}
 
 2. SIGNAL_JSON:
-{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
+weeklyCall is the agentic weekly action to show users. Use BUY when the weekly setup is actionable, SELL when the weekly setup is clearly defensive, and WAIT when the evidence is too mixed or weak to press despite a directional lean in signal.
+{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
 
 3. TALEB_JSON:
 Nassim Taleb's lens: tail risk, fragility, convexity, black swans. Only fire BLACK_SWAN_BUY or BLACK_SWAN_SELL if something is truly extreme. Use NONE for severity LOW when nothing is extreme.
@@ -387,8 +389,8 @@ Warren Buffett's lens: moat, margin of safety, rationality, long-term value. Alw
 const JSON_ONLY_SYSTEM_PROMPT = `You are an expert stock analyst. Return ONLY one valid JSON object. No markdown fences. No prose.
 If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat signals as timing calls, not blanket business verdicts.
 
-Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
-{"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
+Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants; weeklyCall may be BUY, SELL, or WAIT):
+{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
 
 export function buildPrompt(
   d: StockData,

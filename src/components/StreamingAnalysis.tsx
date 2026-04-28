@@ -3,8 +3,8 @@ import { Loader2, CircleAlert } from "lucide-react";
 import { parseSections } from "../lib/stream-parsing";
 import type { StreamingState } from "../hooks/useStreamingAnalysis";
 import { Badge, SignalBadge } from "./ui/badge";
-import type { Signal } from "./ui/badge";
 import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
+import { getWeeklyRecommendationDisplay } from "../lib/recommendation-labels";
 import type { MacroThesis } from "../lib/simple-analysis";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -17,7 +17,7 @@ const STREAM_SECTION_MARKERS = [
   },
   {
     marker: "2. SIGNAL_JSON:",
-    label: "Signal",
+    label: "Weekly signal",
     tone: "text-emerald-700 dark:text-emerald-300",
   },
   {
@@ -128,6 +128,13 @@ export function StreamingAnalysis({
 
   const hasOpportunity = opportunity != null;
   const hasSignal = signal != null;
+  const weeklyRecommendation = hasSignal
+    ? getWeeklyRecommendationDisplay(
+        JSON.stringify(signal),
+        (signal?.signal as string | undefined) ?? null,
+        (signal?.confidence as number | undefined) ?? null,
+      )
+    : null;
   const hasTaleb = taleb != null;
   const hasBuffett = buffett != null;
 
@@ -190,12 +197,12 @@ export function StreamingAnalysis({
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
-                  Timing to act on the thesis
+                  Weekly timing
                 </CardDescription>
-                <CardTitle className="text-xl">Current setup</CardTitle>
+                <CardTitle className="text-xl">Weekly setup</CardTitle>
               </div>
               <div className="flex flex-col items-end gap-1.5">
-                <SignalBadge signal={(signal.signal as Signal) ?? "HOLD"} />
+                <SignalBadge signal={weeklyRecommendation?.value ?? "HOLD"} />
               </div>
             </div>
           </CardHeader>
@@ -229,7 +236,7 @@ export function StreamingAnalysis({
             {Boolean(signal.weeklyOutlook) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Setup
+                  Weekly setup
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {String(signal.weeklyOutlook)}
@@ -240,7 +247,7 @@ export function StreamingAnalysis({
             {Boolean(signal.reasoning) && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Read
+                  Weekly read
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {String(signal.reasoning)}

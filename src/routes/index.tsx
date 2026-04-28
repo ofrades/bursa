@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { TrendingUp, Search } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import {
   getRecentSharedAnalyses,
@@ -11,6 +11,7 @@ import {
 import { DashboardHome, type AnalysisFilter } from "../components/DashboardHome";
 import type { StockMetrics } from "../lib/schema";
 import { SharedAnalysisTable } from "../components/SharedAnalysisTable";
+import { StockSearchBar } from "../components/StockSearchBar";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 
@@ -100,22 +101,43 @@ function HomePage() {
     );
   }
 
+  return <LandingHome analyses={data.analyses} metrics={data.metrics} />;
+}
+
+function LandingHome({
+  analyses: initialAnalyses,
+  metrics,
+}: {
+  analyses: any[];
+  metrics: StockMetrics[];
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+
   const metricsBySymbol = new Map<string, StockMetrics>(
-    data.metrics.map((metric: StockMetrics) => [metric.symbol, metric]),
+    metrics.map((metric) => [metric.symbol, metric]),
   );
-  const analyses = data.analyses.map((row: any) => ({
+  const analyses = initialAnalyses.map((row: any) => ({
     ...row,
     perfDay: metricsBySymbol.get(row.symbol)?.perfDay ?? null,
     perfWtd: metricsBySymbol.get(row.symbol)?.perfWtd ?? null,
     perfMtd: metricsBySymbol.get(row.symbol)?.perfMtd ?? null,
   }));
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredAnalyses = useMemo(() => {
+    if (!normalizedSearchQuery) return analyses;
+    return analyses.filter((row: any) =>
+      [row.symbol, row.name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearchQuery),
+    );
+  }, [analyses, normalizedSearchQuery]);
 
   return (
     <div style={{ minHeight: "100vh" }}>
-      {/* Compact app-style header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
         <div className="max-w-5xl mx-auto w-full px-6 h-13 flex items-center justify-between gap-4">
-          {/* Logo */}
           <div className="flex items-center gap-2 font-semibold text-sm">
             <TrendingUp className="size-4" />
             Bursa
@@ -125,45 +147,62 @@ function HomePage() {
             Today <TodayLabel />
           </div>
 
-          {/* Quiet sign-in */}
           <Button asChild size="sm" variant="outline">
             <a href="/api/auth/google/start">Sign in with Google</a>
           </Button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto w-full px-6 py-8 flex flex-col gap-6">
-        {/* Search bar — read-only prompt for guests */}
-        <a
-          href="/api/auth/google/start"
-          className="flex items-center gap-2.5 w-full h-9 px-3 rounded-md border border-border bg-muted text-muted-foreground text-sm hover:border-foreground/30 transition-colors no-underline"
-        >
-          <Search size={14} className="shrink-0" />
-          <span>Search stocks — sign in to save and watch stocks</span>
-        </a>
-
-        {/* Shared analysis table — the actual product */}
-        <section className="flex flex-col gap-4">
-          <div>
-            <h2 className="text-base font-semibold mb-1">Recent shared analyses</h2>
+      <main className="max-w-5xl mx-auto w-full px-6 py-8">
+        <section>
+          <div className="mb-4">
+            <div className="mb-1 text-xs uppercase tracking-[0.08em] text-muted-foreground">
+              Stocks
+            </div>
+            <h2 className="mb-1 text-2xl font-bold">Recent shared analyses</h2>
             <p className="text-sm text-muted-foreground">
-              Shared AI analysis history across all users. Click any row to see the full breakdown.
+              Browse the shared stock table now, then sign in when you want to save or watch names.
             </p>
           </div>
 
-          <Card className="p-0">
-            {analyses.length === 0 ? (
+          <Card className="overflow-hidden p-0">
+            <div className="border-b border-border px-4 py-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0 flex-1 lg:max-w-xl">
+                  <StockSearchBar
+                    query={searchQuery}
+                    onQueryChange={setSearchQuery}
+                    existingSymbols={analyses.map((row: any) => row.symbol)}
+                    mode="guest"
+                    maxWidth="100%"
+                    placeholder="Filter the stock table…"
+                  />
+                </div>
+
+                <Button asChild size="sm" variant="outline" className="shrink-0">
+                  <a href="/api/auth/google/start">Sign in with Google</a>
+                </Button>
+              </div>
+            </div>
+
+            {filteredAnalyses.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-16 text-center">
                 <TrendingUp className="size-8 text-muted-foreground/40" />
                 <div>
-                  <p className="text-sm font-medium mb-1">No shared analyses yet</p>
+                  <p className="mb-1 text-sm font-medium">
+                    {normalizedSearchQuery
+                      ? `No stocks match “${searchQuery.trim()}”`
+                      : "No shared analyses yet"}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Sign in and add a stock to run the first one.
+                    {normalizedSearchQuery
+                      ? "Try another symbol or company name."
+                      : "Sign in and add a stock to run the first one."}
                   </p>
                 </div>
               </div>
             ) : (
-              <SharedAnalysisTable rows={analyses} />
+              <SharedAnalysisTable rows={filteredAnalyses} />
             )}
           </Card>
         </section>

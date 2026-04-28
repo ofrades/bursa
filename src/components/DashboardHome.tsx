@@ -24,6 +24,9 @@ type SharedRow = {
   signal: string;
   confidence: number | null;
   updatedAt: Date | null;
+  reasoning?: string | null;
+  thesisJson?: string | null;
+  macroThesisJson?: string | null;
   name: string | null;
   perfDay?: number | null;
   perfWtd?: number | null;
@@ -89,6 +92,7 @@ export function DashboardHome({
   const [showTopupToast, setShowTopupToast] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState<string>("1");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -196,6 +200,9 @@ export function DashboardHome({
         signal: a?.signal ?? "HOLD",
         confidence: a?.confidence ?? null,
         updatedAt: a?.updatedAt ?? null,
+        reasoning: a?.reasoning ?? null,
+        thesisJson: a?.thesisJson ?? null,
+        macroThesisJson: a?.macroThesisJson ?? null,
         perfDay: metric?.perfDay ?? null,
         perfWtd: metric?.perfWtd ?? null,
         perfMtd: metric?.perfMtd ?? null,
@@ -210,6 +217,9 @@ export function DashboardHome({
       map.set(s.symbol, {
         ...s,
         name: trackedBySymbol.get(s.symbol)?.name ?? s.name,
+        reasoning: s.reasoning ?? null,
+        thesisJson: s.thesisJson ?? null,
+        macroThesisJson: s.macroThesisJson ?? null,
         perfDay: metric?.perfDay ?? s.perfDay ?? null,
         perfWtd: metric?.perfWtd ?? s.perfWtd ?? null,
         perfMtd: metric?.perfMtd ?? s.perfMtd ?? null,
@@ -234,11 +244,21 @@ export function DashboardHome({
     [rows],
   );
 
-  const filteredRows = useMemo(() => {
+  const stateFilteredRows = useMemo(() => {
     if (filter === "watching") return rows.filter((row) => row.isWatching);
     if (filter === "saved") return rows.filter((row) => row.isSaved);
     return rows;
   }, [filter, rows]);
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  const filteredRows = useMemo(() => {
+    if (!normalizedSearchQuery) return stateFilteredRows;
+    return stateFilteredRows.filter((row) => {
+      const haystack = [row.symbol, row.name].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(normalizedSearchQuery);
+    });
+  }, [normalizedSearchQuery, stateFilteredRows]);
 
   return (
     <div className="min-h-screen">
@@ -333,10 +353,6 @@ export function DashboardHome({
       )}
 
       <main className="max-w-5xl mx-auto w-full px-6 py-6">
-        <div style={{ marginBottom: 24 }}>
-          <StockSearchBar onChanged={reload} trackedStocks={trackedStocks} />
-        </div>
-
         <section>
           <div
             style={{
@@ -365,52 +381,69 @@ export function DashboardHome({
                 Save stocks to store them here, then promote the important ones to watching.
               </p>
             </div>
-            <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-1">
-              {(
-                [
-                  ["watching", "Watching"],
-                  ["saved", "Saved"],
-                  ["all", "All"],
-                ] as const
-              ).map(([value, label]) => {
-                const active = filter === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => onFilterChange(value)}
-                    className={[
-                      "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer",
-                      active
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    ].join(" ")}
-                  >
-                    <span>{label}</span>
-                    <span className="text-xs text-muted-foreground">{counts[value]}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           <Card className="overflow-hidden p-0">
+            <div className="border-b border-border px-4 py-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0 flex-1 lg:max-w-xl">
+                  <StockSearchBar
+                    query={searchQuery}
+                    onQueryChange={setSearchQuery}
+                    onChanged={reload}
+                    trackedStocks={trackedStocks}
+                    existingSymbols={rows.map((row) => row.symbol)}
+                    maxWidth="100%"
+                  />
+                </div>
+
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {(
+                    [
+                      ["watching", "Watching"],
+                      ["saved", "Saved"],
+                      ["all", "All"],
+                    ] as const
+                  ).map(([value, label]) => {
+                    const active = filter === value;
+                    return (
+                      <Button
+                        key={value}
+                        type="button"
+                        size="sm"
+                        variant={active ? "secondary" : "outline"}
+                        onClick={() => onFilterChange(value)}
+                        className="cursor-pointer"
+                      >
+                        <span>{label}</span>
+                        <span className="text-[11px] text-muted-foreground">{counts[value]}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             {filteredRows.length === 0 ? (
               <div className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground">
                 <TrendingUp className="size-8 text-muted-foreground/40" />
                 <p className="font-medium">
-                  {filter === "watching"
-                    ? "No watched stocks yet"
-                    : filter === "saved"
-                      ? "No saved stocks yet"
-                      : "No stocks yet"}
+                  {normalizedSearchQuery
+                    ? `No stocks match “${searchQuery.trim()}” in this view`
+                    : filter === "watching"
+                      ? "No watched stocks yet"
+                      : filter === "saved"
+                        ? "No saved stocks yet"
+                        : "No stocks yet"}
                 </p>
                 <p className="text-sm">
-                  {filter === "watching"
-                    ? "Use the magnifier to promote saved stocks into your active watch list."
-                    : filter === "saved"
-                      ? "Search above to save stocks. Watched stocks will appear here too."
-                      : "Search above to save new stocks or promote them to watching."}
+                  {normalizedSearchQuery
+                    ? "Try another symbol or company name, or use the market results above to add a new stock."
+                    : filter === "watching"
+                      ? "Use the magnifier to promote saved stocks into your active watch list."
+                      : filter === "saved"
+                        ? "Use the search inside the table to save stocks. Watched stocks will appear here too."
+                        : "Use the search inside the table to save new stocks or promote them to watching."}
                 </p>
               </div>
             ) : (

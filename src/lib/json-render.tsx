@@ -102,6 +102,7 @@ const catalog = defineCatalog(schema, {
         sCurvePosition: z.enum(["early_adopter", "crossing_chasm", "mainstream", "mature"]),
         timeHorizon: z.enum(["2y", "5y", "10y+"]),
         opportunityScore: z.number().min(0).max(100),
+        confidence: z.number().min(0).max(100).nullable().optional(),
         dependencyChain: z.array(z.string()),
         demandGap: z.string(),
         loadBearingAssumptions: z.array(z.string()),
@@ -361,6 +362,11 @@ const { registry } = defineRegistry(catalog, {
                 <span className="text-xs uppercase tracking-wider text-muted-foreground mt-0.5">
                   opportunity
                 </span>
+                {typeof props.confidence === "number" ? (
+                  <span className="mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {Math.round(props.confidence)}% thesis conf
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap mt-2">
@@ -552,6 +558,7 @@ export function buildMacroThesisSpec(thesis: MacroThesis) {
           sCurvePosition: thesis.sCurvePosition,
           timeHorizon: thesis.timeHorizon,
           opportunityScore: thesis.opportunityScore,
+          confidence: thesis.confidence ?? null,
           dependencyChain: thesis.dependencyChain,
           demandGap: thesis.demandGap,
           loadBearingAssumptions: thesis.loadBearingAssumptions,

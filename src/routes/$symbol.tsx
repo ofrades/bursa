@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { BarChart3, ChevronLeft, CircleAlert, Loader2, Sparkles, ShieldAlert } from "lucide-react";
-import { Badge, SignalBadge } from "../components/ui/badge";
+import { Badge, LongTermBadge, SignalBadge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -16,9 +16,15 @@ import { isAnalysisRunning } from "../server/active-analyses";
 import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
 import { analysisStreamStore } from "../lib/analysis-stream-store";
 import { StreamingAnalysis } from "../components/StreamingAnalysis";
+import { StockThesisCard } from "../components/StockThesisCard";
 import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
 import { buildSimpleAnalysisSpec } from "../lib/simple-analysis-spec";
 import { parseMacroThesis } from "../lib/simple-analysis";
+import {
+  getLongTermRecommendation,
+  getWeeklyRecommendationDisplay,
+} from "../lib/recommendation-labels";
+import { parseStockThesis } from "../lib/stock-thesis";
 
 export const Route = createFileRoute("/$symbol")({
   validateSearch: (search): { analyze?: boolean } => ({
@@ -39,6 +45,7 @@ export const Route = createFileRoute("/$symbol")({
 });
 
 type ParsedRecommendation = {
+  weeklyCall?: "BUY" | "SELL" | "WAIT";
   weeklyOutlook?: string;
   reasoning?: string;
   riskLevel?: string;
@@ -143,6 +150,11 @@ function StockPage() {
   const stock = data.stock;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
+  const weeklyRecommendation = getWeeklyRecommendationDisplay(
+    latestAnalysis?.reasoning ?? null,
+    latestAnalysis?.signal ?? null,
+    latestAnalysis?.confidence ?? null,
+  );
   const bullishFactors = recommendation?.keyBullishFactors ?? [];
   const bearishFactors = recommendation?.keyBearishFactors ?? [];
   const alerts = data.supervisorAlerts ?? [];
@@ -150,7 +162,9 @@ function StockPage() {
   const simpleAnalysisSpec = data.simpleAnalysis
     ? buildSimpleAnalysisSpec(data.simpleAnalysis)
     : null;
+  const persistedThesis = parseStockThesis(latestAnalysis?.thesisJson ?? null);
   const persistedMacroThesis = parseMacroThesis(latestAnalysis?.macroThesisJson ?? null);
+  const longTermRecommendation = getLongTermRecommendation(persistedThesis, persistedMacroThesis);
   const macroThesisSpec = persistedMacroThesis ? buildMacroThesisSpec(persistedMacroThesis) : null;
 
   return (
@@ -166,9 +180,22 @@ function StockPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {stock?.exchange && <Badge variant="outline">{stock.exchange}</Badge>}
             {latestAnalysis ? (
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="size-3 text-muted-foreground" />
-                <SignalBadge signal={latestAnalysis.signal} />
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="size-3 text-muted-foreground" />
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Weekly
+                  </span>
+                  <SignalBadge signal={weeklyRecommendation.value} />
+                </div>
+                {longTermRecommendation ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Long term
+                    </span>
+                    <LongTermBadge stance={longTermRecommendation.value} />
+                  </div>
+                ) : null}
               </div>
             ) : (
               <Badge variant="outline">No analysis yet</Badge>
@@ -263,17 +290,41 @@ function StockPage() {
 
             {simpleAnalysisSpec && <JsonSpecRenderer spec={simpleAnalysisSpec} />}
 
+            {persistedThesis && <StockThesisCard thesis={persistedThesis} />}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <Card>
                 <CardHeader>
                   <div>
                     <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
-                      Near-term read
+                      Weekly read
                     </CardDescription>
                     <CardTitle className="text-xl">Latest setup</CardTitle>
                   </div>
                   <CardAction>
-                    <SignalBadge signal={latestAnalysis.signal} />
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                            Weekly
+                          </span>
+                          <SignalBadge signal={weeklyRecommendation.value} />
+                        </div>
+                        {longTermRecommendation ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                              Long term
+                            </span>
+                            <LongTermBadge stance={longTermRecommendation.value} />
+                          </div>
+                        ) : null}
+                      </div>
+                      {longTermRecommendation ? (
+                        <p className="max-w-xs text-right text-xs text-muted-foreground">
+                          {longTermRecommendation.summary}
+                        </p>
+                      ) : null}
+                    </div>
                   </CardAction>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-5">
@@ -411,6 +462,14 @@ function StockPage() {
               <div>
                 {data.analysisHistory.map((row, index) => {
                   const isLatest = index === 0;
+                  const rowThesis = parseStockThesis(row.thesisJson ?? null);
+                  const rowMacroThesis = parseMacroThesis(row.macroThesisJson ?? null);
+                  const rowLongTerm = getLongTermRecommendation(rowThesis, rowMacroThesis);
+                  const rowWeekly = getWeeklyRecommendationDisplay(
+                    row.reasoning ?? null,
+                    row.signal,
+                    row.confidence,
+                  );
                   return (
                     <div
                       key={row.id}
@@ -428,7 +487,22 @@ function StockPage() {
                             Updated {dateStr(row.updatedAt, true)}
                           </p>
                         </div>
-                        <SignalBadge signal={row.signal} />
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                              Weekly
+                            </span>
+                            <SignalBadge signal={rowWeekly.value} />
+                          </div>
+                          {rowLongTerm ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                Long term
+                              </span>
+                              <LongTermBadge stance={rowLongTerm.value} />
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
 
                       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">

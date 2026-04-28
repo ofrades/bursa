@@ -18,7 +18,11 @@ import {
 import { Link } from "@tanstack/react-router";
 import { cn } from "#/lib/utils";
 
-import { type Signal, SignalBadge } from "./ui/badge";
+import { LongTermBadge, SignalBadge, type Signal } from "./ui/badge";
+import {
+  getLongTermRecommendationFromJson,
+  getWeeklyRecommendationDisplay,
+} from "../lib/recommendation-labels";
 import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
@@ -27,6 +31,9 @@ export type SharedAnalysisRow = {
   signal: string;
   confidence: number | null;
   updatedAt: Date | null;
+  reasoning?: string | null;
+  thesisJson?: string | null;
+  macroThesisJson?: string | null;
   name: string | null;
   perfDay?: number | null;
   perfWtd?: number | null;
@@ -64,7 +71,7 @@ function compareNullableNumber(a: number | null | undefined, b: number | null | 
 
 function getSignalRank(signal: string) {
   if (signal === "BUY" || signal === "STRONG_BUY") return 2;
-  if (signal === "HOLD") return 1;
+  if (signal === "WAIT" || signal === "HOLD") return 1;
   if (signal === "SELL" || signal === "STRONG_SELL") return 0;
   return -1;
 }
@@ -326,21 +333,79 @@ function SharedAnalysisTable({
       },
       {
         id: "signal",
-        accessorFn: (row) => row.signal,
-        header: ({ column }) => <SortableHeader column={column} title="Signal" align="center" />,
+        accessorFn: (row) =>
+          getWeeklyRecommendationDisplay(row.reasoning ?? null, row.signal, row.confidence).value,
+        header: ({ column }) => <SortableHeader column={column} title="Weekly" align="center" />,
         sortingFn: (a, b) => {
-          const rankDelta = getSignalRank(a.original.signal) - getSignalRank(b.original.signal);
+          const aWeekly = getWeeklyRecommendationDisplay(
+            a.original.reasoning ?? null,
+            a.original.signal,
+            a.original.confidence,
+          );
+          const bWeekly = getWeeklyRecommendationDisplay(
+            b.original.reasoning ?? null,
+            b.original.signal,
+            b.original.confidence,
+          );
+          const rankDelta = getSignalRank(aWeekly.value) - getSignalRank(bWeekly.value);
           if (rankDelta !== 0) return rankDelta;
           return compareNullableNumber(a.original.confidence, b.original.confidence);
         },
-        cell: ({ row }) => (
-          <div className="flex flex-col items-center gap-1 text-center">
-            <SignalBadge signal={row.original.signal as Signal} />
-            <span className="text-[11px] text-muted-foreground tabular-nums">
-              {row.original.confidence != null ? `${row.original.confidence}%` : "—"}
-            </span>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const weekly = getWeeklyRecommendationDisplay(
+            row.original.reasoning ?? null,
+            row.original.signal,
+            row.original.confidence,
+          );
+          return (
+            <div className="flex flex-col items-center gap-0.5 text-center">
+              <SignalBadge signal={weekly.value as Signal} />
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {weekly.confidence != null ? `${Math.round(weekly.confidence)}% conf` : "—"}
+              </span>
+            </div>
+          );
+        },
+      },
+      {
+        id: "longTerm",
+        accessorFn: (row) => {
+          const lt = getLongTermRecommendationFromJson(
+            row.thesisJson ?? null,
+            row.macroThesisJson ?? null,
+          );
+          return lt?.value ?? null;
+        },
+        header: ({ column }) => <SortableHeader column={column} title="Long term" align="center" />,
+        sortingFn: (a, b) => {
+          const rank: Record<string, number> = { Own: 2, "Maybe own": 1, Avoid: 0 };
+          const aVal = getLongTermRecommendationFromJson(
+            a.original.thesisJson ?? null,
+            a.original.macroThesisJson ?? null,
+          )?.value;
+          const bVal = getLongTermRecommendationFromJson(
+            b.original.thesisJson ?? null,
+            b.original.macroThesisJson ?? null,
+          )?.value;
+          return (rank[aVal ?? ""] ?? -1) - (rank[bVal ?? ""] ?? -1);
+        },
+        cell: ({ row }) => {
+          const longTerm = getLongTermRecommendationFromJson(
+            row.original.thesisJson ?? null,
+            row.original.macroThesisJson ?? null,
+          );
+          if (!longTerm) {
+            return <span className="text-[11px] text-muted-foreground">—</span>;
+          }
+          return (
+            <div className="flex flex-col items-center gap-0.5 text-center">
+              <LongTermBadge stance={longTerm.value} />
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {longTerm.confidence != null ? `${Math.round(longTerm.confidence)}% conf` : "—"}
+              </span>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "perfDay",
