@@ -118,6 +118,7 @@ export const analysisStreamStore = {
   /** Remove the entry after the saved analysis has been loaded into the page. */
   clear(symbol: string): void {
     entries.delete(symbol);
+    notify(symbol);
     // Also clean up empty listener sets to avoid leaking memory
     if (getListeners(symbol).size === 0) {
       listeners.delete(symbol);
