@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrendingUp, X } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -10,9 +11,10 @@ import {
   getMultipleAnalyses,
   getMultipleMetrics,
   getRecentSharedAnalyses,
+  refreshMultipleMetrics,
 } from "../server/stocks";
 import { getSession } from "../server/session";
-import type { StockAnalysis, StockMetrics } from "../lib/schema";
+import type { StockAnalysis } from "../lib/schema";
 import { StockSearchBar } from "./StockSearchBar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -50,7 +52,6 @@ type Props = {
   initialTrackedStocks: TrackedStock[];
   initialAnalyses: StockAnalysis[];
   initialShared: SharedRow[];
-  initialMetrics: StockMetrics[];
   filter: AnalysisFilter;
   onFilterChange: (filter: AnalysisFilter) => void;
 };
@@ -80,19 +81,19 @@ export function DashboardHome({
   initialTrackedStocks,
   initialAnalyses,
   initialShared,
-  initialMetrics,
   filter,
   onFilterChange,
 }: Props) {
   const [trackedStocks, setTrackedStocks] = useState(initialTrackedStocks);
   const [analyses, setAnalyses] = useState<StockAnalysis[]>(initialAnalyses);
   const [shared, setShared] = useState<SharedRow[]>(initialShared);
-  const [metrics, setMetrics] = useState<StockMetrics[]>(initialMetrics);
   const [balance, setBalance] = useState(walletBalance);
   const [showTopupToast, setShowTopupToast] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState<string>("1");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -104,6 +105,44 @@ export function DashboardHome({
     }
   }, []);
 
+  const metricSymbols = useMemo(
+    () =>
+      Array.from(
+        new Set([...trackedStocks.map((w) => w.symbol), ...shared.map((row) => row.symbol)]),
+      ),
+    [shared, trackedStocks],
+  );
+
+  const metricsKey = metricSymbols.join(",");
+
+  const metricsQuery = useQuery({
+    queryKey: ["metrics", metricsKey],
+    queryFn: () => getMultipleMetrics({ data: { symbols: metricSymbols } }),
+    enabled: metricSymbols.length > 0,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const refreshMetrics = useCallback(async () => {
+    if (!metricSymbols.length) return;
+    const refreshed = await refreshMultipleMetrics({ data: { symbols: metricSymbols } });
+    queryClient.setQueryData(["metrics", metricsKey], refreshed);
+  }, [metricSymbols, metricsKey, queryClient]);
+
+  useEffect(() => {
+    void refreshMetrics();
+  }, [refreshMetrics]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      void refreshMetrics();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refreshMetrics]);
+
+  const metrics = metricsQuery.data ?? [];
+
   const reload = useCallback(async () => {
     const wl = await getTrackedStocks();
     const trackedSymbols = wl.map((w) => w.symbol);
@@ -112,16 +151,12 @@ export function DashboardHome({
       getRecentSharedAnalyses(),
       getSession(),
     ]);
-    const metricSymbols = Array.from(
-      new Set([...trackedSymbols, ...newShared.map((row) => row.symbol)]),
-    );
-    const newMetrics = await getMultipleMetrics({ data: { symbols: metricSymbols } });
     setTrackedStocks(wl);
     setAnalyses(newAnalyses);
     setShared(newShared);
-    setMetrics(newMetrics);
     setBalance(freshSession?.walletBalance ?? 0);
-  }, []);
+    void queryClient.invalidateQueries({ queryKey: ["metrics"] });
+  }, [queryClient]);
 
   const signOut = () =>
     fetch("/api/auth/signout", { method: "POST" }).then(() => {
@@ -394,6 +429,13 @@ export function DashboardHome({
                     existingSymbols={rows.map((row) => row.symbol)}
                     maxWidth="100%"
                   />
+                  <div className="mt-2 min-h-4 text-xs text-muted-foreground">
+                    {metricsQuery.isLoading
+                      ? "Loading market snapshots…"
+                      : metricsQuery.isFetching
+                        ? "Refreshing market snapshots…"
+                        : null}
+                  </div>
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-2">

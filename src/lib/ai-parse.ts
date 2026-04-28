@@ -1,7 +1,7 @@
 // Robust parser for LLM responses that may contain:
 // - ```json fenced blocks
 // - explanatory text before/after JSON
-// - multiple named sections (SIGNAL_JSON:, TALEB_JSON:, BUFFETT_JSON:, MEMORY_UPDATE:)
+// - multiple named sections (OPPORTUNITY_JSON:, SIGNAL_JSON:, MEMORY_UPDATE:)
 
 export function stripCodeFences(input: string): string {
   return input
@@ -75,30 +75,25 @@ export function splitMemoryUpdate(raw: string): { jsonPart: string; memoryUpdate
 }
 
 /**
- * Parse the new multi-section AI response format:
+ * Parse the multi-section AI response format:
  *
- * 1. SIGNAL_JSON: {...}
- * 2. TALEB_JSON: {...}
- * 3. BUFFETT_JSON: {...}
- * 4. MEMORY_UPDATE: <markdown>
+ * 1. OPPORTUNITY_JSON: {...}
+ * 2. SIGNAL_JSON: {...}
+ * 3. MEMORY_UPDATE: <markdown>
  */
-export function parseSupervisorResponse(raw: string): {
+export function parseStructuredResponse(raw: string): {
   signalJson: string | null;
-  talebJson: string | null;
-  buffettJson: string | null;
   opportunityJson: string | null;
   memoryUpdate: string | null;
 } {
   const signalJson = extractBlockAfterLabel(raw, "SIGNAL_JSON:");
-  const talebJson = extractBlockAfterLabel(raw, "TALEB_JSON:");
-  const buffettJson = extractBlockAfterLabel(raw, "BUFFETT_JSON:");
   const opportunityJson = extractBlockAfterLabel(raw, "OPPORTUNITY_JSON:");
 
   const memoryIdx = raw.indexOf("MEMORY_UPDATE:");
   const memoryUpdate =
     memoryIdx !== -1 ? raw.slice(memoryIdx + "MEMORY_UPDATE:".length).trim() : null;
 
-  return { signalJson, talebJson, buffettJson, opportunityJson, memoryUpdate };
+  return { signalJson, opportunityJson, memoryUpdate };
 }
 
 export function parseAiJson<T = unknown>(raw: string): T {

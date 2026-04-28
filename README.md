@@ -35,7 +35,11 @@ Important variables:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `OPENROUTER_API_KEY`
+- `FMP_API_KEY` for Financial Modeling Prep market data
+- `MARKET_DATA_PROVIDER` (`fmp` or `yahoo`)
 - `BETTER_AUTH_URL` in production
+
+Market data now supports an official-provider path. When `FMP_API_KEY` is set, the app prefers Financial Modeling Prep and falls back to Yahoo if an FMP request fails. Without `FMP_API_KEY`, Yahoo remains the default.
 
 AI requests use `moonshotai/kimi-k2.6` via OpenRouter.
 

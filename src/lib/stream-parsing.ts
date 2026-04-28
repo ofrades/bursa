@@ -3,17 +3,13 @@ import { parsePartialJSON } from "@tanstack/ai";
 export type ParsedSections = {
   opportunityJson: Record<string, unknown> | null;
   signalJson: Record<string, unknown> | null;
-  talebJson: Record<string, unknown> | null;
-  buffettJson: Record<string, unknown> | null;
   memoryUpdate: string | null;
 };
 
 const SECTION_MARKERS = [
   { name: "opportunityJson", marker: "1. OPPORTUNITY_JSON:" },
   { name: "signalJson", marker: "2. SIGNAL_JSON:" },
-  { name: "talebJson", marker: "3. TALEB_JSON:" },
-  { name: "buffettJson", marker: "4. BUFFETT_JSON:" },
-  { name: "memoryUpdate", marker: "5. MEMORY_UPDATE:" },
+  { name: "memoryUpdate", marker: "3. MEMORY_UPDATE:" },
 ] as const;
 
 function extractSection(text: string, startMarker: string, endMarker?: string): string | null {
@@ -32,8 +28,6 @@ export function parseSections(text: string): ParsedSections {
   const result: ParsedSections = {
     opportunityJson: null,
     signalJson: null,
-    talebJson: null,
-    buffettJson: null,
     memoryUpdate: null,
   };
 

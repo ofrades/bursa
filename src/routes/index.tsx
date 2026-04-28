@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { TrendingUp } from "lucide-react";
 import { format } from "date-fns";
@@ -7,6 +8,7 @@ import {
   getTrackedStocks,
   getMultipleAnalyses,
   getMultipleMetrics,
+  refreshMultipleMetrics,
 } from "../server/stocks";
 import { DashboardHome, type AnalysisFilter } from "../components/DashboardHome";
 import type { StockMetrics } from "../lib/schema";
@@ -30,28 +32,20 @@ export const Route = createFileRoute("/")({
   }),
   loader: async ({ context }) => {
     const analyses = await getRecentSharedAnalyses();
-    const analysisSymbols = analyses.map((row) => row.symbol);
 
     if (!context.session) {
-      const metrics = await getMultipleMetrics({
-        data: { symbols: uniqueSymbols(analysisSymbols) },
-      });
-      return { mode: "landing" as const, analyses, metrics };
+      return { mode: "landing" as const, analyses };
     }
 
     const trackedStocks = await getTrackedStocks();
     const trackedSymbols = trackedStocks.map((w) => w.symbol);
     const myAnalyses = await getMultipleAnalyses({ data: { symbols: trackedSymbols } });
-    const metrics = await getMultipleMetrics({
-      data: { symbols: uniqueSymbols([...trackedSymbols, ...analysisSymbols]) },
-    });
 
     return {
       mode: "dashboard" as const,
       analyses,
       trackedStocks,
       myAnalyses,
-      metrics,
     };
   },
   component: HomePage,
@@ -89,7 +83,6 @@ function HomePage() {
         initialTrackedStocks={data.trackedStocks}
         initialAnalyses={data.myAnalyses}
         initialShared={data.analyses}
-        initialMetrics={data.metrics}
         filter={search.filter ?? "watching"}
         onFilterChange={(filter) =>
           navigate({
@@ -101,20 +94,44 @@ function HomePage() {
     );
   }
 
-  return <LandingHome analyses={data.analyses} metrics={data.metrics} />;
+  return <LandingHome analyses={data.analyses} />;
 }
 
-function LandingHome({
-  analyses: initialAnalyses,
-  metrics,
-}: {
-  analyses: any[];
-  metrics: StockMetrics[];
-}) {
+function LandingHome({ analyses: initialAnalyses }: { analyses: any[] }) {
   const [searchQuery, setSearchQuery] = useState("");
 
+  const queryClient = useQueryClient();
+  const metricSymbols = useMemo(
+    () => uniqueSymbols(initialAnalyses.map((row: any) => row.symbol)),
+    [initialAnalyses],
+  );
+  const metricsKey = metricSymbols.join(",");
+  const metricsQuery = useQuery({
+    queryKey: ["metrics", metricsKey],
+    queryFn: () => getMultipleMetrics({ data: { symbols: metricSymbols } }),
+    enabled: metricSymbols.length > 0,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const refreshMetrics = useCallback(async () => {
+    if (!metricSymbols.length) return;
+    const refreshed = await refreshMultipleMetrics({ data: { symbols: metricSymbols } });
+    queryClient.setQueryData(["metrics", metricsKey], refreshed);
+  }, [metricSymbols, metricsKey, queryClient]);
+
+  useEffect(() => {
+    void refreshMetrics();
+  }, [refreshMetrics]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      void refreshMetrics();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refreshMetrics]);
   const metricsBySymbol = new Map<string, StockMetrics>(
-    metrics.map((metric) => [metric.symbol, metric]),
+    (metricsQuery.data ?? []).map((metric) => [metric.symbol, metric]),
   );
   const analyses = initialAnalyses.map((row: any) => ({
     ...row,
@@ -177,6 +194,13 @@ function LandingHome({
                     maxWidth="100%"
                     placeholder="Filter the stock table…"
                   />
+                  <div className="mt-2 min-h-4 text-xs text-muted-foreground">
+                    {metricsQuery.isLoading
+                      ? "Loading market snapshots…"
+                      : metricsQuery.isFetching
+                        ? "Refreshing market snapshots…"
+                        : null}
+                  </div>
                 </div>
 
                 <Button asChild size="sm" variant="outline" className="shrink-0">

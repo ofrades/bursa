@@ -2,11 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { format } from "date-fns";
-import { stockAnalysis, dailySignal, stock, stockMemory, supervisorAlert } from "../lib/schema";
+import { stockAnalysis, dailySignal, stock, stockMemory } from "../lib/schema";
 import { authMiddleware } from "./middleware";
 import { buildInitialMemory } from "./memory";
 import { ema } from "../lib/metrics";
-import { parseAiJson, parseSupervisorResponse } from "../lib/ai-parse";
+import { parseAiJson, parseStructuredResponse } from "../lib/ai-parse";
 import { calculateBilledCost } from "../lib/pricing";
 import { AI_MODEL } from "../lib/ai-model";
 
@@ -16,32 +16,6 @@ export type Signal = "BUY" | "SELL";
 export type Cycle = "ACCUMULATION" | "MARKUP" | "DISTRIBUTION" | "MARKDOWN";
 export type CycleTimeframe = "SHORT" | "MEDIUM" | "LONG";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
-
-// Taleb alert types
-export type TalebAlertType =
-  | "BLACK_SWAN_BUY" // Extreme asymmetric upside — deep value + low downside
-  | "BLACK_SWAN_SELL" // Extreme fragility — hidden risk bomb
-  | "FRAGILE" // High debt, single revenue stream, low cash buffer
-  | "ANTIFRAGILE" // Gets stronger from volatility, cash-rich, diversified
-  | "NONE"; // Nothing extreme detected
-
-// Buffett alert types
-export type BuffettAlertType =
-  | "MARGIN_OF_SAFETY" // Price well below intrinsic value — buy with confidence
-  | "OVERPRICED" // Fundamentals don't justify valuation
-  | "STRONG_MOAT" // Clear durable competitive advantage
-  | "NO_MOAT" // Commoditized, easily disrupted
-  | "RATIONAL_HOLD" // Numbers support continued ownership at current price
-  | "RATIONAL_AVOID"; // Numbers don't support entering at current price
-
-export type SupervisorSeverity = "LOW" | "MEDIUM" | "HIGH" | "EXTREME";
-
-export type SupervisorReview = {
-  alertType: TalebAlertType | BuffettAlertType;
-  severity: SupervisorSeverity;
-  title: string;
-  content: string;
-};
 
 export type RecommendationResult = {
   id: string;
@@ -64,8 +38,6 @@ export type RecommendationResult = {
   consolidationBreakout21EMA?: boolean;
   priceAtAnalysis: number | null;
   analysisDate: string;
-  talebreview: SupervisorReview | null;
-  buffettReview: SupervisorReview | null;
 };
 
 // ─── Yahoo Finance data gathering ─────────────────────────────────────────────
@@ -145,57 +117,23 @@ function daysUntil(dateValue: unknown) {
 }
 
 export async function gatherStockData(symbol: string) {
-  const { default: YahooFinance } = await import("yahoo-finance2");
-  const yf = new YahooFinance({
-    suppressNotices: ["ripHistorical", "yahooSurvey"],
-  });
-  const quote = (await yf.quote(symbol)) as any;
+  const { getHistoricalPrices, getMarketQuote, getMarketSummary } =
+    await import("../lib/market-data");
 
   const period1 = new Date();
   period1.setDate(period1.getDate() - 150);
+  const period2 = new Date();
 
-  const sectorSummary = await (
-    yf.quoteSummary(symbol, {
-      modules: ["assetProfile"],
-    }) as Promise<any>
-  ).catch(() => null);
-  const sector = sectorSummary?.assetProfile?.sector ?? null;
+  const [quote, summary] = await Promise.all([getMarketQuote(symbol), getMarketSummary(symbol)]);
+
+  const sector = summary?.assetProfile?.sector ?? null;
   const sectorBenchmark = sectorBenchmarkSymbol(sector);
 
-  const [historical, summary, marketBenchmarkRaw, sectorBenchmarkRaw] = await Promise.all([
-    (
-      yf.historical(symbol, {
-        period1,
-        period2: new Date(),
-        interval: "1d",
-      }) as Promise<any[]>
-    ).catch(() => []),
-    (
-      yf.quoteSummary(symbol, {
-        modules: [
-          "financialData",
-          "defaultKeyStatistics",
-          "calendarEvents",
-          "assetProfile",
-          "earningsTrend",
-        ],
-      }) as Promise<any>
-    ).catch(() => null),
-    (
-      yf.historical("SPY", {
-        period1,
-        period2: new Date(),
-        interval: "1d",
-      }) as Promise<any[]>
-    ).catch(() => []),
+  const [historical, marketBenchmarkRaw, sectorBenchmarkRaw] = await Promise.all([
+    getHistoricalPrices(symbol, { period1, period2, interval: "1d" }).catch(() => []),
+    getHistoricalPrices("SPY", { period1, period2, interval: "1d" }).catch(() => []),
     sectorBenchmark
-      ? (
-          yf.historical(sectorBenchmark, {
-            period1,
-            period2: new Date(),
-            interval: "1d",
-          }) as Promise<any[]>
-        ).catch(() => [])
+      ? getHistoricalPrices(sectorBenchmark, { period1, period2, interval: "1d" }).catch(() => [])
       : Promise.resolve([]),
   ]);
 
@@ -203,15 +141,15 @@ export async function gatherStockData(symbol: string) {
   const defaultKeyStatistics = summary?.defaultKeyStatistics ?? null;
   const revisionTrend = revisionTrendFromEarnings(summary);
 
-  const hist = (historical as any[])
+  const hist = historical
     .filter((h: any) => h.close != null && h.date != null)
     .map((h: any) => ({ date: new Date(h.date), close: h.close as number }))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
-  const marketBenchmarkHist = (marketBenchmarkRaw as any[])
+  const marketBenchmarkHist = marketBenchmarkRaw
     .filter((h: any) => h.close != null && h.date != null)
     .map((h: any) => ({ date: new Date(h.date), close: h.close as number }))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
-  const sectorBenchmarkHist = (sectorBenchmarkRaw as any[])
+  const sectorBenchmarkHist = sectorBenchmarkRaw
     .filter((h: any) => h.close != null && h.date != null)
     .map((h: any) => ({ date: new Date(h.date), close: h.close as number }))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -275,6 +213,8 @@ export async function gatherStockData(symbol: string) {
 
   return {
     symbol,
+    companyName: quote.longName ?? quote.shortName ?? symbol,
+    businessSummary: summary?.assetProfile?.longBusinessSummary ?? null,
     currentPrice: priceNow,
     dayChange: (quote.regularMarketChangePercent ?? 0) as number,
     marketCap: quote.marketCap as number | undefined,
@@ -338,7 +278,7 @@ export type AIMessages = { system: string; user: string };
 // Static system prompt — identical across all symbols and all calls.
 // OpenRouter sticky-routes by hashing the first system message, so all requests
 // hit the same Moonshot AI endpoint and benefit from cached prefix tokens.
-const ANALYSIS_SYSTEM_PROMPT = `You are a senior equity analyst with a board of two legendary supervisors.
+const ANALYSIS_SYSTEM_PROMPT = `You are a desruptive equity analyst witch investigates present and future demand to predict tomorrow winners.
 Your job: produce a structured multi-section response. Follow the format exactly — no markdown fences, no extra commentary.
 
 ────────────────────────────────────────────────────────────────
@@ -353,44 +293,50 @@ TIMEFRAME DEFINITIONS:
 - MEDIUM: weeks–quarter (SMAs, earnings, sector rotation)
 - LONG: quarters–year (fundamentals, macro, valuation)
 
+PRIMARY JOB FOR THE LONG-TERM THESIS:
+- Map demand shock -> bottleneck/scarcity -> pricing or utilization -> earnings revisions -> equity repricing.
+- Optimize for asymmetry and consensus error, not for picking the prettiest company on traditional ratios.
+- Great slow compounders are not automatically the best opportunities. A messy company with scarce, load-bearing exposure can deserve a high opportunityScore.
+- Treat fundamentals as a durability and fragility layer underneath the surface. Use them to judge survivability, dilution risk, and whether the company can actually capture the wave.
+- Do NOT automatically dismiss a bottleneck winner because trailing margins, valuation, or balance-sheet optics are mediocre. Only let weak fundamentals dominate if they threaten survival or the ability to monetize demand.
+- When discussing upside or downside, think in scenario ranges and transmission paths, not vague adjectives.
+
 STRATEGY SETUP (evaluate and include in SIGNAL_JSON):
 1. Weekly trend — is price in a weekly uptrend above the 21-week EMA?
 2. Pullback to 21 EMA — has price pulled back to or consolidated around the daily 21 EMA?
 3. Consolidation breakout near 21 EMA — is there a strong daily candle breaking above recent consolidation/high away from the 21 EMA?
 
-RECONCILE SETUP VS FUNDAMENTALS:
-- A current recommendation can be tactical, but it must still respect fundamentals.
+RECONCILE SETUP, THESIS, AND FUNDAMENTALS:
+- weeklyCall is allowed to be tactical.
+- opportunityScore should primarily reflect demand acceleration, bottleneck power, scarcity, and estimate-revision potential.
+- Fundamentals should modulate confidence, fragility, and time horizon more than raw upside.
 - If the near-term setup is bullish while revenue / cash flow / debt / valuation look weak, you may still return BUY only as a tactical setup: lower confidence, say clearly that it is a shorter-term timing call, and mention the weak fundamentals in keyBearishFactors and reasoning.
+- If the long-term bottleneck thesis is strong despite mediocre trailing fundamentals, say explicitly what traditional metrics are missing and why the company could still reprice hard.
 - If fundamentals look decent but the setup is weak, you may still return SELL for now: explain that it is a timing / risk-management call, not a claim that the business is bad, and mention the stronger fundamentals in keyBullishFactors or reasoning.
 - Do not present the current signal as a broad business verdict when the evidence is mixed.
 ────────────────────────────────────────────────────────────────
 
-Respond with EXACTLY these five sections, nothing else:
+Respond with EXACTLY these three sections, nothing else:
 
 1. OPPORTUNITY_JSON:
-Domain expert lens: secular trends, dependency chains, demand gaps, adoption curves. Think like a sector specialist mapping macro forces to this specific company — follow physical and structural implications the way Aschenbrenner traced AI compute demand to semiconductors and energy. Be specific about what the company actually sells and who buys it. Use NONE for sCurvePosition only if the company is clearly in decline. confidence should reflect your conviction in the long-term thesis over the stated horizon, not the weekly setup.
-{"secularBet":"<2-sentence thesis about where the world is going and why this company is positioned for it>","dependencyChain":["<If A grows, B must also grow, company owns C of that chain>"],"demandGap":"<where current capacity/infrastructure sits vs. projected need in 2-5 years>","sCurvePosition":"early_adopter"|"crossing_chasm"|"mainstream"|"mature","timeHorizon":"2y"|"5y"|"10y+","loadBearingAssumptions":["<must be true for thesis to hold>","<second assumption>"],"falsificationSignals":["<observable event that would break the thesis>","<second signal>"],"opportunityScore":<0-100>,"confidence":<0-100>}
+Domain expert lens: secular trends, dependency chains, demand gaps, adoption curves, scarcity, and regime shifts. Start from the physical/economic world, not valuation screens. Be specific about what the company actually sells, who buys it, and why that position could become load-bearing. Quantify 2-3 demand-to-equity scenarios so the output explicitly answers: if X demand rises, how could earnings and the stock react? Use null only when you genuinely cannot estimate. confidence should reflect your conviction in the long-term thesis over the stated horizon, not the weekly setup.
+{"secularBet":"<2-sentence thesis about where the world is going and why this company is positioned for it>","dependencyChain":["<If A grows, B must also grow, company owns C of that chain>"],"bottleneckRole":"<what scarce node, chokepoint, or irreplaceable role the company controls; 'none' if no real bottleneck>","consensusBlindSpot":"<what standard fundamental models or common narratives are likely missing>","demandGap":"<where current capacity/infrastructure sits vs. projected need in 2-5 years>","demandScenarios":[{"case":"bear"|"base"|"bull","demandDriver":"<what demand source changes>","demandChangePct":<number|null>,"businessTransmission":"<how that demand change reaches utilization / backlog / pricing / EPS>","earningsImpactPct":<number|null>,"equityImpactPct":<number|null>,"confidence":<0-100>}],"repricingTriggers":["<observable event that could force estimates higher/lower>","<second trigger>"],"sCurvePosition":"early_adopter"|"crossing_chasm"|"mainstream"|"mature","timeHorizon":"2y"|"5y"|"10y+","loadBearingAssumptions":["<must be true for thesis to hold>","<second assumption>"],"falsificationSignals":["<observable event that would break the thesis>","<second signal>"],"opportunityScore":<0-100>,"confidence":<0-100>}
 
 2. SIGNAL_JSON:
 weeklyCall is the agentic weekly action to show users. Use BUY when the weekly setup is actionable, SELL when the weekly setup is clearly defensive, and WAIT when the evidence is too mixed or weak to press despite a directional lean in signal.
-{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
+weeklyOutlook and reasoning are user-facing copy. Keep them plain, simple, and non-technical. Do NOT mention EMA, relative strength, revision balance, percentages, timeframe labels, or indicator names in prose. Use those metrics only in the background to decide whether the short-term setup looks promising, mixed, or weak.
+weeklyOutlook should answer one simple question: does the short-term setup look promising right now or not?
+{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<1-2 short plain-language sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<2-3 short plain-language sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
 
-3. TALEB_JSON:
-Nassim Taleb's lens: tail risk, fragility, convexity, black swans. Only fire BLACK_SWAN_BUY or BLACK_SWAN_SELL if something is truly extreme. Use NONE for severity LOW when nothing is extreme.
-{"alertType":"BLACK_SWAN_BUY"|"BLACK_SWAN_SELL"|"FRAGILE"|"ANTIFRAGILE"|"NONE","severity":"LOW"|"MEDIUM"|"HIGH"|"EXTREME","title":"<10 words max>","content":"<2-3 sentences in Taleb's direct, probabilistic voice>"}
-
-4. BUFFETT_JSON:
-Warren Buffett's lens: moat, margin of safety, rationality, long-term value. Always opine. If momentum is strong but fundamentals are weak, say so directly in his grandfather voice.
-{"alertType":"MARGIN_OF_SAFETY"|"OVERPRICED"|"STRONG_MOAT"|"NO_MOAT"|"RATIONAL_HOLD"|"RATIONAL_AVOID","severity":"LOW"|"MEDIUM"|"HIGH","title":"<10 words max>","content":"<2-3 sentences in Buffett's plain, patient voice>"}
-
-5. MEMORY_UPDATE:
-<updated full memory markdown — include today's signal, cycle, opportunity score, and any new observations>`;
+3. MEMORY_UPDATE:
+<updated full memory markdown — include today's signal, cycle, opportunity score, bottleneck role, demand->earnings->equity map, and any new observations>`;
 
 const JSON_ONLY_SYSTEM_PROMPT = `You are an expert stock analyst. Return ONLY one valid JSON object. No markdown fences. No prose.
-If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat signals as timing calls, not blanket business verdicts.
+If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat signals as timing calls, not blanket business verdicts. For weekly timing, do not confuse "great company" with "best opportunity"; use fundamentals mainly to judge fragility and durability, not to erase genuine demand/bottleneck setups.
+weeklyOutlook and reasoning are user-facing copy. Keep them plain, simple, and non-technical. Do NOT mention EMA, relative strength, revision balance, percentages, timeframe labels, or indicator names in prose. Use those metrics only in the background to decide whether the short-term setup looks promising, mixed, or weak.
 
 Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants; weeklyCall may be BUY, SELL, or WAIT):
-{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
+{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<1-2 short plain-language sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<2-3 short plain-language sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
 
 export function buildPrompt(
   d: StockData,
@@ -408,7 +354,8 @@ ${memory}
 ${setupContext}
 
 ## CURRENT MARKET DATA
-STOCK: ${d.symbol} | SECTOR: ${d.sector ?? "Unknown"} | INDUSTRY: ${d.industry ?? "Unknown"}
+STOCK: ${d.symbol} | COMPANY: ${d.companyName ?? d.symbol} | SECTOR: ${d.sector ?? "Unknown"} | INDUSTRY: ${d.industry ?? "Unknown"}
+BUSINESS SUMMARY: ${d.businessSummary ?? "N/A"}
 PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today) | 52W: $${fmt(d.fiftyTwoWeekLow)}–$${fmt(d.fiftyTwoWeekHigh)}
 MARKET CAP: ${d.marketCap ? "$" + (d.marketCap / 1e9).toFixed(1) + "B" : "N/A"} | BETA: ${fmt(d.beta)}
 Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
@@ -438,7 +385,8 @@ export function buildJsonOnlyRetryPrompt(
   analysisDate: string,
 ): AIMessages {
   const fmt = (n: number | null | undefined, dec = 2) => (n != null ? n.toFixed(dec) : "N/A");
-  const user = `STOCK: ${d.symbol} | PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today)
+  const user = `STOCK: ${d.symbol} | COMPANY: ${d.companyName ?? d.symbol} | PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today)
+BUSINESS SUMMARY: ${d.businessSummary ?? "N/A"}
 Daily 21 EMA: $${fmt(d.ema21Daily)} (${fmt(d.priceVsEMA21)}% vs price)
 Weekly 21 EMA: $${fmt(d.weeklyEma21)} (${fmt(d.priceVsWeeklyEMA21)}% vs price)
 MOMENTUM: 5d ${fmt(d.momentum5d)}% | 20d ${fmt(d.momentum20d)}% | Vol trend ${fmt(d.volumeTrend, 1)}%
@@ -460,7 +408,7 @@ const AI_TIMEOUT_MS = (() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_AI_TIMEOUT_MS;
 })();
 const AI_TIMEOUT_SECONDS = Math.ceil(AI_TIMEOUT_MS / 1_000);
-const AI_MAX_OUTPUT_TOKENS = 8_000; // Leaves ample room for the full four-section payload.
+const AI_MAX_OUTPUT_TOKENS = 8_000; // Leaves ample room for the full structured payload.
 const AI_REASONING = { effort: "none" as const }; // Kimi 2.6 is much faster/cheaper here without hidden reasoning burn.
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -782,82 +730,22 @@ export async function writeMemory(symbol: string, content: string) {
     });
 }
 
-// ─── Save supervisor alerts ───────────────────────────────────────────────────
-
-async function saveSupervisorAlerts(
-  db: Awaited<ReturnType<typeof import("../lib/db").getDb>>,
-  symbol: string,
-  analysisId: string,
-  talebreview: SupervisorReview | null,
-  buffettReview: SupervisorReview | null,
-) {
-  const alerts = [
-    talebreview ? { supervisor: "TALEB", ...talebreview } : null,
-    buffettReview ? { supervisor: "BUFFETT", ...buffettReview } : null,
-  ].filter(Boolean) as Array<{
-    supervisor: string;
-    alertType: string;
-    severity: string;
-    title: string;
-    content: string;
-  }>;
-
-  for (const alert of alerts) {
-    await db.insert(supervisorAlert).values({
-      id: randomUUID(),
-      symbol,
-      stockAnalysisId: analysisId,
-      supervisor: alert.supervisor,
-      alertType: alert.alertType,
-      severity: alert.severity,
-      title: alert.title,
-      content: alert.content,
-      createdAt: new Date(),
-    });
-  }
-}
-
 // ─── Parse full AI response ───────────────────────────────────────────────────
 
 function parseFullResponse(raw: string): {
-  signal: Omit<
-    RecommendationResult,
-    "id" | "priceAtAnalysis" | "analysisDate" | "talebreview" | "buffettReview"
-  >;
-  talebreview: SupervisorReview | null;
-  buffettReview: SupervisorReview | null;
+  signal: Omit<RecommendationResult, "id" | "priceAtAnalysis" | "analysisDate">;
   opportunityJson: Record<string, unknown> | null;
   memoryUpdate: string | null;
 } {
   const {
     signalJson,
-    talebJson,
-    buffettJson,
     opportunityJson: rawOpportunityJson,
     memoryUpdate,
-  } = parseSupervisorResponse(raw);
+  } = parseStructuredResponse(raw);
 
   if (!signalJson) throw new Error(`No SIGNAL_JSON found in response: ${raw.slice(0, 300)}`);
 
   const signal = parseAiJson<any>(signalJson);
-
-  let talebreview: SupervisorReview | null = null;
-  if (talebJson) {
-    try {
-      talebreview = parseAiJson<SupervisorReview>(talebJson);
-    } catch {
-      // Non-fatal — Taleb optional
-    }
-  }
-
-  let buffettReview: SupervisorReview | null = null;
-  if (buffettJson) {
-    try {
-      buffettReview = parseAiJson<SupervisorReview>(buffettJson);
-    } catch {
-      // Non-fatal — Buffett optional
-    }
-  }
 
   let opportunityJson: Record<string, unknown> | null = null;
   if (rawOpportunityJson) {
@@ -868,7 +756,7 @@ function parseFullResponse(raw: string): {
     }
   }
 
-  return { signal, talebreview, buffettReview, opportunityJson, memoryUpdate };
+  return { signal, opportunityJson, memoryUpdate };
 }
 
 async function buildPersistedThesisJson(
@@ -950,20 +838,14 @@ export async function saveAnalysisFromStreamedText({
     throw new Error("Failed to parse streamed analysis");
   }
 
-  const {
-    signal: parsedSignal,
-    talebreview,
-    buffettReview,
-    opportunityJson,
-    memoryUpdate,
-  } = parsed;
+  const { signal: parsedSignal, opportunityJson, memoryUpdate } = parsed;
 
   const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
     symbol,
     parsedSignal,
     stockData,
     {
-      hasExtremeRisk: [talebreview, buffettReview].some((r) => r?.severity === "EXTREME"),
+      hasExtremeRisk: false,
       macroThesis: opportunityJson ?? null,
     },
   );
@@ -991,7 +873,6 @@ export async function saveAnalysisFromStreamedText({
     updatedAt: now,
   });
 
-  await saveSupervisorAlerts(db, symbol, recId, talebreview, buffettReview);
   await db.update(stock).set({ lastAnalyzedAt: now }).where(eq(stock.symbol, symbol));
   if (memoryUpdate) await writeMemory(symbol, memoryUpdate);
 
@@ -1049,28 +930,18 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       const signalOnly = parseAiJson<any>(retry.text);
       parsed = {
         signal: signalOnly,
-        talebreview: null,
-        buffettReview: null,
         opportunityJson: null,
         memoryUpdate: null,
       };
     }
 
-    const {
-      signal: parsedSignal,
-      talebreview,
-      buffettReview,
-      opportunityJson,
-      memoryUpdate,
-    } = parsed;
+    const { signal: parsedSignal, opportunityJson, memoryUpdate } = parsed;
     const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
       data.symbol,
       parsedSignal,
       stockData,
       {
-        hasExtremeRisk: [talebreview, buffettReview].some(
-          (review) => review?.severity === "EXTREME",
-        ),
+        hasExtremeRisk: false,
         macroThesis: opportunityJson ?? null,
       },
     );
@@ -1098,9 +969,6 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       updatedAt: now,
     });
 
-    // Save supervisor alerts
-    await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
-
     await db.update(stock).set({ lastAnalyzedAt: now }).where(eq(stock.symbol, data.symbol));
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
@@ -1119,8 +987,6 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       cycleStrength: parsedSignal.cycleStrength ?? null,
       priceAtAnalysis: stockData.currentPrice,
       analysisDate,
-      talebreview,
-      buffettReview,
     };
   });
 
@@ -1178,29 +1044,19 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       const signalOnly = parseAiJson<any>(retry.text);
       parsed = {
         signal: signalOnly,
-        talebreview: null,
-        buffettReview: null,
         opportunityJson: null,
         memoryUpdate: null,
       };
     }
 
-    const {
-      signal: parsedSignal,
-      talebreview,
-      buffettReview,
-      opportunityJson,
-      memoryUpdate,
-    } = parsed;
+    const { signal: parsedSignal, opportunityJson, memoryUpdate } = parsed;
     const changed = parsedSignal.signal !== analysis.signal;
     const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
       data.symbol,
       parsedSignal,
       stockData,
       {
-        hasExtremeRisk: [talebreview, buffettReview].some(
-          (review) => review?.severity === "EXTREME",
-        ),
+        hasExtremeRisk: false,
         macroThesis: opportunityJson ?? null,
       },
     );
@@ -1242,8 +1098,6 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       createdAt: now,
     });
 
-    await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
-
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 
     // Deduct billed amount from wallet using OpenRouter actual cost when available.
@@ -1261,8 +1115,6 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       signalChanged: changed,
       priceAtAnalysis: stockData.currentPrice,
       analysisDate,
-      talebreview,
-      buffettReview,
     };
   });
 
@@ -1297,7 +1149,7 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
 
     // Re-parse just to build the return value the callers expect.
     const parsed = parseFullResponse(data.rawText);
-    const { signal: parsedSignal, talebreview, buffettReview } = parsed;
+    const { signal: parsedSignal } = parsed;
 
     return {
       id: recId,
@@ -1308,7 +1160,5 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
       cycleStrength: parsedSignal.cycleStrength ?? null,
       priceAtAnalysis: stockData.currentPrice,
       analysisDate,
-      talebreview,
-      buffettReview,
     };
   });

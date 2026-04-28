@@ -47,11 +47,26 @@ export type FundamentalShareholderView = "friendly" | "stable" | "diluting" | "u
 
 export type SCurvePosition = "early_adopter" | "crossing_chasm" | "mainstream" | "mature";
 export type MacroTimeHorizon = "2y" | "5y" | "10y+";
+export type DemandScenarioCase = "bear" | "base" | "bull";
+
+export type MacroDemandScenario = {
+  case: DemandScenarioCase;
+  demandDriver: string;
+  demandChangePct: number | null;
+  businessTransmission: string;
+  earningsImpactPct: number | null;
+  equityImpactPct: number | null;
+  confidence?: number | null;
+};
 
 export type MacroThesis = {
   secularBet: string;
   dependencyChain: string[];
+  bottleneckRole?: string | null;
+  consensusBlindSpot?: string | null;
   demandGap: string;
+  demandScenarios?: MacroDemandScenario[];
+  repricingTriggers?: string[];
   sCurvePosition: SCurvePosition;
   timeHorizon: MacroTimeHorizon;
   loadBearingAssumptions: string[];

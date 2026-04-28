@@ -1,6 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { BarChart3, ChevronLeft, CircleAlert, Loader2, Sparkles, ShieldAlert } from "lucide-react";
+import { BarChart3, ChevronLeft, CircleAlert, Loader2, Sparkles } from "lucide-react";
 import { Badge, LongTermBadge, SignalBadge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -11,7 +12,7 @@ import {
   CardTitle,
   CardAction,
 } from "../components/ui/card";
-import { getStockPageData } from "../server/stocks";
+import { getStockPageData, getStockPageSupplementalData } from "../server/stocks";
 import { isAnalysisRunning } from "../server/active-analyses";
 import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
 import { analysisStreamStore } from "../lib/analysis-stream-store";
@@ -147,6 +148,14 @@ function StockPage() {
       analysisStreamStore.clear(symbol);
     });
   }, [streamState.analysisSaved, router, symbol]);
+  const supplementalQuery = useQuery({
+    queryKey: ["stock-supplemental", symbol, data.latestAnalysis?.id ?? "none"],
+    queryFn: () => getStockPageSupplementalData({ data: { symbol } }),
+    enabled: !data.simpleAnalysis,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: true,
+  });
+
   const stock = data.stock;
   const latestAnalysis = data.latestAnalysis;
   const recommendation = parseRecommendation(latestAnalysis?.reasoning);
@@ -157,9 +166,7 @@ function StockPage() {
   );
   const bullishFactors = recommendation?.keyBullishFactors ?? [];
   const bearishFactors = recommendation?.keyBearishFactors ?? [];
-  const alerts = data.supervisorAlerts ?? [];
-  const hasExtreme = alerts.some((a) => a.severity === "EXTREME");
-  const simpleAnalysisEvidence = data.simpleAnalysis;
+  const simpleAnalysisEvidence = supplementalQuery.data?.simpleAnalysis ?? data.simpleAnalysis;
   const simpleAnalysisSpec = simpleAnalysisEvidence
     ? buildSimpleAnalysisSpec(simpleAnalysisEvidence)
     : null;
@@ -190,7 +197,7 @@ function StockPage() {
             keyBearishFactors: recommendation?.keyBearishFactors,
           },
           simpleAnalysisEvidence,
-          { hasExtremeRisk: hasExtreme, macroThesis: persistedMacroThesis },
+          { hasExtremeRisk: false, macroThesis: persistedMacroThesis },
         )
       : null;
   const effectiveThesis = persistedThesis ?? derivedThesis;
@@ -229,14 +236,6 @@ function StockPage() {
               </div>
             ) : (
               <Badge variant="outline">No analysis yet</Badge>
-            )}
-            {hasExtreme && (
-              <Badge
-                variant="outline"
-                className="border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300"
-              >
-                <ShieldAlert className="size-3" /> Extreme alert
-              </Badge>
             )}
           </div>
           {session && (
@@ -318,7 +317,21 @@ function StockPage() {
           <>
             {macroThesisSpec && <JsonSpecRenderer spec={macroThesisSpec} />}
 
-            {simpleAnalysisSpec && <JsonSpecRenderer spec={simpleAnalysisSpec} />}
+            {simpleAnalysisSpec ? (
+              <JsonSpecRenderer spec={simpleAnalysisSpec} />
+            ) : supplementalQuery.isLoading ? (
+              <Card>
+                <CardContent className="flex items-center gap-3 pt-5">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="font-semibold mb-1">Loading thesis evidence</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Pulling fundamental context for the generative thesis cards.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
 
             {effectiveThesis && <StockThesisCard thesis={effectiveThesis} />}
 

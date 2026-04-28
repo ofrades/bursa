@@ -1,14 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { and, eq, inArray, desc } from "drizzle-orm";
-import {
-  stock,
-  stockMetrics,
-  stockAnalysis,
-  dailySignal,
-  supervisorAlert,
-  watchlist,
-} from "../lib/schema";
-import { buildSimpleAnalysisEvidence } from "../lib/simple-analysis";
+import { stock, stockMetrics, stockAnalysis, dailySignal, watchlist } from "../lib/schema";
+import { buildSimpleAnalysisEvidence, parseSimpleAnalysisEvidence } from "../lib/simple-analysis";
 import { authMiddleware } from "./middleware";
 
 // ─── Ensure stock exists in catalog ──────────────────────────────────────────
@@ -65,19 +58,58 @@ async function upsertUserStockState(
 
 // ─── Metrics ──────────────────────────────────────────────────────────────────
 
+const METRICS_STALE_MS = 15 * 60 * 1000;
+
+function uniqueMetricSymbols(symbols: string[]) {
+  return Array.from(new Set(symbols.filter(Boolean).map((symbol) => symbol.toUpperCase())));
+}
+
+function staleMetricSymbols(
+  symbols: string[],
+  rows: Array<{ symbol: string; updatedAt: Date }>,
+  now = Date.now(),
+) {
+  const bySymbol = new Map(rows.map((row) => [row.symbol, row]));
+  return symbols.filter((symbol) => {
+    const row = bySymbol.get(symbol);
+    if (!row) return true;
+    return now - new Date(row.updatedAt).getTime() >= METRICS_STALE_MS;
+  });
+}
+
 export const getMultipleMetrics = createServerFn({ method: "GET" })
   .inputValidator((data: { symbols: string[] }) => data)
   .handler(async ({ data }) => {
-    const symbols = Array.from(new Set(data.symbols.filter(Boolean)));
+    const symbols = uniqueMetricSymbols(data.symbols);
+    if (!symbols.length) return [];
+
+    const { getDb } = await import("../lib/db");
+    const db = await getDb();
+    return db.select().from(stockMetrics).where(inArray(stockMetrics.symbol, symbols));
+  });
+
+export const refreshMultipleMetrics = createServerFn({ method: "POST" })
+  .inputValidator((data: { symbols: string[] }) => data)
+  .handler(async ({ data }) => {
+    const symbols = uniqueMetricSymbols(data.symbols);
     if (!symbols.length) return [];
 
     const { getDb } = await import("../lib/db");
     const { refreshStockMetrics } = await import("../lib/metrics");
     const db = await getDb();
 
-    // Keep table day/week/month metrics fresh on every load. We still tolerate
-    // individual provider failures and fall back to the last persisted values.
-    await Promise.allSettled(symbols.map((symbol) => refreshStockMetrics(symbol)));
+    const existing = await db
+      .select()
+      .from(stockMetrics)
+      .where(inArray(stockMetrics.symbol, symbols));
+    const toRefresh = staleMetricSymbols(
+      symbols,
+      existing as Array<{ symbol: string; updatedAt: Date }>,
+    );
+
+    if (toRefresh.length) {
+      await Promise.allSettled(toRefresh.map((symbol) => refreshStockMetrics(symbol)));
+    }
 
     return db.select().from(stockMetrics).where(inArray(stockMetrics.symbol, symbols));
   });
@@ -144,38 +176,26 @@ function findClosestPriceOnOrBefore(
 }
 
 export async function getSimpleAnalysisForSymbol(symbol: string) {
-  const { default: YahooFinance } = await import("yahoo-finance2");
-  const yf = new YahooFinance({
-    suppressNotices: ["ripHistorical", "yahooSurvey"],
-  });
+  const {
+    getAnnualCashFlowStatements,
+    getAnnualFinancialStatements,
+    getHistoricalPrices,
+    getMarketQuote,
+    getMarketSummary,
+  } = await import("../lib/market-data");
 
   const period1 = new Date();
   period1.setUTCFullYear(period1.getUTCFullYear() - 6);
   period1.setUTCMonth(0, 1);
   period1.setUTCHours(0, 0, 0, 0);
+  const period2 = new Date();
 
   const [quote, summary, financialsRaw, cashFlowRaw, historicalRaw] = await Promise.all([
-    yf.quote(symbol),
-    yf.quoteSummary(symbol, {
-      modules: ["financialData", "defaultKeyStatistics"],
-    }),
-    yf.fundamentalsTimeSeries(symbol, {
-      period1,
-      period2: new Date(),
-      type: "annual",
-      module: "financials",
-    }),
-    yf.fundamentalsTimeSeries(symbol, {
-      period1,
-      period2: new Date(),
-      type: "annual",
-      module: "cash-flow",
-    }),
-    yf.historical(symbol, {
-      period1,
-      period2: new Date(),
-      interval: "1mo",
-    }),
+    getMarketQuote(symbol),
+    getMarketSummary(symbol),
+    getAnnualFinancialStatements(symbol, { period1, period2 }),
+    getAnnualCashFlowStatements(symbol, { period1, period2 }),
+    getHistoricalPrices(symbol, { period1, period2, interval: "1d" }),
   ]);
 
   const financials = Array.isArray(financialsRaw) ? financialsRaw : [];
@@ -269,7 +289,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
     const db = await getDb();
     const symbol = data.symbol.toUpperCase();
 
-    const [stockRow, analysisRows, marketContext] = await Promise.all([
+    const [stockRow, analysisRows] = await Promise.all([
       db.select().from(stock).where(eq(stock.symbol, symbol)),
       db
         .select()
@@ -277,16 +297,10 @@ export const getStockPageData = createServerFn({ method: "GET" })
         .where(eq(stockAnalysis.symbol, symbol))
         .orderBy(desc(stockAnalysis.updatedAt), desc(stockAnalysis.createdAt))
         .limit(6),
-      import("./recommend")
-        .then(({ gatherStockData }) => gatherStockData(symbol))
-        .catch(() => null),
     ]);
 
     const latestAnalysis = analysisRows[0] ?? null;
-    const { parseSimpleAnalysisEvidence } = await import("../lib/simple-analysis");
-    const simpleAnalysis =
-      parseSimpleAnalysisEvidence(latestAnalysis?.simpleAnalysisJson ?? null) ??
-      (await getSimpleAnalysisForSymbol(symbol).catch(() => null));
+    const simpleAnalysis = parseSimpleAnalysisEvidence(latestAnalysis?.simpleAnalysisJson ?? null);
     const dailySignalsForLatest = latestAnalysis
       ? await db
           .select()
@@ -295,24 +309,38 @@ export const getStockPageData = createServerFn({ method: "GET" })
           .orderBy(desc(dailySignal.date), desc(dailySignal.createdAt))
       : [];
 
-    // Latest supervisor alerts (one per supervisor, from most recent analysis)
-    const supervisorAlertsForLatest = latestAnalysis
-      ? await db
-          .select()
-          .from(supervisorAlert)
-          .where(eq(supervisorAlert.stockAnalysisId, latestAnalysis.id))
-          .orderBy(desc(supervisorAlert.createdAt))
-      : [];
-
     return {
       stock: stockRow[0] ?? null,
       latestAnalysis,
       analysisHistory: analysisRows,
       dailySignals: dailySignalsForLatest,
-      supervisorAlerts: supervisorAlertsForLatest,
       simpleAnalysis,
-      marketContext,
     };
+  });
+
+export const getStockPageSupplementalData = createServerFn({ method: "GET" })
+  .inputValidator((data: { symbol: string }) => data)
+  .handler(async ({ data }) => {
+    const { getDb } = await import("../lib/db");
+    const db = await getDb();
+    const symbol = data.symbol.toUpperCase();
+
+    const [latestAnalysis] = await db
+      .select({ simpleAnalysisJson: stockAnalysis.simpleAnalysisJson })
+      .from(stockAnalysis)
+      .where(eq(stockAnalysis.symbol, symbol))
+      .orderBy(desc(stockAnalysis.updatedAt), desc(stockAnalysis.createdAt))
+      .limit(1);
+
+    const persistedSimpleAnalysis = parseSimpleAnalysisEvidence(
+      latestAnalysis?.simpleAnalysisJson ?? null,
+    );
+    if (persistedSimpleAnalysis) {
+      return { simpleAnalysis: persistedSimpleAnalysis };
+    }
+
+    const simpleAnalysis = await getSimpleAnalysisForSymbol(symbol).catch(() => null);
+    return { simpleAnalysis };
   });
 
 // Public preview used on landing page — gives visitors a feel for the product.

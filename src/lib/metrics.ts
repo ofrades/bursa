@@ -137,23 +137,16 @@ function calcAtr14(history: Array<{ high: number; low: number; close: number }>)
 // ─── Main compute ─────────────────────────────────────────────────────────────
 
 export async function computeMetrics(symbol: string): Promise<SimpleManMetrics> {
-  const { default: YahooFinance } = await import("yahoo-finance2");
-  const yf = new YahooFinance({ suppressNotices: ["ripHistorical", "yahooSurvey"] });
+  const { getHistoricalPrices, getMarketQuote, getMarketSummary } = await import("./market-data");
 
   const now = new Date();
   const period1 = new Date(now);
   period1.setMonth(period1.getMonth() - 15); // ~15 months for SMA200
 
   const [history, summary, quote] = await Promise.all([
-    (yf.historical(symbol, { period1, period2: now, interval: "1d" }) as Promise<any[]>).catch(
-      () => [],
-    ),
-    (
-      yf.quoteSummary(symbol, {
-        modules: ["calendarEvents", "financialData", "defaultKeyStatistics"],
-      }) as Promise<any>
-    ).catch(() => null),
-    (yf.quote(symbol) as Promise<any>).catch(() => null),
+    getHistoricalPrices(symbol, { period1, period2: now, interval: "1d" }).catch(() => []),
+    getMarketSummary(symbol).catch(() => null),
+    getMarketQuote(symbol).catch(() => null),
   ]);
 
   const currentPrice: number = quote?.regularMarketPrice ?? null;

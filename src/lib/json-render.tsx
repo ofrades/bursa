@@ -104,12 +104,28 @@ const catalog = defineCatalog(schema, {
         opportunityScore: z.number().min(0).max(100),
         confidence: z.number().min(0).max(100).nullable().optional(),
         dependencyChain: z.array(z.string()),
+        bottleneckRole: z.string().nullable().optional(),
+        consensusBlindSpot: z.string().nullable().optional(),
         demandGap: z.string(),
+        demandScenarios: z
+          .array(
+            z.object({
+              case: z.enum(["bear", "base", "bull"]),
+              demandDriver: z.string(),
+              demandChangePct: z.number().nullable(),
+              businessTransmission: z.string(),
+              earningsImpactPct: z.number().nullable(),
+              equityImpactPct: z.number().nullable(),
+              confidence: z.number().min(0).max(100).nullable().optional(),
+            }),
+          )
+          .optional(),
+        repricingTriggers: z.array(z.string()).optional(),
         loadBearingAssumptions: z.array(z.string()),
         falsificationSignals: z.array(z.string()),
       }),
       description:
-        "Macro opportunity thesis cornerstone card — secular bet, dependency chain, demand gap, S-curve position, assumptions, kill conditions",
+        "Macro opportunity thesis cornerstone card — secular bet, bottlenecks, demand scenarios, dependency chain, demand gap, assumptions, kill conditions",
     },
   },
   actions: {},
@@ -379,6 +395,30 @@ const { registry } = defineRegistry(catalog, {
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            {(props.bottleneckRole || props.consensusBlindSpot) && (
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {props.bottleneckRole ? (
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 dark:border-sky-800/40 dark:bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-wider text-sky-700 dark:text-sky-400 mb-2">
+                      Bottleneck Role
+                    </p>
+                    <p className="text-sm leading-relaxed text-sky-950 dark:text-muted-foreground">
+                      {props.bottleneckRole}
+                    </p>
+                  </div>
+                ) : null}
+                {props.consensusBlindSpot ? (
+                  <div className="rounded-xl border border-fuchsia-200 bg-fuchsia-50 dark:border-fuchsia-800/40 dark:bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-wider text-fuchsia-700 dark:text-fuchsia-400 mb-2">
+                      Consensus Blind Spot
+                    </p>
+                    <p className="text-sm leading-relaxed text-fuchsia-950 dark:text-muted-foreground">
+                      {props.consensusBlindSpot}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            )}
             {/* Demand Gap */}
             <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
@@ -386,6 +426,76 @@ const { registry } = defineRegistry(catalog, {
               </p>
               <p className="text-sm leading-relaxed text-foreground/80">{props.demandGap}</p>
             </div>
+            {props.demandScenarios?.length ? (
+              <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                  Demand to Equity Scenarios
+                </p>
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                  {props.demandScenarios.map((scenario, i) => {
+                    const label =
+                      scenario.case === "bull"
+                        ? "Bull"
+                        : scenario.case === "bear"
+                          ? "Bear"
+                          : "Base";
+                    return (
+                      <div
+                        key={`${scenario.case}-${i}`}
+                        className="rounded-lg border border-border/60 bg-background/70 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-foreground/80">
+                            {label}
+                          </span>
+                          {typeof scenario.confidence === "number" ? (
+                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                              {Math.round(scenario.confidence)}% conf
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-sm font-medium leading-relaxed text-foreground">
+                          {scenario.demandDriver}
+                        </p>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-md bg-muted px-2.5 py-2">
+                            <p className="uppercase tracking-wider text-muted-foreground">Demand</p>
+                            <p className="mt-1 font-semibold text-foreground">
+                              {typeof scenario.demandChangePct === "number"
+                                ? `${scenario.demandChangePct > 0 ? "+" : ""}${scenario.demandChangePct.toFixed(0)}%`
+                                : "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-md bg-muted px-2.5 py-2">
+                            <p className="uppercase tracking-wider text-muted-foreground">
+                              Earnings
+                            </p>
+                            <p className="mt-1 font-semibold text-foreground">
+                              {typeof scenario.earningsImpactPct === "number"
+                                ? `${scenario.earningsImpactPct > 0 ? "+" : ""}${scenario.earningsImpactPct.toFixed(0)}%`
+                                : "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-md bg-muted px-2.5 py-2 col-span-2">
+                            <p className="uppercase tracking-wider text-muted-foreground">
+                              Equity implication
+                            </p>
+                            <p className="mt-1 font-semibold text-foreground">
+                              {typeof scenario.equityImpactPct === "number"
+                                ? `${scenario.equityImpactPct > 0 ? "+" : ""}${scenario.equityImpactPct.toFixed(0)}%`
+                                : "—"}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                          {scenario.businessTransmission}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {/* Dependency Chain */}
             {props.dependencyChain.length > 0 && (
               <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
@@ -404,6 +514,23 @@ const { registry } = defineRegistry(catalog, {
                 </ol>
               </div>
             )}
+            {props.repricingTriggers?.length ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-800/40 dark:bg-muted/30 p-4">
+                <p className="text-xs uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-3">
+                  Repricing Triggers
+                </p>
+                <ul className="flex flex-col gap-2 pl-4 list-disc">
+                  {props.repricingTriggers.map((item, i) => (
+                    <li
+                      key={i}
+                      className="text-sm text-emerald-950 dark:text-muted-foreground leading-relaxed"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {/* Assumptions + Kill conditions */}
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {props.loadBearingAssumptions.length > 0 && (
@@ -512,23 +639,6 @@ export function buildAnalysisSpec(recData: any, community = false) {
             ["Risk", recData?.riskLevel ?? "—"],
             ["Price target", recData?.priceTarget != null ? `$${recData.priceTarget}` : "—"],
             ["Stop loss", recData?.stopLoss != null ? `$${recData.stopLoss}` : "—"],
-            ["Trend", recData?.weeklyTrend ?? "—"],
-            [
-              "Pullback to 21 EMA",
-              recData?.pullbackTo21EMA === true
-                ? "Yes"
-                : recData?.pullbackTo21EMA === false
-                  ? "No"
-                  : "—",
-            ],
-            [
-              "Consolidation breakout",
-              recData?.consolidationBreakout21EMA === true
-                ? "Yes"
-                : recData?.consolidationBreakout21EMA === false
-                  ? "No"
-                  : "—",
-            ],
           ],
         },
       },
@@ -560,7 +670,11 @@ export function buildMacroThesisSpec(thesis: MacroThesis) {
           opportunityScore: thesis.opportunityScore,
           confidence: thesis.confidence ?? null,
           dependencyChain: thesis.dependencyChain,
+          bottleneckRole: thesis.bottleneckRole ?? null,
+          consensusBlindSpot: thesis.consensusBlindSpot ?? null,
           demandGap: thesis.demandGap,
+          demandScenarios: thesis.demandScenarios ?? [],
+          repricingTriggers: thesis.repricingTriggers ?? [],
           loadBearingAssumptions: thesis.loadBearingAssumptions,
           falsificationSignals: thesis.falsificationSignals,
         },

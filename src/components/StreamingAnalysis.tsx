@@ -24,17 +24,7 @@ const STREAM_SECTION_MARKERS = [
     tone: "text-emerald-700 dark:text-emerald-300",
   },
   {
-    marker: "3. TALEB_JSON:",
-    label: "Stress check",
-    tone: "text-amber-700 dark:text-amber-300",
-  },
-  {
-    marker: "4. BUFFETT_JSON:",
-    label: "Price check",
-    tone: "text-blue-700 dark:text-blue-300",
-  },
-  {
-    marker: "5. MEMORY_UPDATE:",
+    marker: "3. MEMORY_UPDATE:",
     label: "Memory update",
     tone: "text-fuchsia-700 dark:text-fuchsia-300",
   },
@@ -99,19 +89,6 @@ function moneyStr(v: number | null | undefined) {
   }).format(v);
 }
 
-function severityClasses(severity: string | undefined) {
-  switch (severity) {
-    case "EXTREME":
-      return "border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-300";
-    case "HIGH":
-      return "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800/40 dark:bg-orange-950/40 dark:text-orange-300";
-    case "MEDIUM":
-      return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300";
-    default:
-      return "border-border bg-muted text-muted-foreground";
-  }
-}
-
 export function StreamingAnalysis({
   state,
   simpleAnalysis = null,
@@ -128,8 +105,6 @@ export function StreamingAnalysis({
 
   const opportunity = sections.opportunityJson;
   const signal = sections.signalJson;
-  const taleb = sections.talebJson;
-  const buffett = sections.buffettJson;
 
   const hasOpportunity = opportunity != null;
   const hasSignal = signal != null;
@@ -140,9 +115,6 @@ export function StreamingAnalysis({
         (signal?.confidence as number | undefined) ?? null,
       )
     : null;
-  const hasTaleb = taleb != null;
-  const hasBuffett = buffett != null;
-
   const macroThesisSpec = useMemo(() => {
     if (!hasOpportunity) return null;
     try {
@@ -184,14 +156,14 @@ export function StreamingAnalysis({
         },
         simpleAnalysis,
         {
-          hasExtremeRisk: [taleb, buffett].some((review) => review?.severity === "EXTREME"),
+          hasExtremeRisk: false,
           macroThesis: (opportunity as MacroThesis | null | undefined) ?? null,
         },
       );
     } catch {
       return null;
     }
-  }, [buffett, hasSignal, opportunity, signal, simpleAnalysis, taleb]);
+  }, [hasSignal, opportunity, signal, simpleAnalysis]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -350,59 +322,6 @@ export function StreamingAnalysis({
           </Card>
         </div>
       )}
-
-      {/* ─── SUPERVISORS: Taleb + Buffett ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {hasTaleb && taleb && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="flex flex-col gap-1">
-                  <CardDescription className="text-xs uppercase tracking-wider">
-                    Stress check
-                  </CardDescription>
-                  <CardTitle className="text-base leading-tight">
-                    {String(taleb.title ?? "")}
-                  </CardTitle>
-                </div>
-                <Badge variant="outline" className={severityClasses(taleb.severity as string)}>
-                  {String(taleb.severity ?? "LOW")}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {String(taleb.content ?? "")}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {hasBuffett && buffett && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="flex flex-col gap-1">
-                  <CardDescription className="text-xs uppercase tracking-wider">
-                    Price check
-                  </CardDescription>
-                  <CardTitle className="text-base leading-tight">
-                    {String(buffett.title ?? "")}
-                  </CardTitle>
-                </div>
-                <Badge variant="outline" className={severityClasses(buffett.severity as string)}>
-                  {String(buffett.severity ?? "LOW")}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {String(buffett.content ?? "")}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
 
       {/* Progressive transcript before the structured cards can take over. */}
       {state.text.length > 0 && !hasOpportunity && (

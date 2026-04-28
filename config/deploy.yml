@@ -50,6 +50,7 @@ env:
     - GOOGLE_CLIENT_ID
     - GOOGLE_CLIENT_SECRET
     - OPENROUTER_API_KEY
+    - FMP_API_KEY
     - STRIPE_SECRET_KEY
     - STRIPE_WEBHOOK_SECRET
 # Route bursa.mohshoo.com to http://127.0.0.1:80 on the VPS.
