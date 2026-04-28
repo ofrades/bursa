@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Loader2, CircleAlert } from "lucide-react";
 import { parseSections } from "../lib/stream-parsing";
 import type { StreamingState } from "../hooks/useStreamingAnalysis";
+import { shouldShowLiveTranscript } from "../lib/stream-visibility";
 import { Badge, SignalBadge } from "./ui/badge";
 import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
 import { buildSimpleAnalysisSpec } from "../lib/simple-analysis-spec";
@@ -108,6 +109,7 @@ export function StreamingAnalysis({
 
   const hasOpportunity = opportunity != null;
   const hasSignal = signal != null;
+  const showLiveTranscript = shouldShowLiveTranscript(state, hasOpportunity);
   const weeklyRecommendation = hasSignal
     ? getWeeklyRecommendationDisplay(
         JSON.stringify(signal),
@@ -323,8 +325,9 @@ export function StreamingAnalysis({
         </div>
       )}
 
-      {/* Progressive transcript before the structured cards can take over. */}
-      {state.text.length > 0 && !hasOpportunity && (
+      {/* Keep the raw transcript visible while streaming so users can see progress
+          even after partial JSON becomes parseable enough for structured cards. */}
+      {showLiveTranscript && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3 flex-wrap">
