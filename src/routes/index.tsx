@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { TrendingUp, Search } from "lucide-react";
-import { format, startOfWeek, endOfWeek } from "date-fns";
+import { format } from "date-fns";
 import {
   getRecentSharedAnalyses,
   getTrackedStocks,
@@ -56,12 +56,11 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-function WeekLabel() {
+function TodayLabel() {
   const t = new Date();
   return (
     <span suppressHydrationWarning className="font-medium text-foreground">
-      {format(startOfWeek(t, { weekStartsOn: 1 }), "MMM d")} –{" "}
-      {format(endOfWeek(t, { weekStartsOn: 1 }), "MMM d, yyyy")}
+      {format(t, "MMM d, yyyy")}
     </span>
   );
 }
@@ -122,9 +121,8 @@ function HomePage() {
             Bursa
           </div>
 
-          {/* Week indicator */}
           <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-            Week of <WeekLabel />
+            Today <TodayLabel />
           </div>
 
           {/* Quiet sign-in */}
@@ -149,7 +147,7 @@ function HomePage() {
           <div>
             <h2 className="text-base font-semibold mb-1">Recent shared analyses</h2>
             <p className="text-sm text-muted-foreground">
-              Weekly AI analysis shared across all users. Click any row to see the full breakdown.
+              Shared AI analysis history across all users. Click any row to see the full breakdown.
             </p>
           </div>
 

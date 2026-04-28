@@ -111,8 +111,7 @@ export const stockAnalysis = sqliteTable(
     symbol: text("symbol")
       .notNull()
       .references(() => stock.symbol, { onDelete: "cascade" }),
-    weekStart: text("week_start").notNull(),
-    weekEnd: text("week_end").notNull(),
+    analysisDate: text("analysis_date").notNull(), // YYYY-MM-DD
     signal: text("signal").notNull(), // BUY | SELL
     // Market cycle context — the "why" behind the signal
     cycle: text("cycle"), // ACCUMULATION | MARKUP | DISTRIBUTION | MARKDOWN
@@ -131,8 +130,8 @@ export const stockAnalysis = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(now),
   },
   (t) => [
-    unique("uq_analysis_symbol_week").on(t.symbol, t.weekStart),
     index("idx_analysis_symbol").on(t.symbol),
+    index("idx_analysis_symbol_created").on(t.symbol, t.createdAt),
   ],
 );
 

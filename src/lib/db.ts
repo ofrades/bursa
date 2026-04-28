@@ -8,10 +8,9 @@ function resolveDbPath() {
 }
 
 /**
- * Additive schema migrations — safe to run on every cold start.
- * ALTER TABLE ADD COLUMN silently no-ops if the column already exists,
- * and CREATE TABLE/INDEX IF NOT EXISTS handles the new table.
- * This keeps prod SQLite in sync without a full migration framework.
+ * Lightweight cold-start migrations.
+ * Mostly additive, with one stock_analysis table rebuild that converts the
+ * legacy week-based schema into the current append-only day-based schema.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function runMigrations(sqlite: any) {
@@ -22,6 +21,18 @@ function runMigrations(sqlite: any) {
       // column already exists — fine
     }
   };
+  const hasTable = (table: string) =>
+    Boolean(
+      sqlite.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table),
+    );
+  const columnNames = (table: string) =>
+    new Set(
+      sqlite
+        .prepare(`PRAGMA table_info(${table})`)
+        .all()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((row: any) => String(row.name)),
+    );
 
   // stock_analysis — cycle context
   addCol("stock_analysis", "cycle", "text");
@@ -30,6 +41,109 @@ function runMigrations(sqlite: any) {
   addCol("stock_analysis", "thesis_json", "text");
   addCol("stock_analysis", "thesis_version", "text");
   addCol("stock_analysis", "macro_thesis_json", "text");
+  addCol("stock_analysis", "analysis_date", "text");
+
+  if (hasTable("stock_analysis")) {
+    const columns = columnNames("stock_analysis");
+    const legacyWeekSchema = columns.has("week_start") || columns.has("week_end");
+    const missingAnalysisDate = !columns.has("analysis_date");
+
+    if (legacyWeekSchema || missingAnalysisDate) {
+      const analysisDateExpr = columns.has("analysis_date")
+        ? "COALESCE(NULLIF(analysis_date, ''), date(COALESCE(created_at, updated_at) / 1000, 'unixepoch'), date('now'))"
+        : "COALESCE(date(COALESCE(created_at, updated_at) / 1000, 'unixepoch'), date('now'))";
+
+      sqlite.exec("PRAGMA foreign_keys = OFF");
+      try {
+        sqlite.exec("BEGIN");
+        sqlite.exec("DROP INDEX IF EXISTS uq_analysis_symbol_week");
+        sqlite.exec("DROP TABLE IF EXISTS stock_analysis_new");
+        sqlite.exec(`
+          CREATE TABLE stock_analysis_new (
+            id text PRIMARY KEY NOT NULL,
+            symbol text NOT NULL,
+            analysis_date text NOT NULL,
+            signal text NOT NULL,
+            cycle text,
+            cycle_timeframe text,
+            cycle_strength real,
+            confidence real,
+            reasoning text,
+            thesis_json text,
+            thesis_version text,
+            macro_thesis_json text,
+            price_at_analysis real,
+            last_triggered_by_user_id text,
+            created_at integer NOT NULL,
+            updated_at integer NOT NULL,
+            FOREIGN KEY (symbol) REFERENCES stock(symbol) ON DELETE cascade,
+            FOREIGN KEY (last_triggered_by_user_id) REFERENCES user(id) ON DELETE set null
+          )
+        `);
+        sqlite.exec(`
+          INSERT INTO stock_analysis_new (
+            id,
+            symbol,
+            analysis_date,
+            signal,
+            cycle,
+            cycle_timeframe,
+            cycle_strength,
+            confidence,
+            reasoning,
+            thesis_json,
+            thesis_version,
+            macro_thesis_json,
+            price_at_analysis,
+            last_triggered_by_user_id,
+            created_at,
+            updated_at
+          )
+          SELECT
+            id,
+            symbol,
+            ${analysisDateExpr},
+            signal,
+            cycle,
+            cycle_timeframe,
+            cycle_strength,
+            confidence,
+            reasoning,
+            thesis_json,
+            thesis_version,
+            macro_thesis_json,
+            price_at_analysis,
+            last_triggered_by_user_id,
+            created_at,
+            updated_at
+          FROM stock_analysis
+        `);
+        sqlite.exec("DROP TABLE stock_analysis");
+        sqlite.exec("ALTER TABLE stock_analysis_new RENAME TO stock_analysis");
+        sqlite.exec("COMMIT");
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      } finally {
+        sqlite.exec("PRAGMA foreign_keys = ON");
+      }
+    }
+
+    sqlite.exec("DROP INDEX IF EXISTS uq_analysis_symbol_week");
+    sqlite.exec(`
+      UPDATE stock_analysis
+      SET analysis_date = COALESCE(
+        NULLIF(analysis_date, ''),
+        date(COALESCE(created_at, updated_at) / 1000, 'unixepoch'),
+        date('now')
+      )
+      WHERE analysis_date IS NULL OR analysis_date = ''
+    `);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_analysis_symbol ON stock_analysis (symbol)`);
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS idx_analysis_symbol_created ON stock_analysis (symbol, created_at)`,
+    );
+  }
 
   // daily_signal — cycle
   addCol("daily_signal", "cycle", "text");

@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { createFileRoute } from "@tanstack/react-router";
-import { format, startOfWeek, endOfWeek } from "date-fns";
+import { format } from "date-fns";
 import { AI_MODEL } from "../../../lib/ai-model";
 import { getSessionFromRequest } from "../../../lib/session";
 import {
@@ -62,8 +62,7 @@ export const Route = createFileRoute("/api/analyze/stream")({
         }
 
         const today = new Date();
-        const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
-        const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
+        const analysisDate = format(today, "yyyy-MM-dd");
 
         // Track client connection separately from the AI abort.
         // When the client disconnects we stop sending SSE events but the AI
@@ -120,14 +119,7 @@ export const Route = createFileRoute("/api/analyze/stream")({
                   `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
                 ].join(" | ");
 
-                const messages = buildPrompt(
-                  stockData,
-                  memory,
-                  setupContext,
-                  false,
-                  weekStart,
-                  weekEnd,
-                );
+                const messages = buildPrompt(stockData, memory, setupContext, false, analysisDate);
 
                 // Stream AI chunks — NOT aborted when client disconnects.
                 let startedTextMessage = false;
@@ -242,8 +234,7 @@ export const Route = createFileRoute("/api/analyze/stream")({
                       rawText: accumulatedText,
                       stockData,
                       userId: sessionSub,
-                      weekStart,
-                      weekEnd,
+                      analysisDate,
                     });
                   } catch (saveErr) {
                     // eslint-disable-next-line no-console

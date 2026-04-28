@@ -93,12 +93,12 @@ export const getMultipleAnalyses = createServerFn({ method: "GET" })
     const rows = await db
       .select()
       .from(stockAnalysis)
-      .where(inArray(stockAnalysis.symbol, data.symbols));
+      .where(inArray(stockAnalysis.symbol, data.symbols))
+      .orderBy(desc(stockAnalysis.updatedAt), desc(stockAnalysis.createdAt));
     // Return the most recent analysis per symbol
     const latest = new Map<string, (typeof rows)[0]>();
     for (const row of rows) {
-      const cur = latest.get(row.symbol);
-      if (!cur || row.weekStart > cur.weekStart) latest.set(row.symbol, row);
+      if (!latest.has(row.symbol)) latest.set(row.symbol, row);
     }
     return Array.from(latest.values());
   });
@@ -275,7 +275,7 @@ export const getStockPageData = createServerFn({ method: "GET" })
         .select()
         .from(stockAnalysis)
         .where(eq(stockAnalysis.symbol, symbol))
-        .orderBy(desc(stockAnalysis.weekStart), desc(stockAnalysis.updatedAt))
+        .orderBy(desc(stockAnalysis.updatedAt), desc(stockAnalysis.createdAt))
         .limit(6),
       getSimpleAnalysisForSymbol(symbol).catch(() => null),
       import("./recommend")
@@ -328,7 +328,7 @@ export const getRecentSharedAnalyses = createServerFn({
     })
     .from(stockAnalysis)
     .leftJoin(stock, eq(stockAnalysis.symbol, stock.symbol))
-    .orderBy(desc(stockAnalysis.weekStart));
+    .orderBy(desc(stockAnalysis.updatedAt), desc(stockAnalysis.createdAt));
 
   // Keep the latest analysis per symbol
   const latest = new Map<

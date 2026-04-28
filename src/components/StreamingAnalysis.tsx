@@ -17,7 +17,7 @@ const STREAM_SECTION_MARKERS = [
   },
   {
     marker: "2. SIGNAL_JSON:",
-    label: "Weekly signal",
+    label: "Signal",
     tone: "text-emerald-700 dark:text-emerald-300",
   },
   {
@@ -183,7 +183,7 @@ export function StreamingAnalysis({
       {/* ─── CORNERSTONE: Macro Thesis ─── */}
       {macroThesisSpec && <JsonSpecRenderer spec={macroThesisSpec} />}
 
-      {/* ─── WEEKLY SIGNAL — flows from thesis ─── */}
+      {/* ─── SIGNAL — flows from thesis ─── */}
       {hasSignal && (
         <Card>
           <CardHeader>
@@ -192,7 +192,7 @@ export function StreamingAnalysis({
                 <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
                   Timing to act on the thesis
                 </CardDescription>
-                <CardTitle className="text-xl">This week’s setup</CardTitle>
+                <CardTitle className="text-xl">Current setup</CardTitle>
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <SignalBadge signal={(signal.signal as Signal) ?? "HOLD"} />

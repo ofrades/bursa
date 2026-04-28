@@ -32,7 +32,7 @@ export const Route = createFileRoute("/$symbol")({
   }),
   loader: async ({ params }) => {
     const symbol = params.symbol.toUpperCase();
-    const [pageData] = await Promise.all([getStockPageData({ data: { symbol } })]);
+    const pageData = await getStockPageData({ data: { symbol } });
     return { ...pageData, isAnalyzing: isAnalysisRunning(symbol) };
   },
   component: StockPage,
@@ -76,27 +76,11 @@ function dateStr(v: string | Date | null | undefined, withTime = false) {
   return withTime ? d.toLocaleString() : d.toLocaleDateString();
 }
 
-function weekRangeStr(start: string | null | undefined, end: string | null | undefined) {
-  if (!start) return "—";
-  const startDate = new Date(start);
-  const endDate = end ? new Date(end) : null;
-
-  if (Number.isNaN(startDate.getTime())) return start;
-  if (!endDate || Number.isNaN(endDate.getTime())) return dateStr(startDate);
-
-  const sameYear = startDate.getFullYear() === endDate.getFullYear();
-  const startLabel = startDate.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
-  const endLabel = endDate.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  return `${startLabel} – ${endLabel}`;
+function analysisDateStr(v: string | null | undefined) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toLocaleDateString();
 }
 
 function confidenceTone(confidence: number | null | undefined) {
@@ -286,7 +270,7 @@ function StockPage() {
                     <CardDescription className="text-xs uppercase tracking-wider mb-0.5">
                       Near-term read
                     </CardDescription>
-                    <CardTitle className="text-xl">This week&apos;s setup</CardTitle>
+                    <CardTitle className="text-xl">Latest setup</CardTitle>
                   </div>
                   <CardAction>
                     <SignalBadge signal={latestAnalysis.signal} />
@@ -436,7 +420,7 @@ function StockPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-semibold text-foreground">
-                              {weekRangeStr(row.weekStart, row.weekEnd)}
+                              {analysisDateStr(row.analysisDate)}
                             </p>
                             {isLatest && <Badge variant="secondary">Latest</Badge>}
                           </div>

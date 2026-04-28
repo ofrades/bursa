@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TrendingUp, X } from "lucide-react";
-import { format, startOfWeek, endOfWeek } from "date-fns";
+import { format } from "date-fns";
 import {
   getTrackedStocks,
   saveStock,
@@ -61,12 +61,11 @@ function formatEuro(cents: number): string {
   }).format(cents / 100);
 }
 
-function WeekLabel() {
+function TodayLabel() {
   const t = new Date();
   return (
     <span suppressHydrationWarning className="font-medium text-foreground">
-      {format(startOfWeek(t, { weekStartsOn: 1 }), "MMM d")} –{" "}
-      {format(endOfWeek(t, { weekStartsOn: 1 }), "MMM d, yyyy")}
+      {format(t, "MMM d, yyyy")}
     </span>
   );
 }
@@ -250,7 +249,7 @@ export function DashboardHome({
             Bursa
           </div>
           <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-            Week of <WeekLabel />
+            Today <TodayLabel />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {session?.image && (

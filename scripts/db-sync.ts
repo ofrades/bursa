@@ -124,21 +124,20 @@ if (mode === "diff") {
     }
   }
 
-  console.log("\n=== Analyses missing in prod (by symbol+week) ===\n");
+  console.log("\n=== Analyses missing in prod (by id) ===\n");
   const missingAnalyses = db
     .prepare(
-      `SELECT a.symbol, a.week_start, a.week_end, a.signal
+      `SELECT a.symbol, a.analysis_date, a.signal
        FROM local.stock_analysis a
-       LEFT JOIN prod.stock_analysis p
-         ON p.symbol = a.symbol AND p.week_start = a.week_start
+       LEFT JOIN prod.stock_analysis p ON p.id = a.id
        WHERE p.id IS NULL`,
     )
-    .all() as { symbol: string; week_start: string; week_end: string; signal: string }[];
+    .all() as { symbol: string; analysis_date: string; signal: string }[];
   if (missingAnalyses.length === 0) {
     console.log("  (none)");
   } else {
     for (const a of missingAnalyses.slice(0, 20)) {
-      console.log(`  ${a.symbol} | ${a.week_start} → ${a.week_end} | ${a.signal}`);
+      console.log(`  ${a.symbol} | ${a.analysis_date} | ${a.signal}`);
     }
     if (missingAnalyses.length > 20) {
       console.log(`  ... and ${missingAnalyses.length - 20} more`);
@@ -148,20 +147,24 @@ if (mode === "diff") {
   console.log("\n=== Analyses newer in local ===\n");
   const newerAnalyses = db
     .prepare(
-      `SELECT a.symbol, a.week_start, a.updated_at AS local_updated, p.updated_at AS prod_updated
+      `SELECT a.symbol, a.analysis_date, a.updated_at AS local_updated, p.updated_at AS prod_updated
        FROM local.stock_analysis a
-       JOIN prod.stock_analysis p
-         ON p.symbol = a.symbol AND p.week_start = a.week_start
+       JOIN prod.stock_analysis p ON p.id = a.id
        WHERE a.updated_at > p.updated_at`,
     )
-    .all() as { symbol: string; week_start: string; local_updated: number; prod_updated: number }[];
+    .all() as {
+    symbol: string;
+    analysis_date: string;
+    local_updated: number;
+    prod_updated: number;
+  }[];
   if (newerAnalyses.length === 0) {
     console.log("  (none)");
   } else {
     for (const a of newerAnalyses.slice(0, 20)) {
       const dLocal = new Date(a.local_updated).toISOString();
       const dProd = new Date(a.prod_updated).toISOString();
-      console.log(`  ${a.symbol} | ${a.week_start} | local=${dLocal} > prod=${dProd}`);
+      console.log(`  ${a.symbol} | ${a.analysis_date} | local=${dLocal} > prod=${dProd}`);
     }
     if (newerAnalyses.length > 20) {
       console.log(`  ... and ${newerAnalyses.length - 20} more`);
@@ -240,51 +243,47 @@ const tx = db.transaction(() => {
   /* ── 4. stockAnalysis ──────────────────────────────────────────────── */
   console.log("\n[stockAnalysis]");
 
-  // 4a. Insert analyses that don't exist in prod (by symbol+week_start)
+  // 4a. Insert analyses that don't exist in prod (append-only by id)
   const insertedAnalyses = db
     .prepare(
-      `INSERT INTO stock_analysis (id, symbol, week_start, week_end, signal, cycle, cycle_timeframe, cycle_strength, confidence, reasoning, thesis_json, thesis_version, price_at_analysis, last_triggered_by_user_id, created_at, updated_at)
-     SELECT a.id, a.symbol, a.week_start, a.week_end, a.signal, a.cycle, a.cycle_timeframe, a.cycle_strength, a.confidence, a.reasoning, a.thesis_json, a.thesis_version, a.price_at_analysis, a.last_triggered_by_user_id, a.created_at, a.updated_at
+      `INSERT INTO stock_analysis (id, symbol, analysis_date, signal, cycle, cycle_timeframe, cycle_strength, confidence, reasoning, thesis_json, thesis_version, macro_thesis_json, price_at_analysis, last_triggered_by_user_id, created_at, updated_at)
+     SELECT a.id, a.symbol, a.analysis_date, a.signal, a.cycle, a.cycle_timeframe, a.cycle_strength, a.confidence, a.reasoning, a.thesis_json, a.thesis_version, a.macro_thesis_json, a.price_at_analysis, a.last_triggered_by_user_id, a.created_at, a.updated_at
      FROM local.stock_analysis a
-     LEFT JOIN stock_analysis p ON p.symbol = a.symbol AND p.week_start = a.week_start
+     LEFT JOIN stock_analysis p ON p.id = a.id
      WHERE p.id IS NULL`,
     )
     .run();
   console.log(`  inserted (new): ${insertedAnalyses.changes} rows`);
 
-  // 4b. Update analyses that exist in prod but local is newer
-  // We must keep prod.id so child FKs remain valid.
+  // 4b. Update analyses that already exist in prod when local is newer.
   const updatedAnalyses = db
     .prepare(
       `UPDATE stock_analysis AS p
-     SET week_end            = a.week_end,
-         signal              = a.signal,
-         cycle               = a.cycle,
-         cycle_timeframe     = a.cycle_timeframe,
-         cycle_strength      = a.cycle_strength,
-         confidence          = a.confidence,
-         reasoning           = a.reasoning,
-         thesis_json         = a.thesis_json,
-         thesis_version      = a.thesis_version,
-         price_at_analysis   = a.price_at_analysis,
+     SET analysis_date        = a.analysis_date,
+         signal               = a.signal,
+         cycle                = a.cycle,
+         cycle_timeframe      = a.cycle_timeframe,
+         cycle_strength       = a.cycle_strength,
+         confidence           = a.confidence,
+         reasoning            = a.reasoning,
+         thesis_json          = a.thesis_json,
+         thesis_version       = a.thesis_version,
+         macro_thesis_json    = a.macro_thesis_json,
+         price_at_analysis    = a.price_at_analysis,
          last_triggered_by_user_id = a.last_triggered_by_user_id,
-         updated_at          = a.updated_at
+         updated_at           = a.updated_at
      FROM local.stock_analysis a
-     WHERE p.symbol = a.symbol AND p.week_start = a.week_start AND a.updated_at > p.updated_at`,
+     WHERE p.id = a.id AND a.updated_at > p.updated_at`,
     )
     .run();
   console.log(`  updated (local newer): ${updatedAnalyses.changes} rows`);
 
-  // Build a mapping of local analysis id → prod analysis id for rows that share (symbol, week_start)
-  // This lets us correctly map child tables (dailySignal, supervisorAlert) even when IDs differ.
+  // IDs are preserved across DB syncs, so child tables can keep direct references.
   const idMap: Map<string, string> = new Map();
-  const rows = db
-    .prepare(
-      `SELECT a.id AS local_id, p.id AS prod_id
-       FROM local.stock_analysis a
-       JOIN stock_analysis p ON p.symbol = a.symbol AND p.week_start = a.week_start`,
-    )
-    .all() as { local_id: string; prod_id: string }[];
+  const rows = db.prepare(`SELECT id AS local_id, id AS prod_id FROM stock_analysis`).all() as {
+    local_id: string;
+    prod_id: string;
+  }[];
   for (const r of rows) {
     idMap.set(r.local_id, r.prod_id);
   }

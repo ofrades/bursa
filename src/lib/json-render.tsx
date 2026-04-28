@@ -502,11 +502,11 @@ export function buildAnalysisSpec(recData: any, community = false) {
         props: {
           columns: ["Metric", "Value"],
           rows: [
-            ["Weekly outlook", recData?.weeklyOutlook ?? "—"],
+            ["Outlook", recData?.weeklyOutlook ?? "—"],
             ["Risk", recData?.riskLevel ?? "—"],
             ["Price target", recData?.priceTarget != null ? `$${recData.priceTarget}` : "—"],
             ["Stop loss", recData?.stopLoss != null ? `$${recData.stopLoss}` : "—"],
-            ["Weekly trend", recData?.weeklyTrend ?? "—"],
+            ["Trend", recData?.weeklyTrend ?? "—"],
             [
               "Pullback to 21 EMA",
               recData?.pullbackTo21EMA === true

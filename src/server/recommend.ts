@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { format, startOfWeek, endOfWeek } from "date-fns";
+import { format } from "date-fns";
 import { stockAnalysis, dailySignal, stock, stockMemory, supervisorAlert } from "../lib/schema";
 import { authMiddleware } from "./middleware";
 import { buildInitialMemory } from "./memory";
@@ -62,8 +62,7 @@ export type RecommendationResult = {
   pullbackTo21EMA?: boolean;
   consolidationBreakout21EMA?: boolean;
   priceAtAnalysis: number | null;
-  weekStart: string;
-  weekEnd: string;
+  analysisDate: string;
   talebreview: SupervisorReview | null;
   buffettReview: SupervisorReview | null;
 };
@@ -359,10 +358,10 @@ STRATEGY SETUP (evaluate and include in SIGNAL_JSON):
 3. Consolidation breakout near 21 EMA — is there a strong daily candle breaking above recent consolidation/high away from the 21 EMA?
 
 RECONCILE SETUP VS FUNDAMENTALS:
-- A weekly recommendation can be tactical, but it must still respect fundamentals.
+- A current recommendation can be tactical, but it must still respect fundamentals.
 - If the near-term setup is bullish while revenue / cash flow / debt / valuation look weak, you may still return BUY only as a tactical setup: lower confidence, say clearly that it is a shorter-term timing call, and mention the weak fundamentals in keyBearishFactors and reasoning.
-- If fundamentals look decent but the setup is weak, you may still return SELL for this week: explain that it is a timing / risk-management call, not a claim that the business is bad, and mention the stronger fundamentals in keyBullishFactors or reasoning.
-- Do not present the weekly signal as a broad business verdict when the evidence is mixed.
+- If fundamentals look decent but the setup is weak, you may still return SELL for now: explain that it is a timing / risk-management call, not a claim that the business is bad, and mention the stronger fundamentals in keyBullishFactors or reasoning.
+- Do not present the current signal as a broad business verdict when the evidence is mixed.
 ────────────────────────────────────────────────────────────────
 
 Respond with EXACTLY these five sections, nothing else:
@@ -386,7 +385,7 @@ Warren Buffett's lens: moat, margin of safety, rationality, long-term value. Alw
 <updated full memory markdown — include today's signal, cycle, opportunity score, and any new observations>`;
 
 const JSON_ONLY_SYSTEM_PROMPT = `You are an expert stock analyst. Return ONLY one valid JSON object. No markdown fences. No prose.
-If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat weekly signals as timing calls, not blanket business verdicts.
+If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat signals as timing calls, not blanket business verdicts.
 
 Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants):
 {"signal":"BUY"|"SELL","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<2-3 sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<3-4 sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}`;
@@ -396,8 +395,7 @@ export function buildPrompt(
   memory: string,
   setupContext: string,
   isDaily: boolean,
-  weekStart: string,
-  weekEnd: string,
+  analysisDate: string,
 ): AIMessages {
   const fmt = (n: number | null | undefined, dec = 2) => (n != null ? n.toFixed(dec) : "N/A");
 
@@ -425,8 +423,8 @@ Next earnings: ${d.earningsDate ? new Date(d.earningsDate).toDateString() : "N/A
 
 ${
   isDaily
-    ? `CONTEXT: Daily update for week ${weekStart}–${weekEnd}. Only set signalChanged=true if something material shifted.`
-    : `CONTEXT: Weekly recommendation for ${weekStart}–${weekEnd}.`
+    ? `CONTEXT: Daily update as of ${analysisDate}. Only set signalChanged=true if something material shifted.`
+    : `CONTEXT: Shared analysis as of ${analysisDate}.`
 }`;
   return { system: ANALYSIS_SYSTEM_PROMPT, user };
 }
@@ -435,8 +433,7 @@ export function buildJsonOnlyRetryPrompt(
   d: StockData,
   setupContext: string,
   isDaily: boolean,
-  weekStart: string,
-  weekEnd: string,
+  analysisDate: string,
 ): AIMessages {
   const fmt = (n: number | null | undefined, dec = 2) => (n != null ? n.toFixed(dec) : "N/A");
   const user = `STOCK: ${d.symbol} | PRICE: $${fmt(d.currentPrice)} (${fmt(d.dayChange)}% today)
@@ -449,7 +446,7 @@ Op margin: ${d.operatingMargin != null ? (d.operatingMargin * 100).toFixed(1) + 
 Debt service: EBITDA ${d.ebitda ? "$" + (d.ebitda / 1e9).toFixed(2) + "B" : "N/A"} | Op cash ${d.operatingCashflow ? "$" + (d.operatingCashflow / 1e9).toFixed(2) + "B" : "N/A"} | Current ratio ${fmt(d.currentRatio, 1)}
 Revision trend: est vs 30d ${fmt(d.earningsEstimateDelta30dPct, 1)}% | rev balance 30d ${fmt(d.revisionBalance30d, 0)} | Days to earnings ${fmt(d.daysToEarnings, 0)}
 SETUP CONTEXT: ${setupContext}
-CONTEXT: ${isDaily ? `Daily update ${weekStart}–${weekEnd}.` : `Weekly rec ${weekStart}–${weekEnd}.`}`;
+CONTEXT: ${isDaily ? `Daily update as of ${analysisDate}.` : `Shared analysis as of ${analysisDate}.`}`;
   return { system: JSON_ONLY_SYSTEM_PROMPT, user };
 }
 
@@ -823,7 +820,7 @@ async function saveSupervisorAlerts(
 function parseFullResponse(raw: string): {
   signal: Omit<
     RecommendationResult,
-    "id" | "priceAtAnalysis" | "weekStart" | "weekEnd" | "talebreview" | "buffettReview"
+    "id" | "priceAtAnalysis" | "analysisDate" | "talebreview" | "buffettReview"
   >;
   talebreview: SupervisorReview | null;
   buffettReview: SupervisorReview | null;
@@ -934,16 +931,14 @@ export async function saveAnalysisFromStreamedText({
   rawText,
   stockData,
   userId,
-  weekStart,
-  weekEnd,
+  analysisDate,
 }: {
   db: Awaited<ReturnType<typeof import("../lib/db").getDb>>;
   symbol: string;
   rawText: string;
   stockData: Awaited<ReturnType<typeof gatherStockData>>;
   userId: string;
-  weekStart: string;
-  weekEnd: string;
+  analysisDate: string;
 }): Promise<string> {
   let parsed: ReturnType<typeof parseFullResponse>;
   try {
@@ -970,12 +965,13 @@ export async function saveAnalysisFromStreamedText({
     },
   );
 
-  const existing = await db.select().from(stockAnalysis).where(eq(stockAnalysis.symbol, symbol));
-  const thisWeek = existing.find((r) => r.weekStart === weekStart);
-  const recId = thisWeek?.id ?? randomUUID();
+  const recId = randomUUID();
   const now = new Date();
 
-  const analysisPayload = {
+  await db.insert(stockAnalysis).values({
+    id: recId,
+    symbol,
+    analysisDate,
     signal: parsedSignal.signal as Signal,
     cycle: parsedSignal.cycle ?? null,
     cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
@@ -987,21 +983,9 @@ export async function saveAnalysisFromStreamedText({
     macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
     priceAtAnalysis: stockData.currentPrice,
     lastTriggeredByUserId: userId,
+    createdAt: now,
     updatedAt: now,
-  };
-
-  if (thisWeek) {
-    await db.update(stockAnalysis).set(analysisPayload).where(eq(stockAnalysis.id, recId));
-  } else {
-    await db.insert(stockAnalysis).values({
-      id: recId,
-      symbol,
-      weekStart,
-      weekEnd,
-      ...analysisPayload,
-      createdAt: now,
-    });
-  }
+  });
 
   await saveSupervisorAlerts(db, symbol, recId, talebreview, buffettReview);
   await db.update(stock).set({ lastAnalyzedAt: now }).where(eq(stock.symbol, symbol));
@@ -1032,8 +1016,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     const db = await getDb();
 
     const today = new Date();
-    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
-    const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const analysisDate = format(today, "yyyy-MM-dd");
 
     const [stockData, memory] = await Promise.all([
       gatherStockData(data.symbol),
@@ -1046,7 +1029,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const messages = buildPrompt(stockData, memory, setupContext, false, weekStart, weekEnd);
+    const messages = buildPrompt(stockData, memory, setupContext, false, analysisDate);
     const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 
@@ -1056,7 +1039,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     } catch {
       // Fallback: retry for signal JSON only
       const retry = await callAIWithUsage(
-        buildJsonOnlyRetryPrompt(stockData, setupContext, false, weekStart, weekEnd),
+        buildJsonOnlyRetryPrompt(stockData, setupContext, false, analysisDate),
       );
       usage = mergeUsages([usage, retry.usage]);
       const signalOnly = parseAiJson<any>(retry.text);
@@ -1088,16 +1071,13 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       },
     );
 
-    // Upsert global analysis
-    const existing = await db
-      .select()
-      .from(stockAnalysis)
-      .where(eq(stockAnalysis.symbol, data.symbol));
-    const thisWeek = existing.find((r) => r.weekStart === weekStart);
-    const recId = thisWeek?.id ?? randomUUID();
+    const recId = randomUUID();
     const now = new Date();
 
-    const analysisPayload = {
+    await db.insert(stockAnalysis).values({
+      id: recId,
+      symbol: data.symbol,
+      analysisDate,
       signal: parsedSignal.signal as Signal,
       cycle: parsedSignal.cycle ?? null,
       cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
@@ -1109,21 +1089,9 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
       priceAtAnalysis: stockData.currentPrice,
       lastTriggeredByUserId: ctx.session.sub,
+      createdAt: now,
       updatedAt: now,
-    };
-
-    if (thisWeek) {
-      await db.update(stockAnalysis).set(analysisPayload).where(eq(stockAnalysis.id, recId));
-    } else {
-      await db.insert(stockAnalysis).values({
-        id: recId,
-        symbol: data.symbol,
-        weekStart,
-        weekEnd,
-        ...analysisPayload,
-        createdAt: now,
-      });
-    }
+    });
 
     // Save supervisor alerts
     await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
@@ -1145,8 +1113,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
       cycleStrength: parsedSignal.cycleStrength ?? null,
       priceAtAnalysis: stockData.currentPrice,
-      weekStart,
-      weekEnd,
+      analysisDate,
       talebreview,
       buffettReview,
     };
@@ -1172,8 +1139,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
     const db = await getDb();
 
     const today = new Date();
-    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
-    const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const analysisDate = format(today, "yyyy-MM-dd");
 
     const [analysis] = await db
       .select()
@@ -1192,7 +1158,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const messages = buildPrompt(stockData, memory, setupContext, true, weekStart, weekEnd);
+    const messages = buildPrompt(stockData, memory, setupContext, true, analysisDate);
     const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 
@@ -1201,7 +1167,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       parsed = parseFullResponse(initial.text);
     } catch {
       const retry = await callAIWithUsage(
-        buildJsonOnlyRetryPrompt(stockData, setupContext, true, weekStart, weekEnd),
+        buildJsonOnlyRetryPrompt(stockData, setupContext, true, analysisDate),
       );
       usage = mergeUsages([usage, retry.usage]);
       const signalOnly = parseAiJson<any>(retry.text);
@@ -1234,39 +1200,43 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       },
     );
 
-    await db
-      .update(stockAnalysis)
-      .set({
-        signal: parsedSignal.signal as Signal,
-        cycle: parsedSignal.cycle ?? null,
-        cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
-        cycleStrength: parsedSignal.cycleStrength ?? null,
-        confidence: parsedSignal.confidence,
-        reasoning: JSON.stringify(parsedSignal),
-        thesisJson,
-        thesisVersion,
-        macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
-        priceAtAnalysis: stockData.currentPrice,
-        lastTriggeredByUserId: ctx.session.sub,
-        updatedAt: new Date(),
-      })
-      .where(eq(stockAnalysis.id, data.analysisId));
+    const recId = randomUUID();
+    const now = new Date();
+
+    await db.insert(stockAnalysis).values({
+      id: recId,
+      symbol: data.symbol,
+      analysisDate,
+      signal: parsedSignal.signal as Signal,
+      cycle: parsedSignal.cycle ?? null,
+      cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
+      cycleStrength: parsedSignal.cycleStrength ?? null,
+      confidence: parsedSignal.confidence,
+      reasoning: JSON.stringify(parsedSignal),
+      thesisJson,
+      thesisVersion,
+      macroThesisJson: opportunityJson ? JSON.stringify(opportunityJson) : null,
+      priceAtAnalysis: stockData.currentPrice,
+      lastTriggeredByUserId: ctx.session.sub,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     await db.insert(dailySignal).values({
       id: randomUUID(),
-      stockAnalysisId: data.analysisId,
+      stockAnalysisId: recId,
       symbol: data.symbol,
-      date: format(today, "yyyy-MM-dd"),
+      date: analysisDate,
       signal: parsedSignal.signal as Signal,
       cycle: parsedSignal.cycle ?? null,
       note: parsedSignal.reasoning,
       priceAtUpdate: stockData.currentPrice,
       signalChanged: changed,
       trigger: "manual",
-      createdAt: new Date(),
+      createdAt: now,
     });
 
-    await saveSupervisorAlerts(db, data.symbol, data.analysisId, talebreview, buffettReview);
+    await saveSupervisorAlerts(db, data.symbol, recId, talebreview, buffettReview);
 
     if (memoryUpdate) await writeMemory(data.symbol, memoryUpdate);
 
@@ -1276,7 +1246,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
     }
 
     return {
-      id: data.analysisId,
+      id: recId,
       ...parsedSignal,
       signal: parsedSignal.signal as Signal,
       cycle: parsedSignal.cycle ?? null,
@@ -1284,8 +1254,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       cycleStrength: parsedSignal.cycleStrength ?? null,
       signalChanged: changed,
       priceAtAnalysis: stockData.currentPrice,
-      weekStart,
-      weekEnd,
+      analysisDate,
       talebreview,
       buffettReview,
     };
@@ -1307,8 +1276,7 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
     const db = await getDb();
 
     const today = new Date();
-    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
-    const weekEnd = format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const analysisDate = format(today, "yyyy-MM-dd");
 
     const stockData = await gatherStockData(data.symbol);
 
@@ -1318,8 +1286,7 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
       rawText: data.rawText,
       stockData,
       userId: ctx.session.sub,
-      weekStart,
-      weekEnd,
+      analysisDate,
     });
 
     // Re-parse just to build the return value the callers expect.
@@ -1334,8 +1301,7 @@ export const saveWeeklyAnalysis = createServerFn({ method: "POST" })
       cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
       cycleStrength: parsedSignal.cycleStrength ?? null,
       priceAtAnalysis: stockData.currentPrice,
-      weekStart,
-      weekEnd,
+      analysisDate,
       talebreview,
       buffettReview,
     };
