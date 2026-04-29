@@ -213,6 +213,28 @@ export const watchlist = sqliteTable(
   (t) => [unique("uq_watchlist_user_symbol").on(t.userId, t.symbol)],
 );
 
+// ─── Wallet top-ups ───────────────────────────────────────────────────────────
+
+export const walletTopUp = sqliteTable(
+  "wallet_top_up",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id").notNull(),
+    stripeEventId: text("stripe_event_id"),
+    amountCents: integer("amount_cents").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(now),
+  },
+  (t) => [
+    unique("uq_wallet_top_up_checkout_session").on(t.stripeCheckoutSessionId),
+    index("idx_wallet_top_up_user").on(t.userId),
+  ],
+);
+
 // ─── Usage log (per-analysis cost tracking) ───────────────────────────────────
 
 export const usageLog = sqliteTable(
@@ -244,4 +266,5 @@ export type StockAnalysis = typeof stockAnalysis.$inferSelect;
 export type DailySignal = typeof dailySignal.$inferSelect;
 export type SupervisorAlert = typeof supervisorAlert.$inferSelect;
 export type Watchlist = typeof watchlist.$inferSelect;
+export type WalletTopUp = typeof walletTopUp.$inferSelect;
 export type UsageLog = typeof usageLog.$inferSelect;

@@ -193,6 +193,24 @@ function runMigrations(sqlite: any) {
   // wallet migration — additive
   addCol("user", "wallet_balance", "integer NOT NULL DEFAULT 0");
 
+  // wallet_top_up — idempotent Stripe checkout credits ledger
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS wallet_top_up (
+      id text PRIMARY KEY NOT NULL,
+      user_id text NOT NULL,
+      stripe_checkout_session_id text NOT NULL,
+      stripe_event_id text,
+      amount_cents integer NOT NULL,
+      created_at integer NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE cascade
+    )
+  `);
+  addCol("wallet_top_up", "stripe_event_id", "text");
+  sqlite.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_top_up_checkout_session ON wallet_top_up (stripe_checkout_session_id)`,
+  );
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_wallet_top_up_user ON wallet_top_up (user_id)`);
+
   // watchlist -> saved/watching tiers
   addCol("watchlist", "is_saved", "integer NOT NULL DEFAULT 1");
   addCol("watchlist", "is_watching", "integer NOT NULL DEFAULT 1");

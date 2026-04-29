@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { eq } from "drizzle-orm";
 import type StripeType from "stripe";
 import { getDb } from "../../../lib/db";
-import { user } from "../../../lib/schema";
+import { applyWalletTopUp } from "../../../lib/wallet-topup";
 
 // POST /api/billing/webhook — Stripe webhook endpoint
 // Handles checkout.session.completed to top up user wallet.
@@ -53,17 +52,23 @@ export const Route = createFileRoute("/api/billing/webhook")({
             return new Response("Nothing to add", { status: 200 });
           }
 
-          const [u] = await db.select().from(user).where(eq(user.id, userId));
-          if (!u) {
-            return new Response("User not found", { status: 404 });
-          }
+          try {
+            const result = await applyWalletTopUp(db, {
+              userId,
+              checkoutSessionId: session.id,
+              stripeEventId: event.id,
+              centsToAdd,
+            });
 
-          await db
-            .update(user)
-            .set({
-              walletBalance: (u.walletBalance ?? 0) + centsToAdd,
-            })
-            .where(eq(user.id, userId));
+            if (result.status === "duplicate") {
+              return new Response("Already processed", { status: 200 });
+            }
+          } catch (error) {
+            if (error instanceof Error && error.message === "User not found") {
+              return new Response("User not found", { status: 404 });
+            }
+            throw error;
+          }
         }
 
         return new Response("OK", { status: 200 });
