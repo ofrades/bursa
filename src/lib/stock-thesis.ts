@@ -74,6 +74,48 @@ export function parseStockThesis(value: unknown): StockThesis | null {
   }
 }
 
+/**
+ * Inflate an AI-generated THESIS_JSON object into the full StockThesis shape.
+ * The AI outputs every pillar directly; we only add version and compute the
+ * confidence delta (adjusted - base) from the signal's raw confidence.
+ */
+export function parseAIStockThesis(
+  raw: Record<string, unknown>,
+  signalConfidence: number | null,
+): StockThesis | null {
+  try {
+    const base = signalConfidence;
+    const adjusted = typeof raw.confidence === "number" ? raw.confidence : base;
+    const delta = base != null && adjusted != null ? Math.round(adjusted - base) : 0;
+
+    const pillar = (p: unknown): ThesisPillar => {
+      const obj = p as Record<string, unknown>;
+      return {
+        title: String(obj?.title ?? ""),
+        value: String(obj?.value ?? ""),
+        tone: (obj?.tone as ThesisTone) ?? "balanced",
+        summary: String(obj?.summary ?? ""),
+      };
+    };
+
+    return {
+      version: STOCK_THESIS_VERSION,
+      title: String(raw.title ?? ""),
+      summary: String(raw.summary ?? ""),
+      tone: (raw.tone as ThesisTone) ?? "balanced",
+      confidence: { base, adjusted, delta },
+      ownability: pillar(raw.ownability),
+      actionability: pillar(raw.actionability),
+      survivability: pillar(raw.survivability),
+      alignment: pillar(raw.alignment),
+      support: Array.isArray(raw.support) ? raw.support.map(String) : [],
+      limits: Array.isArray(raw.limits) ? raw.limits.map(String) : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }

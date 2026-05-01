@@ -8,7 +8,7 @@ import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
 import { buildSimpleAnalysisSpec } from "../lib/simple-analysis-spec";
 import { getWeeklyRecommendationDisplay } from "../lib/recommendation-labels";
 import type { MacroThesis, SimpleAnalysisEvidence } from "../lib/simple-analysis";
-import { buildStockThesis } from "../lib/stock-thesis";
+import { buildStockThesis, parseAIStockThesis } from "../lib/stock-thesis";
 import { StockThesisCard } from "./StockThesisCard";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -25,7 +25,17 @@ const STREAM_SECTION_MARKERS = [
     tone: "text-emerald-700 dark:text-emerald-300",
   },
   {
-    marker: "3. MEMORY_UPDATE:",
+    marker: "3. THESIS_JSON:",
+    label: "Thesis pillars",
+    tone: "text-blue-700 dark:text-blue-300",
+  },
+  {
+    marker: "4. CONTEXT_JSON:",
+    label: "Business context",
+    tone: "text-amber-700 dark:text-amber-300",
+  },
+  {
+    marker: "5. MEMORY_UPDATE:",
     label: "Memory update",
     tone: "text-fuchsia-700 dark:text-fuchsia-300",
   },
@@ -106,6 +116,23 @@ export function StreamingAnalysis({
 
   const opportunity = sections.opportunityJson;
   const signal = sections.signalJson;
+  const aiThesis = sections.thesisJson;
+  const aiContext = sections.contextJson;
+
+  // Merge AI-generated context into the pre-loaded market evidence so the
+  // ContextCard shows company-specific copy while streaming.
+  const enrichedSimpleAnalysis = useMemo(() => {
+    if (!simpleAnalysis) return null;
+    if (!aiContext) return simpleAnalysis;
+    return {
+      ...simpleAnalysis,
+      ...(typeof aiContext.title === "string" ? { title: aiContext.title } : {}),
+      ...(typeof aiContext.summary === "string" ? { summary: aiContext.summary } : {}),
+      ...(Array.isArray(aiContext.takeaways)
+        ? { takeaways: (aiContext.takeaways as unknown[]).map(String) }
+        : {}),
+    };
+  }, [simpleAnalysis, aiContext]);
 
   const hasOpportunity = opportunity != null;
   const hasSignal = signal != null;
@@ -127,16 +154,28 @@ export function StreamingAnalysis({
   }, [hasOpportunity, opportunity]);
 
   const simpleAnalysisSpec = useMemo(() => {
-    if (!simpleAnalysis) return null;
+    if (!enrichedSimpleAnalysis) return null;
     try {
-      return buildSimpleAnalysisSpec(simpleAnalysis);
+      return buildSimpleAnalysisSpec(enrichedSimpleAnalysis);
     } catch {
       return null;
     }
-  }, [simpleAnalysis]);
+  }, [enrichedSimpleAnalysis]);
 
   const stockThesis = useMemo(() => {
-    if (!hasSignal || !simpleAnalysis) return null;
+    if (!hasSignal) return null;
+    // Prefer the AI-generated thesis pillars; fall back to rule engine if not yet parsed.
+    if (aiThesis) {
+      try {
+        return parseAIStockThesis(
+          aiThesis as Record<string, unknown>,
+          (signal?.confidence as number | null | undefined) ?? null,
+        );
+      } catch {
+        // fall through to buildStockThesis
+      }
+    }
+    if (!enrichedSimpleAnalysis) return null;
     try {
       return buildStockThesis(
         {
@@ -156,7 +195,7 @@ export function StreamingAnalysis({
           keyBullishFactors: (signal?.keyBullishFactors as string[] | undefined) ?? undefined,
           keyBearishFactors: (signal?.keyBearishFactors as string[] | undefined) ?? undefined,
         },
-        simpleAnalysis,
+        enrichedSimpleAnalysis,
         {
           hasExtremeRisk: false,
           macroThesis: (opportunity as MacroThesis | null | undefined) ?? null,
@@ -165,7 +204,7 @@ export function StreamingAnalysis({
     } catch {
       return null;
     }
-  }, [hasSignal, opportunity, signal, simpleAnalysis]);
+  }, [hasSignal, aiThesis, enrichedSimpleAnalysis, opportunity, signal]);
 
   const liveTranscriptCard = showLiveTranscript ? (
     <Card>
@@ -335,8 +374,8 @@ export function StreamingAnalysis({
         </Card>
       )}
 
-      {/* What helps / what to watch */}
-      {hasSignal && (
+      {/* What helps / what to watch — only when no thesis card (thesis already covers these) */}
+      {hasSignal && !stockThesis && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardHeader>

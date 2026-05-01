@@ -84,16 +84,20 @@ export function splitMemoryUpdate(raw: string): { jsonPart: string; memoryUpdate
 export function parseStructuredResponse(raw: string): {
   signalJson: string | null;
   opportunityJson: string | null;
+  thesisJson: string | null;
+  contextJson: string | null;
   memoryUpdate: string | null;
 } {
   const signalJson = extractBlockAfterLabel(raw, "SIGNAL_JSON:");
   const opportunityJson = extractBlockAfterLabel(raw, "OPPORTUNITY_JSON:");
+  const thesisJson = extractBlockAfterLabel(raw, "THESIS_JSON:");
+  const contextJson = extractBlockAfterLabel(raw, "CONTEXT_JSON:");
 
   const memoryIdx = raw.indexOf("MEMORY_UPDATE:");
   const memoryUpdate =
     memoryIdx !== -1 ? raw.slice(memoryIdx + "MEMORY_UPDATE:".length).trim() : null;
 
-  return { signalJson, opportunityJson, memoryUpdate };
+  return { signalJson, opportunityJson, thesisJson, contextJson, memoryUpdate };
 }
 
 export function parseAiJson<T = unknown>(raw: string): T {

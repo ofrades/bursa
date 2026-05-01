@@ -269,6 +269,39 @@ type StockData = Awaited<ReturnType<typeof gatherStockData>>;
 // ─── AI prompt ────────────────────────────────────────────────────────────────
 
 /**
+ * Translates raw EMA/volume numbers into plain-language setup labels.
+ * This is placed in ## SETUP CONTEXT so the model gets an interpreted signal
+ * before the wall of raw numbers in ## CURRENT MARKET DATA.
+ */
+function describeSetup(d: StockData): string {
+  const parts: string[] = [];
+
+  if (d.priceVsEMA21 != null) {
+    const abs = Math.abs(d.priceVsEMA21).toFixed(1);
+    if (Math.abs(d.priceVsEMA21) <= 2) {
+      parts.push(`price near the daily 21 EMA (${d.priceVsEMA21 >= 0 ? "+" : ""}${abs}%)`);
+    } else if (d.priceVsEMA21 > 0) {
+      parts.push(`price extended ${abs}% above the daily 21 EMA`);
+    } else {
+      parts.push(`price ${abs}% below the daily 21 EMA`);
+    }
+  }
+
+  if (d.priceVsWeeklyEMA21 != null) {
+    const dir = d.priceVsWeeklyEMA21 > 0 ? "above" : "below";
+    parts.push(`${Math.abs(d.priceVsWeeklyEMA21).toFixed(1)}% ${dir} the weekly 21 EMA`);
+  }
+
+  if (d.volumeTrend != null) {
+    if (d.volumeTrend > 5) parts.push(`volume expanding (+${d.volumeTrend.toFixed(1)}%)`);
+    else if (d.volumeTrend < -5) parts.push(`volume contracting (${d.volumeTrend.toFixed(1)}%)`);
+    else parts.push(`volume roughly flat`);
+  }
+
+  return parts.length ? parts.join("; ") + "." : "Setup data unavailable.";
+}
+
+/**
  * Structured messages for every AI call.
  * `system` is 100% static → Moonshot AI auto-caches it after the first request (0.25× price on reads).
  * `user` is per-symbol dynamic data only.
@@ -278,7 +311,7 @@ export type AIMessages = { system: string; user: string };
 // Static system prompt — identical across all symbols and all calls.
 // OpenRouter sticky-routes by hashing the first system message, so all requests
 // hit the same Moonshot AI endpoint and benefit from cached prefix tokens.
-const ANALYSIS_SYSTEM_PROMPT = `You are a desruptive equity analyst witch investigates present and future demand to predict tomorrow winners.
+const ANALYSIS_SYSTEM_PROMPT = `You are a disruptive equity analyst who investigates present and future demand to predict tomorrow's winners.
 Your job: produce a structured multi-section response. Follow the format exactly — no markdown fences, no extra commentary.
 
 ────────────────────────────────────────────────────────────────
@@ -287,6 +320,9 @@ CYCLE DEFINITIONS (use these to pick the cycle):
 - MARKUP: Uptrend confirmed, momentum building, breakouts. Signal → BUY (conviction)
 - DISTRIBUTION: Smart money quietly exiting. Sideways near highs, vol divergence. Signal → SELL (early alert)
 - MARKDOWN: Downtrend confirmed, sellers in control. Signal → SELL (exit/avoid)
+
+"signal" = the cycle-direction bias (BUY for ACCUMULATION/MARKUP, SELL for DISTRIBUTION/MARKDOWN).
+"weeklyCall" = this week's tactical action; these may diverge — signal=BUY + weeklyCall=WAIT is correct when the stock is in markup but this week's entry is overextended, too risky, or unclear.
 
 TIMEFRAME DEFINITIONS:
 - SHORT: days–2 weeks (price action, volume, RSI)
@@ -316,7 +352,7 @@ RECONCILE SETUP, THESIS, AND FUNDAMENTALS:
 - Do not present the current signal as a broad business verdict when the evidence is mixed.
 ────────────────────────────────────────────────────────────────
 
-Respond with EXACTLY these three sections, nothing else:
+Respond with EXACTLY these five sections, nothing else:
 
 1. OPPORTUNITY_JSON:
 Domain expert lens: secular trends, dependency chains, demand gaps, adoption curves, scarcity, and regime shifts. Start from the physical/economic world, not valuation screens. Be specific about what the company actually sells, who buys it, and why that position could become load-bearing. Quantify 2-3 demand-to-equity scenarios so the output explicitly answers: if X demand rises, how could earnings and the stock react? Use null only when you genuinely cannot estimate. confidence should reflect your conviction in the long-term thesis over the stated horizon, not the weekly setup.
@@ -328,8 +364,21 @@ weeklyOutlook and reasoning are user-facing copy. Keep them plain, simple, and n
 weeklyOutlook should answer one simple question: does the short-term setup look promising right now or not?
 {"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<1-2 short plain-language sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<2-3 short plain-language sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
 
-3. MEMORY_UPDATE:
-<updated full memory markdown — include today's signal, cycle, opportunity score, bottleneck role, demand->earnings->equity map, and any new observations>`;
+3. THESIS_JSON:
+Synthesise the macro opportunity and weekly signal into a single investor narrative. Use specific company facts in summaries — no generic statements.
+ownability: does this company deserve to be held, given its secular position and business quality? (independent of timing)
+actionability: what is the right tactical action this week — 3-5 specific words (e.g. "Add on next pullback", "Trim into strength", "Hold and watch", "Avoid for now")
+survivability: can this company survive a downturn, dilution risk, or execution failure?
+alignment: is this week's tactical call consistent with the long-term thesis, or a deliberate divergence? Be explicit.
+confidence: your overall conviction in this thesis as stated (0-100); may differ from the weekly signal confidence.
+{"title":"<10-15 word headline combining company name, main narrative, and current stance>","summary":"<2-3 plain-language sentences synthesising macro opportunity, weekly setup, and survivability>","tone":"supportive"|"balanced"|"cautious","confidence":<0-100>,"ownability":{"value":"<3-5 words>","tone":"supportive"|"balanced"|"cautious","summary":"<1-2 sentences using specific company facts>"},"actionability":{"value":"<3-5 words>","tone":"supportive"|"balanced"|"cautious","summary":"<1-2 sentences>"},"survivability":{"value":"<3-5 words>","tone":"supportive"|"balanced"|"cautious","summary":"<1-2 sentences>"},"alignment":{"value":"<3-5 words>","tone":"supportive"|"balanced"|"cautious","summary":"<1-2 sentences stating whether this week diverges from the secular thesis and why>"},"support":["<specific bullish factor>","<second>","<third>"],"limits":["<specific risk or constraint>","<second>","<third>"]}
+
+4. CONTEXT_JSON:
+Plain-language backdrop for the fundamental evidence card shown above the business charts. Use company-specific facts, not generic statements.
+{"title":"<SYMBOL> · <7-12 word description of current business backdrop>","summary":"<2 sentences about the company's current financial health and what it means for an investor today>","takeaways":["<revenue or sales trend specific to this company>","<cash flow or profitability note>","<balance sheet or valuation note>","<one more company-specific observation>"]}
+
+5. MEMORY_UPDATE:
+<updated full memory markdown — include today's signal, cycle, opportunity score, bottleneck role, demand->earnings->equity map, and any new observations. If the signal or cycle FLIPPED from the prior entry, state explicitly what the previous call missed or got wrong and why the view changed. Challenge and revise stale conclusions rather than only appending — if a prior bullish or bearish factor has been contradicted by events, say so and remove it.>`;
 
 const JSON_ONLY_SYSTEM_PROMPT = `You are an expert stock analyst. Return ONLY one valid JSON object. No markdown fences. No prose.
 If near-term setup diverges from fundamentals, explain that clearly in reasoning and lower confidence. Treat signals as timing calls, not blanket business verdicts. For weekly timing, do not confuse "great company" with "best opportunity"; use fundamentals mainly to judge fragility and durability, not to erase genuine demand/bottleneck setups.
@@ -341,7 +390,6 @@ Required JSON (signal is BUY or SELL only, no HOLD/STRONG variants; weeklyCall m
 export function buildPrompt(
   d: StockData,
   memory: string,
-  setupContext: string,
   isDaily: boolean,
   analysisDate: string,
 ): AIMessages {
@@ -351,7 +399,7 @@ export function buildPrompt(
 ${memory}
 
 ## SETUP CONTEXT
-${setupContext}
+${describeSetup(d)}
 
 ## CURRENT MARKET DATA
 STOCK: ${d.symbol} | COMPANY: ${d.companyName ?? d.symbol} | SECTOR: ${d.sector ?? "Unknown"} | INDUSTRY: ${d.industry ?? "Unknown"}
@@ -735,11 +783,15 @@ export async function writeMemory(symbol: string, content: string) {
 function parseFullResponse(raw: string): {
   signal: Omit<RecommendationResult, "id" | "priceAtAnalysis" | "analysisDate">;
   opportunityJson: Record<string, unknown> | null;
+  thesisJson: Record<string, unknown> | null;
+  contextJson: Record<string, unknown> | null;
   memoryUpdate: string | null;
 } {
   const {
     signalJson,
     opportunityJson: rawOpportunityJson,
+    thesisJson: rawThesisJson,
+    contextJson: rawContextJson,
     memoryUpdate,
   } = parseStructuredResponse(raw);
 
@@ -756,19 +808,59 @@ function parseFullResponse(raw: string): {
     }
   }
 
-  return { signal, opportunityJson, memoryUpdate };
+  let thesisJson: Record<string, unknown> | null = null;
+  if (rawThesisJson) {
+    try {
+      thesisJson = parseAiJson<Record<string, unknown>>(rawThesisJson);
+    } catch {
+      // Non-fatal — thesis falls back to buildStockThesis
+    }
+  }
+
+  let contextJson: Record<string, unknown> | null = null;
+  if (rawContextJson) {
+    try {
+      contextJson = parseAiJson<Record<string, unknown>>(rawContextJson);
+    } catch {
+      // Non-fatal — context falls back to hardcoded strings
+    }
+  }
+
+  return { signal, opportunityJson, thesisJson, contextJson, memoryUpdate };
 }
 
 async function buildPersistedThesisJson(
   symbol: string,
   parsedSignal: any,
   stockData: StockData,
-  options?: { hasExtremeRisk?: boolean; macroThesis?: Record<string, unknown> | null },
+  options?: {
+    hasExtremeRisk?: boolean;
+    macroThesis?: Record<string, unknown> | null;
+    aiThesisJson?: Record<string, unknown> | null;
+    aiContextJson?: Record<string, unknown> | null;
+  },
 ) {
-  const [{ buildStockThesis, STOCK_THESIS_VERSION }, { getSimpleAnalysisForSymbol }] =
-    await Promise.all([import("../lib/stock-thesis"), import("./stocks")]);
+  const [
+    { buildStockThesis, parseAIStockThesis, STOCK_THESIS_VERSION },
+    { getSimpleAnalysisForSymbol },
+  ] = await Promise.all([import("../lib/stock-thesis"), import("./stocks")]);
 
   const simpleAnalysis = await getSimpleAnalysisForSymbol(symbol).catch(() => null);
+
+  // Merge AI-generated context (title, summary, takeaways) into the evidence object
+  // so the evidence card shows company-specific copy rather than hardcoded strings.
+  let enrichedSimpleAnalysis = simpleAnalysis;
+  if (simpleAnalysis && options?.aiContextJson) {
+    const ctx = options.aiContextJson;
+    enrichedSimpleAnalysis = {
+      ...simpleAnalysis,
+      ...(typeof ctx.title === "string" ? { title: ctx.title } : {}),
+      ...(typeof ctx.summary === "string" ? { summary: ctx.summary } : {}),
+      ...(Array.isArray(ctx.takeaways)
+        ? { takeaways: (ctx.takeaways as unknown[]).map(String) }
+        : {}),
+    };
+  }
 
   let macroThesis = null;
   if (options?.macroThesis) {
@@ -776,34 +868,41 @@ async function buildPersistedThesisJson(
     macroThesis = parseMacroThesis(JSON.stringify(options.macroThesis));
   }
 
-  const thesis = buildStockThesis(
-    {
-      signal: parsedSignal.signal as "BUY" | "SELL",
-      cycle: parsedSignal.cycle ?? null,
-      cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
-      confidence: parsedSignal.confidence ?? null,
-      riskLevel: parsedSignal.riskLevel,
-      weeklyTrend: parsedSignal.weeklyTrend,
-      pullbackTo21EMA: parsedSignal.pullbackTo21EMA,
-      consolidationBreakout21EMA: parsedSignal.consolidationBreakout21EMA,
-      weeklyOutlook: parsedSignal.weeklyOutlook,
-      reasoning: parsedSignal.reasoning,
-      keyBullishFactors: parsedSignal.keyBullishFactors,
-      keyBearishFactors: parsedSignal.keyBearishFactors,
-      relativeStrengthVsMarket20d: stockData.relativeStrengthVsMarket20d ?? null,
-      relativeStrengthVsSector20d: stockData.relativeStrengthVsSector20d ?? null,
-      daysToEarnings: stockData.daysToEarnings ?? null,
-      earningsEventRisk: stockData.earningsEventRisk ?? null,
-      earningsEstimateDelta30dPct: stockData.earningsEstimateDelta30dPct ?? null,
-      earningsEstimateDelta90dPct: stockData.earningsEstimateDelta90dPct ?? null,
-      revisionBalance30d: stockData.revisionBalance30d ?? null,
-    },
-    simpleAnalysis,
-    { hasExtremeRisk: options?.hasExtremeRisk, macroThesis },
-  );
+  // Prefer AI-generated thesis; fall back to rule-engine for old analyses.
+  let thesis = options?.aiThesisJson
+    ? parseAIStockThesis(options.aiThesisJson, parsedSignal.confidence ?? null)
+    : null;
+
+  if (!thesis) {
+    thesis = buildStockThesis(
+      {
+        signal: parsedSignal.signal as "BUY" | "SELL",
+        cycle: parsedSignal.cycle ?? null,
+        cycleTimeframe: parsedSignal.cycleTimeframe ?? null,
+        confidence: parsedSignal.confidence ?? null,
+        riskLevel: parsedSignal.riskLevel,
+        weeklyTrend: parsedSignal.weeklyTrend,
+        pullbackTo21EMA: parsedSignal.pullbackTo21EMA,
+        consolidationBreakout21EMA: parsedSignal.consolidationBreakout21EMA,
+        weeklyOutlook: parsedSignal.weeklyOutlook,
+        reasoning: parsedSignal.reasoning,
+        keyBullishFactors: parsedSignal.keyBullishFactors,
+        keyBearishFactors: parsedSignal.keyBearishFactors,
+        relativeStrengthVsMarket20d: stockData.relativeStrengthVsMarket20d ?? null,
+        relativeStrengthVsSector20d: stockData.relativeStrengthVsSector20d ?? null,
+        daysToEarnings: stockData.daysToEarnings ?? null,
+        earningsEventRisk: stockData.earningsEventRisk ?? null,
+        earningsEstimateDelta30dPct: stockData.earningsEstimateDelta30dPct ?? null,
+        earningsEstimateDelta90dPct: stockData.earningsEstimateDelta90dPct ?? null,
+        revisionBalance30d: stockData.revisionBalance30d ?? null,
+      },
+      enrichedSimpleAnalysis,
+      { hasExtremeRisk: options?.hasExtremeRisk, macroThesis },
+    );
+  }
 
   return {
-    simpleAnalysisJson: simpleAnalysis ? JSON.stringify(simpleAnalysis) : null,
+    simpleAnalysisJson: enrichedSimpleAnalysis ? JSON.stringify(enrichedSimpleAnalysis) : null,
     thesisJson: thesis ? JSON.stringify(thesis) : null,
     thesisVersion: thesis?.version ?? STOCK_THESIS_VERSION,
   };
@@ -838,7 +937,13 @@ export async function saveAnalysisFromStreamedText({
     throw new Error("Failed to parse streamed analysis");
   }
 
-  const { signal: parsedSignal, opportunityJson, memoryUpdate } = parsed;
+  const {
+    signal: parsedSignal,
+    opportunityJson,
+    thesisJson: aiThesisJson,
+    contextJson: aiContextJson,
+    memoryUpdate,
+  } = parsed;
 
   const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
     symbol,
@@ -847,6 +952,8 @@ export async function saveAnalysisFromStreamedText({
     {
       hasExtremeRisk: false,
       macroThesis: opportunityJson ?? null,
+      aiThesisJson: aiThesisJson ?? null,
+      aiContextJson: aiContextJson ?? null,
     },
   );
 
@@ -914,7 +1021,7 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const messages = buildPrompt(stockData, memory, setupContext, false, analysisDate);
+    const messages = buildPrompt(stockData, memory, false, analysisDate);
     const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 
@@ -935,7 +1042,13 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       };
     }
 
-    const { signal: parsedSignal, opportunityJson, memoryUpdate } = parsed;
+    const {
+      signal: parsedSignal,
+      opportunityJson,
+      thesisJson: aiThesisJson,
+      contextJson: aiContextJson,
+      memoryUpdate,
+    } = parsed;
     const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
       data.symbol,
       parsedSignal,
@@ -943,6 +1056,8 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
       {
         hasExtremeRisk: false,
         macroThesis: opportunityJson ?? null,
+        aiThesisJson: aiThesisJson ?? null,
+        aiContextJson: aiContextJson ?? null,
       },
     );
 
@@ -1029,7 +1144,7 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
     ].join(" | ");
 
-    const messages = buildPrompt(stockData, memory, setupContext, true, analysisDate);
+    const messages = buildPrompt(stockData, memory, true, analysisDate);
     const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 
@@ -1049,7 +1164,13 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       };
     }
 
-    const { signal: parsedSignal, opportunityJson, memoryUpdate } = parsed;
+    const {
+      signal: parsedSignal,
+      opportunityJson,
+      thesisJson: aiThesisJson,
+      contextJson: aiContextJson,
+      memoryUpdate,
+    } = parsed;
     const changed = parsedSignal.signal !== analysis.signal;
     const { simpleAnalysisJson, thesisJson, thesisVersion } = await buildPersistedThesisJson(
       data.symbol,
@@ -1058,6 +1179,8 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       {
         hasExtremeRisk: false,
         macroThesis: opportunityJson ?? null,
+        aiThesisJson: aiThesisJson ?? null,
+        aiContextJson: aiContextJson ?? null,
       },
     );
 

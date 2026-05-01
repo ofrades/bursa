@@ -26,6 +26,8 @@ import {
   getWeeklyRecommendationDisplay,
 } from "../lib/recommendation-labels";
 import { buildStockThesis, parseStockThesis } from "../lib/stock-thesis";
+import { buildAnalysisDiff } from "../lib/analysis-diff";
+import { AnalysisAuditCard } from "../components/AnalysisAuditCard";
 
 export const Route = createFileRoute("/$symbol")({
   validateSearch: (search): { analyze?: boolean } => ({
@@ -286,10 +288,6 @@ function StockPage() {
                 </p>
                 <div className="text-xs text-muted-foreground space-y-0.5">
                   <p>Updated: {dateStr(latestAnalysis?.updatedAt, true)}</p>
-                  <p>
-                    Confidence:{" "}
-                    {latestAnalysis?.confidence != null ? `${latestAnalysis.confidence}%` : "—"}
-                  </p>
                   <p>{session ? "Signed in" : "Browsing public data"}</p>
                 </div>
               </div>
@@ -335,7 +333,9 @@ function StockPage() {
 
             {effectiveThesis && <StockThesisCard thesis={effectiveThesis} />}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <div
+              className={`grid grid-cols-1 gap-4 items-start${effectiveThesis ? "" : " lg:grid-cols-2"}`}
+            >
               <Card>
                 <CardHeader>
                   <div>
@@ -344,31 +344,13 @@ function StockPage() {
                     </CardDescription>
                     <CardTitle className="text-xl">Latest setup</CardTitle>
                   </div>
-                  <CardAction>
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                            Weekly
-                          </span>
-                          <SignalBadge signal={weeklyRecommendation.value} />
-                        </div>
-                        {longTermRecommendation ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                              Long term
-                            </span>
-                            <LongTermBadge stance={longTermRecommendation.value} />
-                          </div>
-                        ) : null}
-                      </div>
-                      {longTermRecommendation ? (
-                        <p className="max-w-xs text-right text-xs text-muted-foreground">
-                          {longTermRecommendation.summary}
-                        </p>
-                      ) : null}
-                    </div>
-                  </CardAction>
+                  {longTermRecommendation ? (
+                    <CardAction>
+                      <p className="max-w-xs text-right text-xs text-muted-foreground">
+                        {longTermRecommendation.summary}
+                      </p>
+                    </CardAction>
+                  ) : null}
                 </CardHeader>
                 <CardContent className="flex flex-col gap-5">
                   <div className="grid grid-cols-2 gap-3">
@@ -422,47 +404,49 @@ function StockPage() {
                 </CardContent>
               </Card>
 
-              <div className="flex flex-col gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardDescription className="text-xs uppercase tracking-wider">
-                      What helps
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {bullishFactors.length ? (
-                      <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
-                        {bullishFactors.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No clear helpers saved yet.</p>
-                    )}
-                  </CardContent>
-                </Card>
+              {!effectiveThesis && (
+                <div className="flex flex-col gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardDescription className="text-xs uppercase tracking-wider">
+                        What helps
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {bullishFactors.length ? (
+                        <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
+                          {bullishFactors.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No clear helpers saved yet.</p>
+                      )}
+                    </CardContent>
+                  </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardDescription className="text-xs uppercase tracking-wider">
-                      What to watch
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {bearishFactors.length ? (
-                      <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
-                        {bearishFactors.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No clear watch-outs saved yet.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                  <Card>
+                    <CardHeader>
+                      <CardDescription className="text-xs uppercase tracking-wider">
+                        What to watch
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {bearishFactors.length ? (
+                        <ul className="flex flex-col gap-2 text-sm text-muted-foreground list-disc pl-4 leading-relaxed">
+                          {bearishFactors.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          No clear watch-outs saved yet.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -479,6 +463,17 @@ function StockPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Audit: what changed since the previous run */}
+        {!streamState.isLoading &&
+          !streamState.isComplete &&
+          !streamState.text &&
+          !data.isAnalyzing &&
+          data.analysisHistory.length >= 2 && (
+            <AnalysisAuditCard
+              diff={buildAnalysisDiff(data.analysisHistory[0], data.analysisHistory[1])}
+            />
+          )}
 
         {/* History */}
         <Card className="p-0 overflow-hidden gap-0">
@@ -513,6 +508,7 @@ function StockPage() {
                     row.signal,
                     row.confidence,
                   );
+                  const rowRec = parseRecommendation(row.reasoning ?? null);
                   return (
                     <div
                       key={row.id}
@@ -575,6 +571,12 @@ function StockPage() {
                           </p>
                         </div>
                       </div>
+
+                      {rowRec?.weeklyOutlook && (
+                        <p className="mt-3 text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                          {rowRec.weeklyOutlook}
+                        </p>
+                      )}
                     </div>
                   );
                 })}

@@ -36,8 +36,7 @@ export async function applyWalletTopUp(
     }
 
     try {
-      tx
-        .insert(walletTopUp)
+      tx.insert(walletTopUp)
         .values({
           userId: input.userId,
           stripeCheckoutSessionId: input.checkoutSessionId,
@@ -52,8 +51,7 @@ export async function applyWalletTopUp(
       throw error;
     }
 
-    tx
-      .update(user)
+    tx.update(user)
       .set({ walletBalance: (account.walletBalance ?? 0) + input.centsToAdd })
       .where(eq(user.id, input.userId))
       .run();

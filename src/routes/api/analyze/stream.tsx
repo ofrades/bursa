@@ -113,13 +113,7 @@ export const Route = createFileRoute("/api/analyze/stream")({
                   readMemory(symbol),
                 ]);
 
-                const setupContext = [
-                  `Daily 21 EMA: $${stockData.ema21Daily?.toFixed(2) ?? "N/A"} (${stockData.priceVsEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
-                  `Weekly 21 EMA: $${stockData.weeklyEma21?.toFixed(2) ?? "N/A"} (${stockData.priceVsWeeklyEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
-                  `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
-                ].join(" | ");
-
-                const messages = buildPrompt(stockData, memory, setupContext, false, analysisDate);
+                const messages = buildPrompt(stockData, memory, false, analysisDate);
 
                 // Stream AI chunks — NOT aborted when client disconnects.
                 let startedTextMessage = false;
