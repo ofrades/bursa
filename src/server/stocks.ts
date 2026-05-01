@@ -343,6 +343,13 @@ export const getStockPageSupplementalData = createServerFn({ method: "GET" })
     return { simpleAnalysis };
   });
 
+export const getStockDividendData = createServerFn({ method: "GET" })
+  .inputValidator((data: { symbol: string }) => data)
+  .handler(async ({ data }) => {
+    const { getDividendData } = await import("../lib/market-data");
+    return getDividendData(data.symbol.toUpperCase());
+  });
+
 // Public preview used on landing page — gives visitors a feel for the product.
 export const getRecentSharedAnalyses = createServerFn({
   method: "GET",

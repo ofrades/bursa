@@ -516,3 +516,60 @@ export async function getAnnualCashFlowStatements(
 export function getMarketDataProviderLabel() {
   return providerFromEnv();
 }
+
+export type DividendPayment = {
+  date: Date;
+  amount: number;
+};
+
+export type DividendData = {
+  dividendRate: number | null;
+  dividendYield: number | null;
+  trailingAnnualDividendRate: number | null;
+  trailingAnnualDividendYield: number | null;
+  exDividendDate: Date | null;
+  history: DividendPayment[];
+};
+
+export async function getDividendData(symbol: string): Promise<DividendData> {
+  const { default: YahooFinance } = await import("yahoo-finance2");
+  const yf = new YahooFinance({ suppressNotices: ["ripHistorical", "yahooSurvey"] });
+
+  const period1 = new Date();
+  period1.setUTCFullYear(period1.getUTCFullYear() - 10);
+  period1.setUTCMonth(0, 1);
+  period1.setUTCHours(0, 0, 0, 0);
+
+  const [chartData, summaryData] = await Promise.allSettled([
+    yf.chart(symbol, {
+      period1,
+      period2: new Date(),
+      interval: "1mo" as any,
+      events: "div" as any,
+    }) as any,
+    yf.quoteSummary(symbol, { modules: ["summaryDetail"] }) as any,
+  ]);
+
+  const chart = chartData.status === "fulfilled" ? chartData.value : null;
+  const summary = summaryData.status === "fulfilled" ? summaryData.value : null;
+  const sd = summary?.summaryDetail ?? null;
+
+  const rawDividends: Array<{ date: any; amount?: number }> = chart?.events?.dividends ?? [];
+
+  const history: DividendPayment[] = rawDividends
+    .filter((d) => d.amount != null && d.date != null)
+    .map((d) => ({
+      date: d.date instanceof Date ? d.date : new Date(d.date),
+      amount: d.amount as number,
+    }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  return {
+    dividendRate: asNumber(sd?.dividendRate),
+    dividendYield: asNumber(sd?.dividendYield),
+    trailingAnnualDividendRate: asNumber(sd?.trailingAnnualDividendRate),
+    trailingAnnualDividendYield: asNumber(sd?.trailingAnnualDividendYield),
+    exDividendDate: sd?.exDividendDate instanceof Date ? sd.exDividendDate : null,
+    history,
+  };
+}

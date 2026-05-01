@@ -12,7 +12,11 @@ import {
   CardTitle,
   CardAction,
 } from "../components/ui/card";
-import { getStockPageData, getStockPageSupplementalData } from "../server/stocks";
+import {
+  getStockPageData,
+  getStockPageSupplementalData,
+  getStockDividendData,
+} from "../server/stocks";
 import { isAnalysisRunning } from "../server/active-analyses";
 import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
 import { analysisStreamStore } from "../lib/analysis-stream-store";
@@ -28,6 +32,7 @@ import {
 import { buildStockThesis, parseStockThesis } from "../lib/stock-thesis";
 import { buildAnalysisDiff } from "../lib/analysis-diff";
 import { AnalysisAuditCard } from "../components/AnalysisAuditCard";
+import { DividendCard } from "../components/DividendCard";
 
 export const Route = createFileRoute("/$symbol")({
   validateSearch: (search): { analyze?: boolean } => ({
@@ -156,6 +161,13 @@ function StockPage() {
     enabled: !data.simpleAnalysis,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: true,
+  });
+
+  const dividendQuery = useQuery({
+    queryKey: ["stock-dividend", symbol],
+    queryFn: () => getStockDividendData({ data: { symbol } }),
+    staleTime: 60 * 60_000, // 1 hour — dividends don't change often
+    refetchOnWindowFocus: false,
   });
 
   const stock = data.stock;
@@ -463,6 +475,9 @@ function StockPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Dividends */}
+        {dividendQuery.data && <DividendCard data={dividendQuery.data} />}
 
         {/* Audit: what changed since the previous run */}
         {!streamState.isLoading &&
