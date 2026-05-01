@@ -266,7 +266,49 @@ export async function gatherStockData(symbol: string) {
 
 type StockData = Awaited<ReturnType<typeof gatherStockData>>;
 
-// ─── AI prompt ────────────────────────────────────────────────────────────────
+export type PriorAnalysisContext = {
+  analysisDate: string;
+  signal: string;
+  weeklyCall?: string | null;
+  priceAtAnalysis: number | null;
+  weeklyOutlook?: string | null;
+};
+
+/**
+ * Builds a PRIOR CALL PERFORMANCE block for the user prompt.
+ * This is computed from DB data — never from AI memory — so it cannot be
+ * soft-pedalled or silently omitted. The model is forced to reckon with the
+ * factual outcome of its last call.
+ */
+function buildPriorCallBlock(prior: PriorAnalysisContext, currentPrice: number): string {
+  const pct =
+    prior.priceAtAnalysis && prior.priceAtAnalysis > 0
+      ? ((currentPrice - prior.priceAtAnalysis) / prior.priceAtAnalysis) * 100
+      : null;
+
+  const pctStr = pct != null ? `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%` : "unknown";
+
+  let outcome = "→ minimal price movement (call was roughly neutral)";
+  if (pct != null && Math.abs(pct) >= 3) {
+    const priceWentUp = pct > 0;
+    const calledBullish =
+      prior.weeklyCall === "BUY" || (!prior.weeklyCall && prior.signal === "BUY");
+    const calledBearish =
+      prior.weeklyCall === "SELL" || (!prior.weeklyCall && prior.signal === "SELL");
+    if ((calledBullish && priceWentUp) || (calledBearish && !priceWentUp)) {
+      outcome = `✓ moved IN the predicted direction (${pctStr})`;
+    } else if ((calledBullish && !priceWentUp) || (calledBearish && priceWentUp)) {
+      outcome = `✗ moved AGAINST the predicted direction (${pctStr})`;
+    }
+  }
+
+  const weeklyCallStr = prior.weeklyCall ? ` / weekly: ${prior.weeklyCall}` : "";
+  const outlookStr = prior.weeklyOutlook ? `\nPrior reasoning: "${prior.weeklyOutlook}"` : "";
+
+  return `Last call (${prior.analysisDate}): ${prior.signal}${weeklyCallStr} at $${prior.priceAtAnalysis?.toFixed(2) ?? "N/A"}
+Outcome since then: ${outcome}${outlookStr}
+You MUST fill priorCallAssessment: state specifically what the prior reasoning got right or wrong given this outcome.`;
+}
 
 /**
  * Translates raw EMA/volume numbers into plain-language setup labels.
@@ -362,7 +404,8 @@ Domain expert lens: secular trends, dependency chains, demand gaps, adoption cur
 weeklyCall is the agentic weekly action to show users. Use BUY when the weekly setup is actionable, SELL when the weekly setup is clearly defensive, and WAIT when the evidence is too mixed or weak to press despite a directional lean in signal.
 weeklyOutlook and reasoning are user-facing copy. Keep them plain, simple, and non-technical. Do NOT mention EMA, relative strength, revision balance, percentages, timeframe labels, or indicator names in prose. Use those metrics only in the background to decide whether the short-term setup looks promising, mixed, or weak.
 weeklyOutlook should answer one simple question: does the short-term setup look promising right now or not?
-{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<1-2 short plain-language sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<2-3 short plain-language sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
+priorCallAssessment: null when there is no prior analysis. Otherwise REQUIRED — 1-3 honest sentences about what the prior call got right or wrong given what actually happened. Be specific: name the catalyst missed or the reasoning that held up. Do not hedge or be vague.
+{"signal":"BUY"|"SELL","weeklyCall":"BUY"|"SELL"|"WAIT","priorCallAssessment":"<reflection on prior call>"|null,"cycle":"ACCUMULATION"|"MARKUP"|"DISTRIBUTION"|"MARKDOWN","cycleTimeframe":"SHORT"|"MEDIUM"|"LONG","cycleStrength":<0-100>,"confidence":<0-100>,"weeklyOutlook":"<1-2 short plain-language sentences>","keyBullishFactors":["<f>","<f>","<f>"],"keyBearishFactors":["<f>","<f>","<f>"],"riskLevel":"LOW"|"MEDIUM"|"HIGH","priceTarget":<number|null>,"stopLoss":<number|null>,"reasoning":"<2-3 short plain-language sentences>","signalChanged":<boolean>,"weeklyTrend":"uptrend"|"downtrend"|"sideways","pullbackTo21EMA":<boolean>,"consolidationBreakout21EMA":<boolean>}
 
 3. THESIS_JSON:
 Synthesise the macro opportunity and weekly signal into a single investor narrative. Use specific company facts in summaries — no generic statements.
@@ -392,11 +435,16 @@ export function buildPrompt(
   memory: string,
   isDaily: boolean,
   analysisDate: string,
+  prior?: PriorAnalysisContext | null,
 ): AIMessages {
   const fmt = (n: number | null | undefined, dec = 2) => (n != null ? n.toFixed(dec) : "N/A");
 
+  const priorBlock = prior
+    ? `\n\n## PRIOR CALL PERFORMANCE\n${buildPriorCallBlock(prior, d.currentPrice)}`
+    : "";
+
   const user = `## STOCK MEMORY (accumulated context)
-${memory}
+${memory}${priorBlock}
 
 ## SETUP CONTEXT
 ${describeSetup(d)}
@@ -1010,18 +1058,43 @@ export const generateWeeklyAnalysis = createServerFn({ method: "POST" })
     const today = new Date();
     const analysisDate = format(today, "yyyy-MM-dd");
 
-    const [stockData, memory] = await Promise.all([
+    const [stockData, memory, priorRows] = await Promise.all([
       gatherStockData(data.symbol),
       readMemory(data.symbol),
+      db
+        .select({
+          analysisDate: stockAnalysis.analysisDate,
+          signal: stockAnalysis.signal,
+          reasoning: stockAnalysis.reasoning,
+          priceAtAnalysis: stockAnalysis.priceAtAnalysis,
+        })
+        .from(stockAnalysis)
+        .where(eq(stockAnalysis.symbol, data.symbol))
+        .orderBy(desc(stockAnalysis.updatedAt))
+        .limit(1),
     ]);
 
-    const setupContext = [
-      `Daily 21 EMA: $${stockData.ema21Daily?.toFixed(2) ?? "N/A"} (${stockData.priceVsEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
-      `Weekly 21 EMA: $${stockData.weeklyEma21?.toFixed(2) ?? "N/A"} (${stockData.priceVsWeeklyEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
-      `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
-    ].join(" | ");
+    const priorRow = priorRows[0] ?? null;
+    const priorReasoning = priorRow?.reasoning
+      ? (() => {
+          try {
+            return JSON.parse(priorRow.reasoning) as Record<string, string>;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+    const prior: PriorAnalysisContext | null = priorRow
+      ? {
+          analysisDate: priorRow.analysisDate,
+          signal: priorRow.signal,
+          weeklyCall: priorReasoning?.weeklyCall ?? null,
+          priceAtAnalysis: priorRow.priceAtAnalysis,
+          weeklyOutlook: priorReasoning?.weeklyOutlook ?? null,
+        }
+      : null;
 
-    const messages = buildPrompt(stockData, memory, false, analysisDate);
+    const messages = buildPrompt(stockData, memory, false, analysisDate, prior);
     const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 
@@ -1138,13 +1211,24 @@ export const generateDailyUpdate = createServerFn({ method: "POST" })
       readMemory(data.symbol),
     ]);
 
-    const setupContext = [
-      `Daily 21 EMA: $${stockData.ema21Daily?.toFixed(2) ?? "N/A"} (${stockData.priceVsEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
-      `Weekly 21 EMA: $${stockData.weeklyEma21?.toFixed(2) ?? "N/A"} (${stockData.priceVsWeeklyEMA21?.toFixed(1) ?? "N/A"}% vs price)`,
-      `Volume trend: ${stockData.volumeTrend?.toFixed(1) ?? "N/A"}%`,
-    ].join(" | ");
+    const analysisReasoning = analysis.reasoning
+      ? (() => {
+          try {
+            return JSON.parse(analysis.reasoning) as Record<string, string>;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+    const prior: PriorAnalysisContext = {
+      analysisDate: analysis.analysisDate,
+      signal: analysis.signal,
+      weeklyCall: analysisReasoning?.weeklyCall ?? null,
+      priceAtAnalysis: analysis.priceAtAnalysis,
+      weeklyOutlook: analysisReasoning?.weeklyOutlook ?? null,
+    };
 
-    const messages = buildPrompt(stockData, memory, true, analysisDate);
+    const messages = buildPrompt(stockData, memory, true, analysisDate, prior);
     const initial = await callAIWithUsage(messages);
     let usage = initial.usage;
 

@@ -12,6 +12,7 @@ import {
   chargeUserForUsage,
   saveAnalysisFromStreamedText,
   type AIUsage,
+  type PriorAnalysisContext,
 } from "../../../server/recommend";
 import { markAnalysisStarted, markAnalysisFinished } from "../../../server/active-analyses";
 
@@ -108,12 +109,48 @@ export const Route = createFileRoute("/api/analyze/stream")({
                 });
 
                 // Gather stock data now that the HTTP response has already started.
-                const [stockData, memory] = await Promise.all([
+                const { getDb } = await import("../../../lib/db");
+                const { stockAnalysis } = await import("../../../lib/schema");
+                const { desc, eq } = await import("drizzle-orm");
+                const db = await getDb();
+
+                const [stockData, memory, priorRows] = await Promise.all([
                   gatherStockData(symbol),
                   readMemory(symbol),
+                  db
+                    .select({
+                      analysisDate: stockAnalysis.analysisDate,
+                      signal: stockAnalysis.signal,
+                      reasoning: stockAnalysis.reasoning,
+                      priceAtAnalysis: stockAnalysis.priceAtAnalysis,
+                    })
+                    .from(stockAnalysis)
+                    .where(eq(stockAnalysis.symbol, symbol))
+                    .orderBy(desc(stockAnalysis.updatedAt))
+                    .limit(1),
                 ]);
 
-                const messages = buildPrompt(stockData, memory, false, analysisDate);
+                const priorRow = priorRows[0] ?? null;
+                const priorReasoning = priorRow?.reasoning
+                  ? (() => {
+                      try {
+                        return JSON.parse(priorRow.reasoning) as Record<string, string>;
+                      } catch {
+                        return null;
+                      }
+                    })()
+                  : null;
+                const prior: PriorAnalysisContext | null = priorRow
+                  ? {
+                      analysisDate: priorRow.analysisDate,
+                      signal: priorRow.signal,
+                      weeklyCall: priorReasoning?.weeklyCall ?? null,
+                      priceAtAnalysis: priorRow.priceAtAnalysis,
+                      weeklyOutlook: priorReasoning?.weeklyOutlook ?? null,
+                    }
+                  : null;
+
+                const messages = buildPrompt(stockData, memory, false, analysisDate, prior);
 
                 // Stream AI chunks — NOT aborted when client disconnects.
                 let startedTextMessage = false;

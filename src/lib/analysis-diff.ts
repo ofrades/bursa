@@ -16,11 +16,13 @@ export type AnalysisRow = {
 };
 
 type ParsedReasoning = {
+  weeklyCall?: "BUY" | "SELL" | "WAIT";
   weeklyOutlook?: string;
   reasoning?: string;
   riskLevel?: string;
   keyBullishFactors?: string[];
   keyBearishFactors?: string[];
+  priorCallAssessment?: string | null;
 };
 
 function parseReasoning(value: string | null): ParsedReasoning {
@@ -51,6 +53,21 @@ export type AnalysisDiff = {
   /** The newer analysis's own explanation of its call */
   outlook: string | null;
   reasoning: string | null;
+
+  /**
+   * The model's self-assessment of the prior call — explicitly produced by the
+   * AI when it sees the PRIOR CALL PERFORMANCE block in the prompt.
+   * null when the analysis predates this feature or there was no prior call.
+   */
+  priorCallAssessment: string | null;
+
+  /**
+   * Whether the older call was directionally correct given the price move.
+   * "right" = price moved in the called direction by ≥3%
+   * "wrong" = price moved against the called direction by ≥3%
+   * "neutral" = move was < 3% in either direction
+   */
+  callOutcome: "right" | "wrong" | "neutral";
 
   /** True when something material changed (signal, long-term, cycle, or ≥2 factor changes) */
   hasMaterialChange: boolean;
@@ -99,6 +116,24 @@ export function buildAnalysisDiff(newer: AnalysisRow, older: AnalysisRow): Analy
       ? ((newer.priceAtAnalysis - older.priceAtAnalysis) / older.priceAtAnalysis) * 100
       : null;
 
+  // Determine whether the older call was directionally correct.
+  let callOutcome: AnalysisDiff["callOutcome"] = "neutral";
+  if (pricePct != null && Math.abs(pricePct) >= 3) {
+    const olderWeeklyCall = olderR.weeklyCall ?? older.signal;
+    const priceWentUp = pricePct > 0;
+    if (
+      (olderWeeklyCall === "BUY" && priceWentUp) ||
+      (olderWeeklyCall === "SELL" && !priceWentUp)
+    ) {
+      callOutcome = "right";
+    } else if (
+      (olderWeeklyCall === "BUY" && !priceWentUp) ||
+      (olderWeeklyCall === "SELL" && priceWentUp)
+    ) {
+      callOutcome = "wrong";
+    }
+  }
+
   return {
     newerDate: newer.analysisDate,
     olderDate: older.analysisDate,
@@ -131,6 +166,8 @@ export function buildAnalysisDiff(newer: AnalysisRow, older: AnalysisRow): Analy
 
     outlook: newerR.weeklyOutlook ?? null,
     reasoning: newerR.reasoning ?? null,
+    priorCallAssessment: newerR.priorCallAssessment ?? null,
+    callOutcome,
 
     hasMaterialChange: signalFlipped || ltChanged || cycleChanged || factorChangeCount >= 2,
   };

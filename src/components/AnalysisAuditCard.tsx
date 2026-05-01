@@ -1,7 +1,45 @@
-import { ArrowRight, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import {
+  ArrowRight,
+  TrendingDown,
+  TrendingUp,
+  Minus,
+  CheckCircle2,
+  XCircle,
+  MinusCircle,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Badge } from "./ui/badge";
 import type { AnalysisDiff } from "../lib/analysis-diff";
+
+function OutcomeBadge({
+  outcome,
+  pct,
+}: {
+  outcome: "right" | "wrong" | "neutral";
+  pct: number | null;
+}) {
+  const pctStr = pct != null ? ` (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)` : "";
+  if (outcome === "right")
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+        <CheckCircle2 className="size-3.5" />
+        Prior call correct{pctStr}
+      </span>
+    );
+  if (outcome === "wrong")
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 dark:bg-red-950/50 dark:text-red-300">
+        <XCircle className="size-3.5" />
+        Prior call wrong{pctStr}
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+      <MinusCircle className="size-3.5" />
+      Inconclusive{pctStr}
+    </span>
+  );
+}
 
 function SignalChip({ value }: { value: string }) {
   const base = "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold";
@@ -108,6 +146,17 @@ export function AnalysisAuditCard({ diff }: { diff: AnalysisDiff }) {
       </CardHeader>
 
       <CardContent className="flex flex-col gap-6">
+        {/* Outcome verdict — prominent, always first */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <OutcomeBadge outcome={diff.callOutcome} pct={diff.price.pct} />
+          {diff.callOutcome !== "neutral" && (
+            <p className="text-xs text-muted-foreground">
+              {diff.callOutcome === "wrong"
+                ? `Called ${diff.signal.from} at $${diff.price.from?.toFixed(2) ?? "—"}, stock moved ${diff.price.pct != null && diff.price.pct > 0 ? "up" : "down"} to $${diff.price.to?.toFixed(2) ?? "—"}`
+                : `Called ${diff.signal.from} at $${diff.price.from?.toFixed(2) ?? "—"}, stock confirmed the direction`}
+            </p>
+          )}
+        </div>
         {/* Signal + confidence row */}
         <div className="flex flex-wrap items-center gap-6">
           {/* Weekly signal */}
@@ -222,6 +271,20 @@ export function AnalysisAuditCard({ diff }: { diff: AnalysisDiff }) {
                 tone="neutral"
               />
             </div>
+          </div>
+        )}
+
+        {/* Model's self-assessment of the prior call */}
+        {diff.priorCallAssessment && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-950/20">
+            <p className="text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-2">
+              {diff.callOutcome === "wrong"
+                ? "Mea culpa — what the model missed"
+                : "Model's reflection on the prior call"}
+            </p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {diff.priorCallAssessment}
+            </p>
           </div>
         )}
 
