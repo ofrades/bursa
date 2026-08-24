@@ -1,0 +1,84 @@
+// POST /api/billing/checkout — top up wallet with any amount
+import { createFileRoute } from "@tanstack/react-router";
+import { getSecret } from "../../../secrets";
+import { getAuthenticatedUser } from "../../../lib/auth";
+import { getAppOrigin } from "../../../lib/app-url";
+
+export const Route = createFileRoute("/api/billing/checkout")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const session = await getAuthenticatedUser(request);
+        if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+        // Admin bypass never needs billing
+        if (session.isAdmin) {
+          return Response.json({ url: "/" });
+        }
+
+        const stripeSecret = await getSecret("STRIPE_SECRET_KEY");
+        if (!stripeSecret) {
+          return Response.json({ error: "Stripe not configured" }, { status: 500 });
+        }
+
+        const body = (await request.json().catch(() => ({}))) as {
+          amountEur?: number;
+        };
+        const amountEur = Math.max(1, Math.min(100, Math.round(body.amountEur ?? 1)));
+        const cents = amountEur * 100;
+
+        const { default: Stripe } = await import("stripe");
+        const stripe = new Stripe(stripeSecret, { apiVersion: "2026-04-22.preview" });
+
+        const origin = getAppOrigin(request);
+
+        const { getDb } = await import("../../../lib/db");
+        const { user } = await import("../../../lib/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+
+        const [userRow] = await db.select().from(user).where(eq(user.id, session.sub));
+
+        let customerId = userRow?.stripeCustomerId ?? undefined;
+        if (!customerId) {
+          const customer = await stripe.customers.create({
+            email: session.email,
+            name: session.name,
+            metadata: { user_id: session.sub },
+          });
+          customerId = customer.id;
+          await db
+            .update(user)
+            .set({ stripeCustomerId: customerId })
+            .where(eq(user.id, session.sub));
+        }
+
+        const checkoutSession = await stripe.checkout.sessions.create({
+          mode: "payment",
+          customer: customerId,
+          line_items: [
+            {
+              price_data: {
+                currency: "eur",
+                unit_amount: cents,
+                product_data: {
+                  name: "Wallet Top-up",
+                  description: `Add €${amountEur.toFixed(2)} to your Bursa wallet`,
+                },
+              },
+              quantity: 1,
+            },
+          ],
+          success_url: `${origin}/?topup=1`,
+          cancel_url: `${origin}/`,
+          // Wallet value must match the amount Stripe reports as paid. Keep
+          // promotions disabled so checkout cannot fall below the €1 minimum.
+          allow_promotion_codes: false,
+          metadata: { user_id: session.sub },
+        });
+
+        return Response.json({ url: checkoutSession.url });
+      },
+    },
+  },
+});

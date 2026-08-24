@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.jsonc",
+  // Vendored agent tooling: the oxlint anti-slop plugin is consumed by
+  // `oxlint.config.ts` (not imported by app code) and the skill assets are
+  // standalone scripts, so neither participates in the app import graph.
+  // shadcn/ui registry components ship a full export surface; the app
+  // consumes only what it needs. Keep the registry files pristine.
+  "ignore": ["tools/oxlint/**", ".agents/skills/**", "src/components/ui/**"],
+  // `cloudflare:workers` is provided by the Workers runtime (typed via
+  // @cloudflare/workers-types), not resolved from node_modules.
+  // oxlint + @oxlint/plugins are consumed by tools/oxlint/anti-slop via
+  // oxlint.config.ts, which knip cannot trace into an ignored directory.
+  "ignoreDependencies": ["cloudflare", "oxlint"],
+  "ignoreBinaries": ["vp"],
+  "entry": [
+    "src/routes/**/*.{ts,tsx}",
+    "scripts/**/*.{ts,mjs}",
+    "*.config.{js,ts,mjs}",
+    "alchemy.run.ts",
+    "src/**/*.test.{ts,tsx}",
+  ],
+}
