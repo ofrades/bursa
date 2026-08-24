@@ -5,10 +5,8 @@
 - TanStack Start + Vite 8, driven directly by `vite` / `vitest` (no meta-CLI).
 - Bun is the package manager (`bun install`, `bun.lock`, `bun run <script>`).
   Node 24 remains the runtime for dev servers, tests, and builds.
-- Lint with oxlint (anti-slop plugin under `tools/`), format with oxfmt.
-  `bun run check` runs both. `bun run typecheck` runs plain `tsc --noEmit`
-  (note: 22 pre-existing errors remain from the Vite+ era, where the type
-  gate was Vite+'s bundled checker — fixing them is a pending follow-up).
+- Lint with oxlint (anti-slop plugin under `tools/`), format with oxfmt,
+  typecheck with plain `tsc --noEmit`. `bun run check` runs all three.
 
 ## Commands
 

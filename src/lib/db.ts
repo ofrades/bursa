@@ -1,4 +1,3 @@
-import * as schema from "./schema";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "../env";
 
@@ -7,7 +6,9 @@ export type Db = ReturnType<typeof makeDb>;
 let _db: Db | null = null;
 
 function makeDb(d1: D1Database) {
-  return drizzle(d1, { schema });
+  // drizzle 1.0 rc dropped `schema` from SQLite driver configs (and the
+  // relational query API is unused here), so the client takes no config.
+  return drizzle(d1);
 }
 
 /**

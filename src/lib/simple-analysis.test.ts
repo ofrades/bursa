@@ -154,8 +154,7 @@ describe("simple analysis quarterly KPIs & growth chart", () => {
     });
     expect(evidence!.valuationCard).toBeNull();
     // And the growth-pace tiles should not contain a Valuation row.
-    const valuation = evidence!.kpiTiles!.find((t) => t.metric === "valuation");
-    expect(valuation).toBeUndefined();
+    expect(evidence!.kpiTiles!.some((t) => t.metricLabel === "Valuation")).toBe(false);
   });
 
   it("marks FCF as annual when only annual cash history is available", () => {

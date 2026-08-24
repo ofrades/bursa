@@ -1,5 +1,4 @@
 import { defineCatalog } from "@json-render/core";
-import * as React from "react";
 import {
   defineRegistry,
   Renderer,
@@ -291,7 +290,11 @@ function trendSymbol(trend: "up" | "down" | "flat" | "mixed") {
 // Extracted as a module-level const so KpiGrid can reference it directly.
 // (It can't reach it via the components object — those are method-shorthand
 // properties, not in lexical scope.)
-function KpiTileComponent({ props }: { props: z.infer<typeof catalog.components.KpiTile.props> }) {
+function KpiTileComponent({
+  props,
+}: {
+  props: z.infer<typeof catalog.data.components.KpiTile.props>;
+}) {
   return (
     <div className="rounded-lg border border-border/60 bg-muted/30 p-3 transition-colors hover:border-border">
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -642,119 +645,6 @@ const { registry } = defineRegistry(catalog, {
         </CardContent>
       </UICard>
     ),
-    GrowthChartToggle: ({ props }) => {
-      const [mode, setMode] = React.useState<"qoq" | "yoy">(props.mode);
-      const seriesKeys = props.series.map((s) => s.key);
-
-      // Compute QoQ / YoY series on the fly from the raw quarterly $ values.
-      // Using a derived data set (rather than passing pre-computed points in
-      // the spec) keeps the props surface small and avoids any shape mismatch
-      // with the chartConfig.
-      const buildPoints = (kind: "qoq" | "yoy") => {
-        const chartNumber = (value: string | number | null | undefined): number | null => {
-          const parsed = z.number().safeParse(value);
-          return parsed.success ? parsed.data : null;
-        };
-        return props.points.map((point, i) => {
-          const baseIdx = kind === "qoq" ? i - 1 : i - 4;
-          return Object.fromEntries([
-            ["label", point.label] as const,
-            ...seriesKeys.map((key): [string, number | null] => {
-              const cur = chartNumber(point[key]);
-              const baseRaw = baseIdx >= 0 ? props.points[baseIdx]?.[key] : undefined;
-              const base = chartNumber(baseRaw);
-              if (cur == null || base == null || base <= 0) return [key, null];
-              return [key, ((cur - base) / base) * 100];
-            }),
-          ]);
-        });
-      };
-      const points = React.useMemo(() => buildPoints(mode), [mode, props.points]);
-
-      const chartConfig = Object.fromEntries(
-        props.series.map((s) => [s.key, { label: s.label, color: s.color }]),
-      ) satisfies ChartConfig;
-
-      return (
-        <UICard>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <CardTitle className="text-base">{props.title}</CardTitle>
-                {props.description ? (
-                  <CardDescription className="leading-relaxed">{props.description}</CardDescription>
-                ) : null}
-              </div>
-              <div
-                role="tablist"
-                aria-label="Growth cadence"
-                className="inline-flex items-center rounded-md border border-border bg-muted/40 p-0.5"
-              >
-                {(["qoq", "yoy"] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === m}
-                    onClick={() => setMode(m)}
-                    className={cn(
-                      "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                      mode === m
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {m === "qoq" ? "QoQ" : "YoY"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="min-h-[240px] w-full">
-              <BarChart accessibilityLayer data={points} margin={{ left: 4, right: 4 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis
-                  tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
-                  tickLine={false}
-                  axisLine={false}
-                  width={48}
-                />
-                <ChartTooltip
-                  cursor={false}
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => {
-                        const num = value == null ? Number.NaN : Number(value);
-                        return (
-                          <div className="flex w-full items-center justify-between gap-3">
-                            <span className="text-muted-foreground">
-                              {name == null ? "" : String(name)}
-                            </span>
-                            <span className="font-mono font-medium tabular-nums text-foreground">
-                              {Number.isFinite(num) ? `${num.toFixed(1)}%` : "—"}
-                            </span>
-                          </div>
-                        );
-                      }}
-                    />
-                  }
-                />
-                {props.series.map((series) => (
-                  <Bar
-                    key={series.key}
-                    dataKey={series.key}
-                    fill={`var(--color-${series.key})`}
-                    radius={4}
-                  />
-                ))}
-              </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </UICard>
-      );
-    },
     BalanceSheetStrip: ({ props }) => (
       <UICard>
         <CardHeader>

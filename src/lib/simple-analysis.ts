@@ -314,7 +314,7 @@ export function cagr(first: number, last: number, years: number): number | null 
 // Per-point QoQ growth: thisQ / prevQ - 1, expressed as %. First point is null
 // (no prior quarter).
 // @internal
-export function qoqGrowth(series: number[]): Array<number | null> {
+export function qoqGrowth(series: Array<number | null | undefined>): Array<number | null> {
   return series.map((value, i) => {
     if (i === 0) return null;
     const prev = series[i - 1];
@@ -325,7 +325,7 @@ export function qoqGrowth(series: number[]): Array<number | null> {
 
 // Per-point YoY growth: thisQ / sameQ4Ago - 1. Earlier points stay null.
 // @internal
-export function yoyGrowth(series: number[]): Array<number | null> {
+export function yoyGrowth(series: Array<number | null | undefined>): Array<number | null> {
   return series.map((value, i) => {
     if (i < 4) return null;
     const base = series[i - 4];

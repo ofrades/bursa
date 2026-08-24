@@ -13,7 +13,7 @@
     "lint": "oxlint .",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",
-    "check": "bun run lint && bun run fmt:check",
+    "check": "bun run lint && bun run fmt:check && bun run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "ci": "bun run check && bun run test && bun run build",

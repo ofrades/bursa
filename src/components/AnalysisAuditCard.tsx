@@ -41,9 +41,9 @@ function fmtPct(v: number | null) {
   return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
 }
 
-function fmtPrice(v: number | null) {
-  if (v == null) return "—";
-  return `$${v.toFixed(2)}`;
+function fmtPrice(v: string | number) {
+  const n = Number(v);
+  return Number.isFinite(n) ? `$${n.toFixed(2)}` : String(v);
 }
 
 function daysAgo(iso: string): string {
