@@ -6,13 +6,17 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "postinstall": "npm rebuild better-sqlite3",
-    "dev": "vp dev --port 3000",
-    "build": "vp build",
-    "preview": "vp preview",
-    "check": "vp check",
-    "test": "vp test",
-    "ci": "vp lint && vp test && vp build",
+    "dev": "vite --port 3000",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint .",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt --check .",
+    "check": "bun run lint && bun run fmt:check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ci": "bun run check && bun run test && bun run build",
     "knip": "knip",
     "hooks:install": "git config core.hooksPath .githooks",
     "cf:dev": "alchemy dev",
@@ -69,21 +73,16 @@
     "effect": "4.0.0-rc.111",
     "jsdom": "^28.1.0",
     "knip": "^6.32.2",
+    "oxfmt": "^0.41.0",
     "oxlint": "1.79.0",
     "typescript": "^5.7.2",
     "vite": "^8.0.0",
     "vitest": "^3.0.5"
   },
-  "packageManager": "pnpm@10.33.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "lightningcss"
-    ]
-  },
-  "pn": {
-    "onlyBuiltDependencies": [
-      "workerd"
-    ]
-  }
+  "trustedDependencies": [
+    "better-sqlite3",
+    "esbuild",
+    "lightningcss",
+    "workerd"
+  ]
 }

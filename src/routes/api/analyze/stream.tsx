@@ -18,7 +18,7 @@ import { releaseAnalysis, reserveAnalysis } from "../../../lib/analysis-reservat
 
 // Module-level log fires every time Vite re-evaluates this file (HMR reload).
 // If you don't see this in the dev server terminal, the file isn't being
-// reloaded and you need to restart `vp dev`.
+// reloaded and you need to restart `bun run dev`.
 // eslint-disable-next-line no-console
 console.log(`[stream] module loaded at ${new Date().toISOString()}`);
 import {

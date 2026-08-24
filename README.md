@@ -4,29 +4,29 @@ AI-powered stock analysis app built with TanStack Start, React, Tailwind, Nitro,
 
 ## Local development
 
-This repo uses Vite+.
+This repo uses bun as its package manager.
 
 ```bash
-vp install
-vp run hooks:install
-vp dev
+bun install
+bun run hooks:install
+bun run dev
 ```
 
 Useful commands:
 
 ```bash
-vp build
-vp check
-vp test
-vp run ci
+bun run build
+bun run check
+bun run test
+bun run ci
 ```
 
-The installed pre-push hook runs `vp run ci` before every push.
+The installed pre-push hook runs `bun run ci` before every push.
 
 Notes:
 
-- `vp test` currently exits non-zero when there are no test files.
-- `vp check` currently reports existing formatting issues across the repo.
+- `bun run test` exits non-zero when there are no test files.
+- Formatting is enforced by oxfmt; run `bun run fmt` to fix.
 
 ## Environment
 
@@ -55,8 +55,8 @@ Pushes are checked locally by the pre-push hook; deploy production explicitly
 after the push succeeds using the logged-in local Alchemy session.
 
 ```bash
-vp run cf:deploy:prod   # prod stage → https://bursa.mohshoo.com
-vp run cf:deploy        # dev stage (workers.dev URL)
+bun run cf:deploy:prod   # prod stage → https://bursa.mohshoo.com
+bun run cf:deploy        # dev stage (workers.dev URL)
 ```
 
 Deploys seed sensitive values from `.env` into Cloudflare Secrets Store under

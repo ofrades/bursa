@@ -3,11 +3,7 @@ import { z } from "zod";
 import { and, eq, inArray, desc } from "drizzle-orm";
 import { stock, stockMetrics, stockAnalysis, dailySignal, watchlist } from "../lib/schema";
 import { buildSimpleAnalysisEvidence, parseSimpleAnalysisEvidence } from "../lib/simple-analysis";
-import {
-  symbolListInput,
-  symbolInputObject,
-  stockStateInput,
-} from "../lib/validators";
+import { symbolListInput, symbolInputObject, stockStateInput } from "../lib/validators";
 import { authMiddleware } from "./middleware";
 
 // ─── Ensure stock exists in catalog ──────────────────────────────────────────

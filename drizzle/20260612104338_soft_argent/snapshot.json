@@ -1,9 +1,7 @@
 {
   "dialect": "sqlite",
   "id": "02b0bc9d-cd97-4a8a-a608-2b64c295e4e2",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "version": "7",
   "ddl": [
     {
@@ -21,9 +19,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "daily_signal_pk",
       "table": "daily_signal",
@@ -144,13 +140,9 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "stock_analysis_id"
-      ],
+      "columns": ["stock_analysis_id"],
       "tableTo": "stock_analysis",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -173,9 +165,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "state"
-      ],
+      "columns": ["state"],
       "nameExplicit": false,
       "name": "oauth_state_pk",
       "table": "oauth_state",
@@ -230,9 +220,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "nameExplicit": false,
       "name": "stock_pk",
       "table": "stock",
@@ -323,9 +311,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "stock_analysis_pk",
       "table": "stock_analysis",
@@ -524,13 +510,9 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "tableTo": "stock",
-      "columnsTo": [
-        "symbol"
-      ],
+      "columnsTo": ["symbol"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -539,13 +521,9 @@
       "entityType": "fks"
     },
     {
-      "columns": [
-        "last_triggered_by_user_id"
-      ],
+      "columns": ["last_triggered_by_user_id"],
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "nameExplicit": false,
@@ -568,9 +546,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "nameExplicit": false,
       "name": "stock_memory_pk",
       "table": "stock_memory",
@@ -597,13 +573,9 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "tableTo": "stock",
-      "columnsTo": [
-        "symbol"
-      ],
+      "columnsTo": ["symbol"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -626,9 +598,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "nameExplicit": false,
       "name": "stock_metrics_pk",
       "table": "stock_metrics",
@@ -935,13 +905,9 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "tableTo": "stock",
-      "columnsTo": [
-        "symbol"
-      ],
+      "columnsTo": ["symbol"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -964,9 +930,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "supervisor_alert_pk",
       "table": "supervisor_alert",
@@ -1081,13 +1045,9 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "tableTo": "stock",
-      "columnsTo": [
-        "symbol"
-      ],
+      "columnsTo": ["symbol"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -1096,13 +1056,9 @@
       "entityType": "fks"
     },
     {
-      "columns": [
-        "stock_analysis_id"
-      ],
+      "columns": ["stock_analysis_id"],
       "tableTo": "stock_analysis",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -1125,9 +1081,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "usage_log_pk",
       "table": "usage_log",
@@ -1266,9 +1220,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "user_pk",
       "table": "user",
@@ -1413,9 +1365,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "wallet_top_up_pk",
       "table": "wallet_top_up",
@@ -1500,13 +1450,9 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -1529,9 +1475,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "watchlist_pk",
       "table": "watchlist",
@@ -1606,13 +1550,9 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -1621,13 +1561,9 @@
       "entityType": "fks"
     },
     {
-      "columns": [
-        "symbol"
-      ],
+      "columns": ["symbol"],
       "tableTo": "stock",
-      "columnsTo": [
-        "symbol"
-      ],
+      "columnsTo": ["symbol"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
