@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
   chat,
   toServerSentEventsResponse,
@@ -12,8 +13,9 @@ import { desc, eq } from "drizzle-orm";
 import { analysisOutputSchema, type AnalysisOutput } from "../../../lib/analysis-output-schema";
 import { z } from "zod";
 import { normalizeAnalysisOutput } from "../../../lib/analysis-normalize";
-import { getSecret } from "../../../secrets";
-import { getAuthenticatedUser } from "../../../lib/auth";
+import { authenticatedUserEffect } from "../../../lib/auth";
+import { Database } from "../../../lib/effect/services/database";
+import { Secrets } from "../../../lib/effect/services/secrets";
 import { releaseAnalysis, reserveAnalysis } from "../../../lib/analysis-reservation";
 
 // Module-level log fires every time Vite re-evaluates this file (HMR reload).
@@ -97,7 +99,15 @@ export const Route = createFileRoute("/api/analyze/stream")({
       POST: async ({ request }) => {
         // eslint-disable-next-line no-console
         console.log(`[stream] handler entered at ${new Date().toISOString()}`);
-        const session = await getAuthenticatedUser(request);
+        const session = await Effect.runPromise(
+          authenticatedUserEffect(request).pipe(
+            Effect.catchTags({
+              UnauthorizedError: () => Effect.succeed(null),
+              ExternalServiceError: () => Effect.succeed(null),
+            }),
+            Effect.provide(Database.layer),
+          ),
+        );
         if (!session) {
           // eslint-disable-next-line no-console
           console.log("[stream] no session, returning 401");
@@ -213,7 +223,12 @@ export const Route = createFileRoute("/api/analyze/stream")({
             `[stream] prompt built (${messages.system.length + messages.user.length} chars), getting model...`,
           );
           const modelName = getOpenRouterModel();
-          const apiKey = await getSecret("OPENROUTER_API_KEY");
+          const apiKey = await Effect.runPromise(
+            Effect.gen(function* () {
+              const secrets = yield* Secrets;
+              return yield* secrets.getOrThrow("OPENROUTER_API_KEY");
+            }).pipe(Effect.provide(Secrets.layer)),
+          ).catch(() => null);
           if (!apiKey) throw new Error("OpenRouter not configured");
           const openrouterFactory = openaiCompatible({
             name: "openrouter",

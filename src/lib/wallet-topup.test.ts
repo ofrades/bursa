@@ -105,14 +105,18 @@ describe("applyWalletTopUp", () => {
     const { sqlite, db } = createTestDb();
 
     try {
-      await expect(
-        applyWalletTopUp(db, {
-          userId: "missing-user",
-          checkoutSessionId: "cs_missing",
-          stripeEventId: "evt_missing",
-          centsToAdd: 100,
-        }),
-      ).rejects.toThrow("User not found");
+      const error: unknown = await applyWalletTopUp(db, {
+        userId: "missing-user",
+        checkoutSessionId: "cs_missing",
+        stripeEventId: "evt_missing",
+        centsToAdd: 100,
+      }).then(
+        () => {
+          throw new Error("expected rejection");
+        },
+        (rejection) => rejection,
+      );
+      expect((error as { _tag: string })._tag).toBe("NotFoundError");
 
       const topUps = await db.select().from(walletTopUp);
       expect(topUps).toHaveLength(0);

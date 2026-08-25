@@ -4,27 +4,38 @@
  * Falls back to 0.92 if Stripe is unreachable or not configured.
  */
 
-import { getSecret } from "../secrets";
+import { Effect, Layer } from "effect";
+import { Secrets } from "./effect/services/secrets";
+import { StripeGateway } from "./effect/services/stripe";
 
 const FALLBACK_RATE = 0.92;
 
-export async function getUsdToEurRate(): Promise<number> {
-  const key = await getSecret("STRIPE_SECRET_KEY");
-  if (!key) return FALLBACK_RATE;
+type FxQuote = Awaited<ReturnType<import("stripe").default["fxQuotes"]["create"]>>;
 
-  try {
-    const { default: Stripe } = await import("stripe");
-    const stripe = new Stripe(key, { apiVersion: "2026-04-22.preview" });
-    const quote = await stripe.fxQuotes.create({
-      to_currency: "eur",
-      from_currencies: ["usd"],
-      lock_duration: "none",
-    });
+/** @public Effect-first API; see getUsdToEurRate for the promise facade. */
+/** @public Effect-first API; see getUsdToEurRate for the promise facade. */
+export const getUsdToEurRateEffect: Effect.Effect<number, never, StripeGateway> = Effect.gen(
+  function* () {
+    const stripe = yield* StripeGateway;
+    const quote = (yield* stripe.use((client) =>
+      client.fxQuotes.create({
+        to_currency: "eur",
+        from_currencies: ["usd"],
+        lock_duration: "none",
+      }),
+    )) as FxQuote;
+
     const rate = quote.rates["usd"]?.rate_details?.base_rate;
     if (rate && rate > 0) return rate;
-  } catch {
-    // Stripe unreachable — use fallback
-  }
+    return FALLBACK_RATE;
+  },
+).pipe(Effect.catch(() => Effect.succeed(FALLBACK_RATE)));
 
-  return FALLBACK_RATE;
+/** Promise-based facade for non-Effect call sites (server functions). */
+export function getUsdToEurRate(): Promise<number> {
+  return Effect.runPromise(
+    getUsdToEurRateEffect.pipe(
+      Effect.provide(StripeGateway.layer.pipe(Layer.provideMerge(Secrets.layer))),
+    ),
+  );
 }

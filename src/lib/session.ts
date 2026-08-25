@@ -1,4 +1,5 @@
 import { verifySessionToken, type SessionPayload } from "./jwt";
+export type { SessionPayload };
 
 const SESSION_COOKIE = "__session";
 const IS_PROD = process.env.NODE_ENV === "production";

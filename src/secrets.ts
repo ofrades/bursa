@@ -1,4 +1,4 @@
-type SecretName =
+export type SecretName =
   | "AUTH_SECRET"
   | "FMP_API_KEY"
   | "GOOGLE_CLIENT_SECRET"

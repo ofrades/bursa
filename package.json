@@ -6,6 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
+    "prepare": "effect-language-service patch",
     "dev": "vite --port 3000",
     "build": "vite build",
     "preview": "vite preview",
@@ -60,6 +61,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260822.1",
+    "@effect/language-service": "^0.87.2",
     "@effect/platform-bun": "4.0.0-rc.111",
     "@effect/platform-node": "4.0.0-rc.111",
     "@oxlint/plugins": "1.79.0",

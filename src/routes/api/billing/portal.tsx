@@ -1,46 +1,59 @@
 // POST /api/billing/portal — Stripe Customer Portal for managing subscription
+import { Effect, Layer } from "effect";
+import { eq } from "drizzle-orm";
 import { createFileRoute } from "@tanstack/react-router";
-import { getSecret } from "../../../secrets";
-import { getAuthenticatedUser } from "../../../lib/auth";
 import { getAppOrigin } from "../../../lib/app-url";
+import { authenticatedUserEffect } from "../../../lib/auth";
+import { Database } from "../../../lib/effect/services/database";
+import { Secrets } from "../../../lib/effect/services/secrets";
+import { StripeGateway } from "../../../lib/effect/services/stripe";
+import { ExternalServiceError, NotFoundError } from "../../../lib/effect/errors";
+import { toResponse } from "../../../lib/effect/respond";
+import { user } from "../../../lib/schema";
+
+const portalProgram = Effect.fn("billing.portal")(function* (request: Request) {
+  const session = yield* authenticatedUserEffect(request);
+
+  const { db } = yield* Database;
+  const stripe = yield* StripeGateway;
+
+  const [userRow] = yield* Effect.tryPromise({
+    try: () =>
+      db
+        .select({ stripeCustomerId: user.stripeCustomerId })
+        .from(user)
+        .where(eq(user.id, session.sub)),
+    catch: (cause) => new ExternalServiceError({ service: "d1", cause }),
+  });
+
+  if (!userRow?.stripeCustomerId) {
+    return yield* new NotFoundError({ resource: "billing account" });
+  }
+  const customerId = userRow.stripeCustomerId;
+
+  const origin = getAppOrigin(request);
+  const url = yield* stripe
+    .use((client) =>
+      client.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${origin}/dashboard`,
+      }),
+    )
+    .pipe(Effect.map((portalSession) => portalSession.url));
+
+  return { url };
+});
+
+const appLayer = Layer.merge(
+  Database.layer,
+  StripeGateway.layer.pipe(Layer.provideMerge(Secrets.layer)),
+);
 
 export const Route = createFileRoute("/api/billing/portal")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        const session = await getAuthenticatedUser(request);
-        if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
-
-        const stripeSecret = await getSecret("STRIPE_SECRET_KEY");
-        if (!stripeSecret)
-          return Response.json({ error: "Stripe not configured" }, { status: 500 });
-
-        const { getDb } = await import("../../../lib/db");
-        const { user } = await import("../../../lib/schema");
-        const { eq } = await import("drizzle-orm");
-        const db = await getDb();
-
-        const [userRow] = await db
-          .select({ stripeCustomerId: user.stripeCustomerId })
-          .from(user)
-          .where(eq(user.id, session.sub));
-
-        if (!userRow?.stripeCustomerId) {
-          return Response.json({ error: "No billing account found" }, { status: 404 });
-        }
-
-        const { default: Stripe } = await import("stripe");
-        const stripe = new Stripe(stripeSecret, { apiVersion: "2026-04-22.preview" });
-
-        const origin = getAppOrigin(request);
-
-        const portalSession = await stripe.billingPortal.sessions.create({
-          customer: userRow.stripeCustomerId,
-          return_url: `${origin}/dashboard`,
-        });
-
-        return Response.json({ url: portalSession.url });
-      },
+      POST: ({ request }) =>
+        toResponse(portalProgram(request).pipe(Effect.provide(appLayer)), Response.json),
     },
   },
 });
