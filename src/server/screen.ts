@@ -5,6 +5,8 @@ import { getDb } from "../lib/db";
 import { screenRun, screenStock, type ScreenStock } from "../lib/schema";
 import { classifyLatestRun } from "../lib/screen/jev";
 import { getScreenRecord, type RunRecord } from "../lib/screen/outcomes";
+
+export type { RunRecord };
 import { advanceScreen } from "../lib/screen/run";
 import { compareRuns, METHODOLOGY_VERSION } from "../lib/screen/report";
 import { authMiddleware } from "./middleware";
