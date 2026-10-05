@@ -2,17 +2,15 @@ import { z } from "zod";
 import {
   getEarningsSurprises,
   getFundamentalsTimeSeries,
-  getHistoricalPrices,
-  getMarketQuote,
-  getMarketSummary,
+  getRevisionPrices,
+  getRevisionSummary,
 } from "../market-data";
-import { advFromBars, momentumFromCloses, type Statements, type SymbolData } from "./compute";
+import { advFromBars, momentumFromCloses, type ScreenParams, type SymbolData } from "./compute";
+import { readRevision, readStatements } from "./data";
 
-// 16 months of daily bars: 12-1 momentum needs 12*21 + 1*21 sessions, and the
+// 16 months of daily bars: 12-1 momentum needs 12*21 + 1 closes, and the
 // tail feeds the 3-month ADV average.
 const PRICE_MONTHS = 16;
-const MOM_BACK = 12 * 21;
-const MOM_SKIP = 1 * 21;
 const ADV_SESSIONS = 63;
 
 const STATEMENT_TYPES = [
@@ -39,118 +37,53 @@ const STATEMENT_TYPES = [
   "annualOperatingCashFlow",
 ];
 
-type SeriesPoint = { date: string; value: number | null };
-
-function sortedDesc(series: SeriesPoint[] | undefined) {
-  return (series ?? []).filter((p) => p.value !== null).sort((a, b) => (a.date < b.date ? 1 : -1));
-}
-
-function latest(series: SeriesPoint[] | undefined): number | null {
-  return sortedDesc(series)[0]?.value ?? null;
-}
-
-function latestTwo(series: SeriesPoint[] | undefined): [number | null, number | null] {
-  const rows = sortedDesc(series);
-  return [rows[0]?.value ?? null, rows[1]?.value ?? null];
-}
-
-type TrendRevision = {
-  revision: number | null;
-  epsGrowth: number | null;
-  up30: number | null;
-  down30: number | null;
-};
-
-function trendRevision(
-  summary: Awaited<ReturnType<typeof getMarketSummary>>,
-  period: string,
-): TrendRevision {
-  const entry = summary.earningsTrend?.trend?.find((t) => t.period === period) ?? null;
-  const cur = entry?.epsTrend?.current ?? null;
-  const old = entry?.epsTrend?.["90daysAgo"] ?? null;
-  const revision = cur !== null && old !== null && old !== 0 ? cur / old - 1 : null;
-  const avg = entry?.earningsEstimate?.avg ?? null;
-  const yearAgo = entry?.earningsEstimate?.yearAgoEps ?? null;
-  const growth = entry?.growth?.growth ?? null;
-  const epsGrowth =
-    growth ?? (avg !== null && yearAgo !== null && yearAgo > 0 ? avg / yearAgo - 1 : null);
-  return {
-    revision,
-    epsGrowth,
-    up30: entry?.epsRevisions?.upLast30days ?? null,
-    down30: entry?.epsRevisions?.downLast30days ?? null,
-  };
-}
-
-async function fetchStatements(symbol: string): Promise<Statements> {
+async function fetchStatements(symbol: string) {
   const period1 = new Date(Date.now() - 3 * 365 * 24 * 3600 * 1000);
   const series = await getFundamentalsTimeSeries(symbol, { period1, period2: new Date() }, [
     ...STATEMENT_TYPES,
   ]);
-  const s = (type: string) => series[type];
-  const ltd = latest(s("annualLongTermDebt"));
-  const currentDebt = latest(s("annualCurrentDebt"));
-  return {
-    ebit: latest(s("annualEBIT")),
-    depreciation:
-      latest(s("annualReconciledDepreciation")) ??
-      latest(s("annualDepreciationAmortizationDepletion")),
-    pretaxIncome: latest(s("annualPretaxIncome")),
-    taxProvision: latest(s("annualTaxProvision")),
-    netIncome: latestTwo(s("annualNetIncome")),
-    totalRevenue: latestTwo(s("annualTotalRevenue")),
-    grossProfit: latestTwo(s("annualGrossProfit")),
-    totalAssets: latestTwo(s("annualTotalAssets")),
-    currentAssets: latestTwo(s("annualCurrentAssets")),
-    currentLiabilities: latestTwo(s("annualCurrentLiabilities")),
-    totalDebt:
-      latest(s("annualTotalDebt")) ??
-      (ltd === null && currentDebt === null ? null : (ltd ?? 0) + (currentDebt ?? 0)),
-    longTermDebt: latestTwo(s("annualLongTermDebt")),
-    stockholdersEquity: latest(s("annualStockholdersEquity")),
-    cash: latest(s("annualCashAndCashEquivalents")),
-    shortTermInvestments: latest(s("annualOtherShortTermInvestments")),
-    sharesOutstanding:
-      latestTwo(s("annualOrdinarySharesNumber")) ?? latestTwo(s("annualShareIssued")),
-    operatingCashFlow: latest(s("annualOperatingCashFlow")),
-    capitalExpenditure: latest(s("annualCapitalExpenditure")),
-  };
+  return readStatements(series);
 }
 
 /** Three requests per symbol in the happy path: summary (8 modules incl.
  * estimates + surprises), 16mo chart (prices + currency), statements. */
-export async function fetchScreenData(symbol: string): Promise<SymbolData> {
+export async function fetchScreenData(symbol: string, params: ScreenParams) {
   const period1 = new Date(Date.now() - PRICE_MONTHS * 31 * 24 * 3600 * 1000);
-  const [summary, prices, statements] = await Promise.all([
-    getMarketSummary(symbol),
-    getHistoricalPrices(symbol, { period1, period2: new Date() }),
+  const [summary, prices, fiscal] = await Promise.all([
+    getRevisionSummary(symbol),
+    getRevisionPrices(symbol, { period1, period2: new Date() }),
     fetchStatements(symbol),
   ]);
   const surprises = await getEarningsSurprises(symbol, summary);
 
-  let currency = summary.price?.currency ?? null;
-  let mcap = summary.price?.marketCap ?? null;
-  if (currency === null || mcap === null) {
-    const quote = await getMarketQuote(symbol);
-    currency = currency ?? quote.currency ?? null;
-    mcap = mcap ?? quote.marketCap ?? null;
-  }
+  const currency = summary.price?.currency ?? null;
+  const mcap = summary.price?.marketCap ?? null;
 
-  const fy1 = trendRevision(summary, "0y");
-  const fy2 = trendRevision(summary, "+1y");
+  const fy1 = readRevision(summary.earningsTrend?.trend?.find((t) => t.period === "0y"));
+  const fy2 = readRevision(summary.earningsTrend?.trend?.find((t) => t.period === "+1y"));
   const surpriseFractions = surprises
     .slice()
     .sort((a, b) => (a.quarter < b.quarter ? 1 : -1)) // newest first
     .filter((s) => s.epsActual !== null && s.epsEstimate !== null && s.epsEstimate !== 0)
     .map((s) => (s.epsActual! - s.epsEstimate!) / Math.abs(s.epsEstimate!));
 
-  const closes = prices.map((p) => p.adjClose ?? p.close ?? null);
-  return {
+  const closes = prices.map((p) => p.adjClose ?? null);
+  const liquidity = prices.slice(-ADV_SESSIONS);
+  const completeLiquidity =
+    liquidity.length === ADV_SESSIONS &&
+    liquidity.every(
+      (p) =>
+        Number.isFinite(p.close) &&
+        (p.close ?? 0) > 0 &&
+        Number.isFinite(p.volume) &&
+        (p.volume ?? -1) >= 0,
+    );
+  const data: SymbolData = {
     currency,
     financialCurrency: summary.financialData?.financialCurrency ?? null,
     sector: summary.assetProfile?.sector ?? null,
     mcap,
-    adv: advFromBars(prices.slice(-ADV_SESSIONS)),
+    adv: completeLiquidity ? advFromBars(liquidity) : null,
     analysts: summary.financialData?.numberOfAnalystOpinions ?? null,
     fy1Rev: fy1.revision,
     fy2Rev: fy2.revision,
@@ -158,29 +91,67 @@ export async function fetchScreenData(symbol: string): Promise<SymbolData> {
     downLast30d: fy1.down30,
     epsGrowthFy1: fy1.epsGrowth,
     surprises: surpriseFractions,
-    statements,
-    mom121: momentumFromCloses(closes, MOM_BACK, MOM_SKIP),
+    statements: fiscal.statements,
+    mom121: momentumFromCloses(
+      closes,
+      params.momentumMonthsBack * 21,
+      params.momentumMonthsSkip * 21,
+    ),
     fwdPe: summary.summaryDetail?.forwardPE ?? null,
+  };
+  const issues: string[] = [
+    "Estimate update timestamps are not provided; freshness is unverified.",
+  ];
+  if (fy1.revision === null || fy2.revision === null)
+    issues.push("Missing or non-positive FY1/FY2 EPS baseline; revision cannot be compared.");
+  if (!fy1.targetDate || !fy2.targetDate) issues.push("Consensus fiscal target dates unavailable.");
+  if (prices.length < ADV_SESSIONS) throw new Error("Fewer than 63 trading sessions for liquidity");
+  if (
+    (fy1.revision !== null && Math.abs(fy1.revision) > 1) ||
+    (fy2.revision !== null && Math.abs(fy2.revision) > 1)
+  )
+    issues.push("EPS revision exceeds 100%; inspect small baselines and one-off effects.");
+  const latestPrice = prices.at(-1)?.date;
+  if (!latestPrice || Date.now() - latestPrice.getTime() > 7 * 86400000)
+    throw new Error("Price history is missing or older than seven days");
+  if (!fiscal.date || Date.now() - Date.parse(fiscal.date) > 550 * 86400000)
+    throw new Error("Annual statements are missing or older than 18 months");
+  return {
+    name: summary.price?.longName ?? summary.price?.shortName ?? symbol,
+    data,
+    issues,
+    snapshot: {
+      source: "Yahoo Finance",
+      fetchedAt: new Date().toISOString(),
+      fy1,
+      fy2,
+      statementDate: fiscal.date,
+      priorStatementDate: fiscal.priorDate,
+      priceDate: latestPrice.toISOString(),
+      data,
+    },
   };
 }
 
 export async function fetchFxRates(): Promise<Record<string, number>> {
   const eurPairs = ["EURUSD", "EURGBP", "EURCHF", "EURSEK", "EURDKK", "EURNOK", "EURJPY"];
   const usdPairs = ["CNY", "HKD", "TWD", "KRW", "INR", "CAD", "AUD", "BRL", "SAR"];
-  const unitsPerEur: Record<string, number> = {};
+  type FxRates = Record<string, number>;
+  const unitsPerEur: FxRates = { EUR: 1 };
 
   await Promise.all(
     eurPairs.map(async (pair) => {
       const ccy = pair.replace("EUR", "");
       const v = await fetchYahooRate(pair + "=X");
-      if (v !== null) unitsPerEur[ccy] = v;
+      if (v !== null && Number.isFinite(v) && v > 0) unitsPerEur[ccy] = v;
     }),
   );
   const eurusd = unitsPerEur["USD"];
   await Promise.all(
     usdPairs.map(async (ccy) => {
       const v = await fetchYahooRate(ccy + "=X");
-      if (v !== null && eurusd !== undefined) unitsPerEur[ccy] = v * eurusd;
+      if (v !== null && Number.isFinite(v) && v > 0 && eurusd !== undefined)
+        unitsPerEur[ccy] = v * eurusd;
     }),
   );
   return unitsPerEur;
@@ -190,8 +161,12 @@ async function fetchYahooRate(pair: string): Promise<number | null> {
   try {
     const res = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${pair}?range=5d&interval=1d`,
+      { signal: AbortSignal.timeout(30000) },
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      await res.body?.cancel();
+      return null;
+    }
     const payload = z
       .object({
         chart: z.object({

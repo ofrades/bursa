@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, or } from "drizzle-orm";
 import type { Db } from "../db";
 import { screenRun, screenStock } from "../schema";
 import { UNIVERSE } from "./universe";
@@ -10,8 +10,9 @@ import {
   type ScreenParams,
   type ScreenRow,
 } from "./compute";
+import { exclusionReasons, METHODOLOGY_VERSION } from "./report";
 
-const BATCH_SIZE = 40;
+const BATCH_SIZE = 10;
 const FETCH_CONCURRENCY = 4;
 
 async function getRunningScreenRun(db: Db) {
@@ -26,28 +27,41 @@ async function getRunningScreenRun(db: Db) {
 
 async function startScreenRun(db: Db, params: ScreenParams = DEFAULT_PARAMS) {
   const existing = await getRunningScreenRun(db);
-  if (existing) return existing;
+  if (existing) {
+    if (Date.now() - existing.runAt.getTime() < 86400000) return existing;
+    await db.update(screenRun).set({ status: "failed" }).where(eq(screenRun.id, existing.id));
+  }
 
   const fxRates = await fetchFxRates();
-  const [run] = await db
-    .insert(screenRun)
-    .values({
-      params: JSON.stringify(params),
-      fxRates: JSON.stringify(fxRates),
-      universeCount: UNIVERSE.length,
-    })
-    .returning();
-
+  const id = crypto.randomUUID();
   const queue = UNIVERSE.map((entry) => ({
-    runId: run.id,
+    runId: id,
     symbol: entry.symbol,
     name: entry.symbol,
     region: entry.region,
     country: entry.country,
   }));
-  for (let i = 0; i < queue.length; i += 100) {
-    await db.insert(screenStock).values(queue.slice(i, i + 100));
+  const inserts = [];
+  for (let i = 0; i < queue.length; i += 10) {
+    inserts.push(db.insert(screenStock).values(queue.slice(i, i + 10)));
   }
+  try {
+    await db.batch([
+      db.insert(screenRun).values({
+        id,
+        params: JSON.stringify(params),
+        fxRates: JSON.stringify(fxRates),
+        universeCount: queue.length,
+        methodologyVersion: METHODOLOGY_VERSION,
+      }),
+      ...inserts,
+    ]);
+  } catch (cause) {
+    const active = await getRunningScreenRun(db);
+    if (active) return active;
+    throw cause;
+  }
+  const [run] = await db.select().from(screenRun).where(eq(screenRun.id, id)).limit(1);
   return run;
 }
 
@@ -71,18 +85,32 @@ async function runScreenBatch(db: Db, runId: string, batchSize = BATCH_SIZE) {
       chunk.map(async (stock) => {
         let row: ScreenRow;
         try {
-          const data = await fetchScreenData(stock.symbol);
+          const fetched = await fetchScreenData(stock.symbol, params);
           row = evaluateSymbol(
             {
               symbol: stock.symbol,
-              name: stock.name,
+              name: fetched.name,
               region: stock.region,
               country: stock.country,
             },
-            data,
+            fetched.data,
             fxRates,
             params,
           );
+          const issues = [...fetched.issues, ...exclusionReasons(row)];
+          if (row.sue === null)
+            issues.push(
+              `Fewer than ${params.sueQuarters} usable earnings surprises; median used in ranking.`,
+            );
+          if (row.mom121 === null)
+            issues.push("Adjusted-price momentum unavailable; median used in ranking.");
+          await db
+            .update(screenStock)
+            .set({
+              dataIssues: JSON.stringify(issues),
+              inputSnapshot: JSON.stringify(fetched.snapshot),
+            })
+            .where(eq(screenStock.id, stock.id));
         } catch (cause) {
           await db
             .update(screenStock)
@@ -126,6 +154,14 @@ async function runScreenBatch(db: Db, runId: string, batchSize = BATCH_SIZE) {
     );
   }
 
+  const processed = await db
+    .select({ id: screenStock.id })
+    .from(screenStock)
+    .where(and(eq(screenStock.runId, runId), eq(screenStock.processed, true)));
+  await db
+    .update(screenRun)
+    .set({ processedCount: processed.length })
+    .where(eq(screenRun.id, runId));
   const [remaining] = await db
     .select({ id: screenStock.id })
     .from(screenStock)
@@ -198,7 +234,7 @@ async function finalizeScreenRun(db: Db, run: typeof screenRun.$inferSelect, par
   await db
     .update(screenRun)
     .set({
-      status: "done",
+      status: rows.every((r) => r.error !== null) ? "failed" : "done",
       processedCount: rows.length,
       passedUniverse: computed.filter((r) => r.passUniverse).length,
       passedRevision: computed.filter((r) => r.passUniverse && r.passRevision).length,
@@ -210,15 +246,41 @@ async function finalizeScreenRun(db: Db, run: typeof screenRun.$inferSelect, par
 
 /** Starts a run if none is active, then processes one batch. Cheap enough to
  * call from an admin button or a cron trigger until the run completes. */
-export async function advanceScreen(db: Db) {
-  const run = await startScreenRun(db);
-  const result = await runScreenBatch(db, run.id);
+export async function advanceScreen(db: Db, runId?: string) {
+  const [requested] = runId
+    ? await db.select().from(screenRun).where(eq(screenRun.id, runId)).limit(1)
+    : [];
+  if (runId && !requested) throw new Error("Screen run not found");
+  const run = requested ?? (await startScreenRun(db));
+  const token = crypto.randomUUID();
+  const [claimed] = await db
+    .update(screenRun)
+    .set({ lockToken: token, lockUntil: new Date(Date.now() + 15 * 60000) })
+    .where(
+      and(
+        eq(screenRun.id, run.id),
+        eq(screenRun.status, "running"),
+        or(isNull(screenRun.lockUntil), lt(screenRun.lockUntil, new Date())),
+      ),
+    )
+    .returning();
+  let batchProcessed = 0;
+  if (claimed) {
+    try {
+      batchProcessed = (await runScreenBatch(db, run.id)).processed;
+    } finally {
+      await db
+        .update(screenRun)
+        .set({ lockToken: null, lockUntil: null })
+        .where(and(eq(screenRun.id, run.id), eq(screenRun.lockToken, token)));
+    }
+  }
   const [fresh] = await db.select().from(screenRun).where(eq(screenRun.id, run.id)).limit(1);
   return {
     runId: run.id,
     status: fresh?.status ?? "running",
     processed: fresh?.processedCount ?? 0,
     universe: fresh?.universeCount ?? 0,
-    batchProcessed: result.processed,
+    batchProcessed,
   };
 }

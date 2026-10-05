@@ -50,8 +50,8 @@ function symbolData(
     analysts: 25,
     fy1Rev: 0.1,
     fy2Rev: 0.05,
-    upLast30d: null,
-    downLast30d: null,
+    upLast30d: 10,
+    downLast30d: 2,
     surprises: [0.05, 0.04, 0.06, 0.03, 0.02, 0.05, 0.04, 0.03],
     statements: statements(statementOverrides),
     mom121: 0.2,
@@ -166,6 +166,38 @@ describe("evaluateSymbol", () => {
     expect(row.roic).toBeNull();
   });
 
+  it("uses EBITDA, not EBIT, in the leverage gate", () => {
+    const row = evaluateSymbol(
+      { symbol: "X", name: "X", region: "EU", country: "DE" },
+      symbolData({}, { totalDebt: 500, cash: 0, ebit: 100, depreciation: 100 }),
+      FX,
+      DEFAULT_PARAMS,
+    );
+    expect(row.ndEbitda).toBe(2.5);
+  });
+
+  it("uses actual analyst breadth and rejects unavailable counts", () => {
+    const meta = { symbol: "X", name: "X", region: "EU", country: "DE" };
+    const row = evaluateSymbol(
+      meta,
+      symbolData({ upLast30d: 2, downLast30d: 10 }),
+      FX,
+      DEFAULT_PARAMS,
+    );
+    expect(row.breadth).toBeCloseTo(-2 / 3);
+    expect(row.passRevision).toBe(false);
+    expect(
+      evaluateSymbol(meta, symbolData({ upLast30d: null }), FX, DEFAULT_PARAMS).breadth,
+    ).toBeNull();
+  });
+
+  it("enforces the configured SUE history", () => {
+    const meta = { symbol: "X", name: "X", region: "EU", country: "DE" };
+    expect(
+      evaluateSymbol(meta, symbolData({ surprises: [0.1, 0.2, 0.3, 0.4] }), FX, DEFAULT_PARAMS).sue,
+    ).toBeNull();
+  });
+
   it("fails non-financials when roic cannot be computed", () => {
     const row = evaluateSymbol(
       { symbol: "X", name: "X", region: "US", country: "US" },
@@ -184,24 +216,25 @@ describe("evaluateSymbol", () => {
       DEFAULT_PARAMS,
     );
     expect(row.passRevision).toBe(false);
-    expect(row.breadth).toBe(0);
+    expect(row.breadth).toBeCloseTo(2 / 3);
   });
 });
 
 describe("advFromBars", () => {
-  it("averages close*volume over traded bars only", () => {
+  it("includes known zero-volume sessions in daily liquidity", () => {
     expect(
       advFromBars([
         { close: 10, volume: 100 },
-        { close: 20, volume: 0 }, // zero-volume day excluded
+        { close: 20, volume: 0 }, // known zero trading contributes zero
         { close: 30, volume: null },
         { close: 20, volume: 100 },
       ]),
-    ).toBeCloseTo(1500, 0);
+    ).toBeCloseTo(1000, 0);
   });
 
-  it("returns null with no traded bars", () => {
-    expect(advFromBars([{ close: 10, volume: 0 }])).toBeNull();
+  it("returns zero with known zero trading and null with unknown volume", () => {
+    expect(advFromBars([{ close: 10, volume: 0 }])).toBe(0);
+    expect(advFromBars([{ close: 10, volume: null }])).toBeNull();
   });
 });
 
@@ -209,18 +242,23 @@ describe("momentumFromCloses", () => {
   const series = Array.from({ length: 300 }, (_, i) => 100 + i); // 100..399
 
   it("skips the last month and uses the 12-month-ago close", () => {
-    // c[300-1-21]=378, c[300-1-273]=126 -> (378/126)-1 = 2
+    // Endpoints: one month ago (378) and twelve months ago (147).
     const m = momentumFromCloses(series, 252, 21);
-    expect(m).toBeCloseTo(2, 6);
+    expect(m).toBeCloseTo(378 / 147 - 1, 6);
   });
 
   it("returns null when history is too short", () => {
     expect(momentumFromCloses(series.slice(0, 250), 252, 21)).toBeNull();
   });
 
-  it("survives interior nulls", () => {
+  it("rejects gaps rather than shifting the session window", () => {
     const withNulls = series.map((v, i) => (i === 5 ? null : v));
-    expect(momentumFromCloses(withNulls, 252, 21)).toBeCloseTo(2, 6);
+    expect(momentumFromCloses(withNulls, 252, 21)).toBeNull();
+  });
+
+  it("requires an extra close for the starting endpoint", () => {
+    expect(momentumFromCloses(series.slice(0, 252), 252, 21)).toBeNull();
+    expect(momentumFromCloses(series.slice(0, 253), 252, 21)).toBeTypeOf("number");
   });
 });
 
@@ -303,6 +341,20 @@ describe("finalize", () => {
     expect(rows.filter((r) => r.strict).map((r) => r.symbol)).toEqual(["A"]);
     for (const r of survivors) expect(r.weight).toBeCloseTo(0.2, 6);
     expect(rows[0].composite).toBeGreaterThan(rows[3].composite ?? 0);
+  });
+
+  it("handles an empty survivor set", () => {
+    expect(() => finalize([], DEFAULT_PARAMS)).not.toThrow();
+  });
+
+  it("uses the configured momentum weight", () => {
+    const rows = [row("A", 0.1, 0.1), row("B", 0.1, 0.8)];
+    finalize(rows, {
+      ...DEFAULT_PARAMS,
+      weights: { revision: 0, breadth: 0, sue: 0, momentum: 1 },
+    });
+    expect(rows[0].composite).toBeCloseTo(-1);
+    expect(rows[1].composite).toBeCloseTo(1);
   });
 
   it("gives zero composite spread when all factors are identical", () => {

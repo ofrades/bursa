@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getSecret } from "../secrets";
+import { normalizeFundamentals, revisionSummarySchema, unwrapYahoo } from "./market-data-normalize";
 
 type SearchResult = {
   symbol: string;
@@ -80,6 +81,8 @@ type SummaryData = {
     regularMarketPrice?: number | null;
     marketCap?: number | null;
     currency?: string | null;
+    longName?: string | null;
+    shortName?: string | null;
   } | null;
   calendarEvents?: {
     earnings?: {
@@ -91,13 +94,16 @@ type SummaryData = {
       period?: string | null;
       epsTrend?: {
         current?: number | null;
-        [key: string]: number | null | undefined;
+        "30daysAgo"?: number | null;
+        "90daysAgo"?: number | null;
+        epsTrendCurrency?: string | null;
       } | null;
       earningsEstimate?: {
         avg?: number | null;
         yearAgoEps?: number | null;
       } | null;
-      growth?: { growth?: number | null } | null;
+      endDate?: string | null;
+      growth?: number | null;
       epsRevisions?: {
         upLast30days?: number | null;
         downLast30days?: number | null;
@@ -106,9 +112,9 @@ type SummaryData = {
   } | null;
   earningsHistory?: {
     history?: Array<{
-      quarter?: { fmt?: string | null } | string | null;
-      epsActual?: { raw?: number | null } | null;
-      epsEstimate?: { raw?: number | null } | null;
+      quarter?: { fmt?: string | null } | string | number | null;
+      epsActual?: { raw?: number | null } | number | null;
+      epsEstimate?: { raw?: number | null } | number | null;
     }> | null;
   } | null;
 };
@@ -238,7 +244,7 @@ async function yahooGetJson(url: string, cookie?: string): Promise<any> {
   // backoff instead of poisoning whole symbols with errors.
   const retryStatuses = new Set([429, 500, 502, 503, 504]);
   for (let attempt = 0; ; attempt += 1) {
-    const response = await fetch(url, { headers });
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
     if (response.ok) return response.json();
     try {
       await response.body?.cancel(); // unread bodies stall workerd's fetch pool
@@ -249,14 +255,16 @@ async function yahooGetJson(url: string, cookie?: string): Promise<any> {
       await new Promise((resolve) => setTimeout(resolve, 800 * 2 ** attempt));
       continue;
     }
-    throw new Error(`Yahoo request failed: ${response.status} ${url}`);
+    throw new Error(
+      `Yahoo request failed: ${response.status} ${new URL(url).origin}${new URL(url).pathname}`,
+    );
   }
 }
 
-let _yahooCrumb: { crumb: string; cookie: string } | null = null;
+let _yahooCrumb: { crumb: string; cookie: string; expiresAt: number } | null = null;
 
 async function yahooCrumb(): Promise<{ crumb: string; cookie: string }> {
-  if (_yahooCrumb) return _yahooCrumb;
+  if (_yahooCrumb && _yahooCrumb.expiresAt > Date.now()) return _yahooCrumb;
 
   // Bootstrap cookies from the finance portal rather than fc.yahoo.com:
   // from the EU, fc.yahoo.com often lands on a consent page and never issues
@@ -268,7 +276,9 @@ async function yahooCrumb(): Promise<{ crumb: string; cookie: string }> {
       "accept-language": "en-US,en;q=0.9",
     },
     redirect: "follow",
+    signal: AbortSignal.timeout(30000),
   });
+  await bootstrap.body?.cancel();
   const cookie = bootstrap.headers
     .getSetCookie()
     .map((c) => c.split(";")[0])
@@ -280,12 +290,21 @@ async function yahooCrumb(): Promise<{ crumb: string; cookie: string }> {
   ];
   for (const url of attempts) {
     try {
+      const response = await fetch(url, {
+        headers: { "user-agent": YAHOO_UA, cookie },
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        continue;
+      }
       const parsedCrumb = z
         .string()
+        .trim()
         .min(1)
-        .safeParse(await yahooGetJson(url, cookie || undefined));
+        .safeParse(await response.text());
       if (parsedCrumb.success) {
-        _yahooCrumb = { crumb: parsedCrumb.data, cookie };
+        _yahooCrumb = { crumb: parsedCrumb.data, cookie, expiresAt: Date.now() + 3600000 };
         return _yahooCrumb;
       }
     } catch {
@@ -422,7 +441,7 @@ export async function getMarketQuote(symbol: string): Promise<QuoteData> {
   return yahooGetQuote(symbol);
 }
 
-async function yahooGetSummary(symbol: string): Promise<SummaryData> {
+async function yahooGetSummary(symbol: string, strict = false): Promise<SummaryData> {
   try {
     const { crumb, cookie } = await yahooCrumb();
     const modules = [
@@ -439,7 +458,8 @@ async function yahooGetSummary(symbol: string): Promise<SummaryData> {
       `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(crumb)}`,
       cookie || undefined,
     );
-    const result = summary?.quoteSummary?.result?.[0] ?? null;
+    const result = unwrapYahoo(summary?.quoteSummary?.result?.[0] ?? null) as SummaryData | null;
+    if (!result) throw new Error(`Yahoo summary unavailable for ${symbol}`);
     return {
       assetProfile: result?.assetProfile ?? null,
       financialData: result?.financialData ?? null,
@@ -451,6 +471,7 @@ async function yahooGetSummary(symbol: string): Promise<SummaryData> {
       earningsHistory: result?.earningsHistory ?? null,
     };
   } catch (error) {
+    if (strict) throw error;
     // Yahoo's quoteSummary is the last-rung fallback (and EU-hostile);
     // degrade to empty sections rather than failing the whole analysis.
     console.warn(
@@ -581,6 +602,11 @@ async function fmpGetSummary(symbol: string): Promise<SummaryData> {
   };
 }
 
+/** Screening requires actual historical consensus, not cross-year FMP estimates. */
+export async function getRevisionSummary(symbol: string): Promise<SummaryData> {
+  return revisionSummarySchema.parse(await yahooGetSummary(symbol, true));
+}
+
 export async function getMarketSummary(symbol: string): Promise<SummaryData> {
   if ((await providerFromEnv()) === "fmp") {
     try {
@@ -632,6 +658,13 @@ async function fmpGetHistoricalPrices(
     to: options.period2.toISOString().slice(0, 10),
   })) as RawHistoricalPayload;
   return normalizeHistoricalRows(rows);
+}
+
+export async function getRevisionPrices(
+  symbol: string,
+  options: HistoricalOptions,
+): Promise<HistoricalPoint[]> {
+  return yahooGetHistoricalPrices(symbol, options);
 }
 
 export async function getHistoricalPrices(
@@ -703,18 +736,7 @@ async function yahooFundamentalsTimeSeries(
   const res = await yahooGetJson(
     `https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?${search.toString()}`,
   );
-  const result = res?.timeseries?.result?.[0] ?? {};
-  const byType: Record<string, YahooTimeSeriesRow[]> = Object.fromEntries(
-    types.map((type) => [type, []]),
-  );
-  for (const rows of Object.values(result)) {
-    if (!Array.isArray(rows)) continue;
-    for (const row of rows as YahooTimeSeriesRow[]) {
-      const type = row.dataId !== undefined ? DATA_ID_TO_TYPE[row.dataId] : undefined;
-      if (type && byType[type]) byType[type].push(row);
-    }
-  }
-  return byType;
+  return normalizeFundamentals(res, types, DATA_ID_TO_TYPE);
 }
 
 export type FundamentalSeriesPoint = { date: string; value: number | null };
@@ -727,7 +749,13 @@ export async function getFundamentalsTimeSeries(
   options: AnnualStatementOptions,
   types: string[],
 ): Promise<Record<string, FundamentalSeriesPoint[]>> {
-  const byType = await yahooFundamentalsTimeSeries(symbol, options, types);
+  const known = types.filter((type) => type in FUNDAMENTALS_DATA_IDS);
+  const unknown = types.filter((type) => !(type in FUNDAMENTALS_DATA_IDS));
+  const parts = await Promise.all([
+    yahooFundamentalsTimeSeries(symbol, options, known),
+    ...unknown.map((type) => yahooFundamentalsTimeSeries(symbol, options, [type])),
+  ]);
+  const byType = Object.assign({}, ...parts) as Record<string, YahooTimeSeriesRow[]>;
   return Object.fromEntries(
     Object.entries(byType).map(([type, rows]) => [
       type,
@@ -750,32 +778,24 @@ export async function getEarningsSurprises(
   summary?: SummaryData,
 ): Promise<EarningsSurprise[]> {
   const historySchema = z.object({
-    quarter: z.union([z.string(), z.object({ fmt: z.string() }).transform((o) => o.fmt)]),
+    quarter: z.union([
+      z.string(),
+      z.number().transform((v) => new Date(v * 1000).toISOString().slice(0, 10)),
+      z.object({ fmt: z.string() }).transform((o) => o.fmt),
+    ]),
     epsActual: z
-      .object({ raw: z.number().nullable() })
-      .nullable()
-      .optional()
-      .transform((o) => asNumber(o?.raw)),
+      .preprocess((v) => unwrapYahoo(z.json().parse(v ?? null)), z.number().nullable().optional())
+      .transform((v) => v ?? null),
     epsEstimate: z
-      .object({ raw: z.number().nullable() })
-      .nullable()
-      .optional()
-      .transform((o) => asNumber(o?.raw)),
+      .preprocess((v) => unwrapYahoo(z.json().parse(v ?? null)), z.number().nullable().optional())
+      .transform((v) => v ?? null),
   });
   const fromSummary = z
     .array(historySchema)
     .catch([])
     .parse(summary?.earningsHistory?.history ?? [])
     .filter((s) => s.quarter !== "");
-  if (fromSummary.length) return fromSummary;
-
-  if ((await providerFromEnv()) === "fmp") {
-    try {
-      return await fmpGetEarningsSurprises(symbol);
-    } catch {
-      return yahooGetEarningsSurprises(symbol);
-    }
-  }
+  if (summary) return fromSummary;
   return yahooGetEarningsSurprises(symbol);
 }
 
@@ -799,15 +819,6 @@ async function yahooGetEarningsSurprises(symbol: string): Promise<EarningsSurpri
     );
     return [];
   }
-}
-
-async function fmpGetEarningsSurprises(symbol: string): Promise<EarningsSurprise[]> {
-  const rows = (await fmpGet("earnings-surprises", { symbol })) as any[];
-  return (Array.isArray(rows) ? rows : []).map((row) => ({
-    quarter: String(row.date ?? ""),
-    epsActual: asNumber(row.actualEpsResult),
-    epsEstimate: asNumber(row.estimatedEpsAvg),
-  }));
 }
 
 function mapYahooFinancialStatements(

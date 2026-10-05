@@ -71,13 +71,56 @@ on every deploy.
 
 ## EPS-revision screen
 
-`/screen` runs the Mare Nostrum-style screen (90-day FY1/FY2 consensus revisions,
-breadth, SUE, ROIC/leverage/Piotroski gates, composite ranking) over the curated
-global large-cap universe in `src/lib/screen/universe.ts`. The list is data-driven:
-every survivor, ranked, equal-weighted; the strict top-revision-quintile subset is
-flagged. Admin: "Run screen" advances the batched run; "Classify revisions" runs the
-OpenRouter revision-quality classifier (RECURRING/ONE_OFF/MIXED) over the strict set.
+`/screen` is a free-data research shortlist over the 371 manually curated global
+large caps in `src/lib/screen/universe.ts`, not a reproduction of a fund's verified
+methodology or coverage of every market. It always shows the latest **completed**
+methodology-v2 snapshot; partial/failed refreshes do not replace it. Original v1
+results remain stored but are not compared against corrected calculations.
 
-Headless runs (cron / CI): `POST /api/screen/run` then `POST /api/screen/jev` with
-the `x-screen-token` header matching the `SCREEN_ADMIN_TOKEN` secret — or just use
-`scripts/screen-cron.sh`.
+- Yahoo-only consensus, adjusted prices and statements, independent of the app's
+  FMP configuration. Raw numeric wrappers and both named/merged fundamentals are
+  decoded at the boundary. Every evaluated row saves its inputs, source, fetch
+  time, consensus fiscal targets and aligned statement dates.
+- Universe: market cap ≥ €40bn, 63-session average daily turnover ≥ €100m,
+  analyst coverage ≥ 20. Missing FX or inputs are reported, not inferred.
+- Revisions: positive 90-day FY1 **and** FY2 EPS changes with positive EPS baselines;
+  positive 30-day analyst breadth `(up-down)/(up+down)`. Loss/zero-baseline names
+  and missing breadth are explicitly excluded, not treated as negative signals.
+- Quality: ROIC ≥10%, net debt/(EBIT+D&A) ≤3, Piotroski ≥7. Financial-sector
+  exemptions remain explicit. Statement ratios use the same two fiscal dates.
+- Composite: clipped (±3) cross-sectional z-scores: revisions 35%, analyst breadth
+  35%, surprise score 20%, adjusted-price momentum 10%. SUE requires eight usable
+  quarters; missing SUE/momentum use the survivor median (zero if none exist),
+  with warnings. Strict selection uses the 80th percentile of revision+breadth
+  z-scores; ties can produce more than 20% of survivors.
+- GARP is optional and off by default. It does not change base ranking or strict
+  membership. The page shows changes since the preceding comparable completed
+  snapshot, entrants/exits, exclusions, errors and stale-run warnings.
+- Prices older than seven days and statements older than 550 days reject the row.
+  Fetch timestamps are **not** estimate-update timestamps; consensus freshness and
+  historical FY-rollover continuity cannot be verified from this free source.
+- Trade Republic buy/long consensus, coverage, dates and target-price upside are
+  manual pre-buy checks, separate from estimate revisions. No broker rating or
+  validated buy-share threshold is invented by this screen.
+
+Admin: "Run screen" advances/resumes the run. Batches are atomically leased;
+creation/queue insertion is atomic, and stale runs over 24 hours are abandoned.
+Optional "Classify revisions (paid AI)" invokes OpenRouter; its probabilities are
+uncalibrated advisory judgments. The weekly driver never invokes paid AI.
+
+Headless: `POST /api/screen/run` with `{ "runId": "..." }` after the first response,
+using the `x-screen-token` header matching a deployed `SCREEN_ADMIN_TOKEN` binding.
+Pinning the run prevents retries from accidentally starting another completed run.
+`scripts/screen-cron.sh` does this, fails on HTTP/invalid response/incomplete-run
+errors, and requires Node 24 plus curl. Example host cron (host timezone):
+
+```cron
+0 6 * * 1 SCREEN_ADMIN_TOKEN=... BASE_URL=https://bursa.mohshoo.com /path/screen-cron.sh
+```
+
+The script alone does not install a scheduler. Set `SCREEN_ADMIN_TOKEN` in the
+secure deployment environment to provision its Secrets Store binding.
+Deployment: `bun run cf:deploy:prod` applies the reliability migration and publishes
+`https://bursa.mohshoo.com/screen`; then run the first corrected snapshot as admin.
+Deploy requires the existing credentials listed in `.env.example`—do not replace
+`AUTH_SECRET` merely to satisfy a deployment configuration error.

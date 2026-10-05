@@ -1,9 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../lib/db";
 import { screenRun, screenStock, type ScreenStock } from "../lib/schema";
 import { classifyLatestRun } from "../lib/screen/jev";
+import { getScreenRecord, type RunRecord } from "../lib/screen/outcomes";
 import { advanceScreen } from "../lib/screen/run";
+import { compareRuns, METHODOLOGY_VERSION } from "../lib/screen/report";
 import { authMiddleware } from "./middleware";
 
 export type ScreenDashboard = {
@@ -17,43 +20,60 @@ export type ScreenDashboard = {
     passedRevision: number;
     survivorCount: number;
   } | null;
+  latest: { status: string; processedCount: number; universeCount: number; runAt: string } | null;
+  previousRunAt: string | null;
   rows: ScreenStock[];
   entered: string[];
   exited: string[];
+  changes: Record<string, { revision: number | null; composite: number | null }>;
 };
 
 export const getScreenDashboard = createServerFn({ method: "GET" }).handler(
   async (): Promise<ScreenDashboard> => {
     const db = getDb();
-    const [run] = await db.select().from(screenRun).orderBy(desc(screenRun.runAt)).limit(1);
-    if (!run) return { run: null, rows: [], entered: [], exited: [] };
-
+    const [latest] = await db
+      .select()
+      .from(screenRun)
+      .where(eq(screenRun.methodologyVersion, METHODOLOGY_VERSION))
+      .orderBy(desc(screenRun.runAt))
+      .limit(1);
+    const [run, previous] = await db
+      .select()
+      .from(screenRun)
+      .where(
+        and(eq(screenRun.status, "done"), eq(screenRun.methodologyVersion, METHODOLOGY_VERSION)),
+      )
+      .orderBy(desc(screenRun.runAt))
+      .limit(2);
+    const latestStatus = latest
+      ? {
+          status: latest.status,
+          processedCount: latest.processedCount,
+          universeCount: latest.universeCount,
+          runAt: latest.runAt.toISOString(),
+        }
+      : null;
+    if (!run)
+      return {
+        run: null,
+        latest: latestStatus,
+        previousRunAt: null,
+        rows: [],
+        entered: [],
+        exited: [],
+        changes: {},
+      };
     const rows = await db
       .select()
       .from(screenStock)
       .where(eq(screenStock.runId, run.id))
       .orderBy(desc(screenStock.composite));
-
-    const survivors = rows.filter((r) => r.passUniverse && r.passRevision && r.passQuality);
-    const [prevRun] = await db
-      .select()
-      .from(screenRun)
-      .where(and(eq(screenRun.status, "done")))
-      .orderBy(desc(screenRun.runAt))
-      .limit(2);
-    let entered: string[] = [];
-    let exited: string[] = [];
-    if (prevRun && prevRun.id !== run.id) {
-      const prevRows = await db
-        .select({ symbol: screenStock.symbol, strict: screenStock.strict })
-        .from(screenStock)
-        .where(eq(screenStock.runId, prevRun.id));
-      const prevSurvivors = new Set(prevRows.filter((r) => r.strict).map((r) => r.symbol));
-      const currentStrict = new Set(survivors.filter((r) => r.strict).map((r) => r.symbol));
-      entered = [...currentStrict].filter((s) => !prevSurvivors.has(s));
-      exited = [...prevSurvivors].filter((s) => !currentStrict.has(s));
-    }
-
+    const previousRows = previous
+      ? await db.select().from(screenStock).where(eq(screenStock.runId, previous.id))
+      : [];
+    const comparison = previous
+      ? compareRuns(rows, previousRows)
+      : { entered: [], exited: [], changes: {} };
     return {
       run: {
         id: run.id,
@@ -65,9 +85,10 @@ export const getScreenDashboard = createServerFn({ method: "GET" }).handler(
         passedRevision: run.passedRevision,
         survivorCount: run.survivorCount,
       },
+      latest: latestStatus,
+      previousRunAt: previous?.runAt.toISOString() ?? null,
       rows,
-      entered,
-      exited,
+      ...comparison,
     };
   },
 );
@@ -75,17 +96,18 @@ export const getScreenDashboard = createServerFn({ method: "GET" }).handler(
 export const classifyScreenSurvivors = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    if (!context.isAdmin) {
-      throw new Error("admin only");
-    }
+    if (!context.isAdmin) throw new Error("admin only");
     return classifyLatestRun(getDb());
   });
 
 export const advanceScreenRun = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    if (!context.isAdmin) {
-      throw new Error("admin only");
-    }
-    return advanceScreen(getDb());
+  .inputValidator(z.object({ runId: z.string().uuid().optional() }))
+  .handler(async ({ context, data }) => {
+    if (!context.isAdmin) throw new Error("admin only");
+    return advanceScreen(getDb(), data.runId);
   });
+
+export const getScreenTrackRecord = createServerFn({ method: "GET" }).handler(
+  async (): Promise<RunRecord[]> => getScreenRecord(getDb()),
+);

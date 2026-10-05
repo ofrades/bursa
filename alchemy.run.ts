@@ -2,6 +2,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 export default Alchemy.Stack(
   "Bursa",
@@ -34,11 +35,20 @@ export default Alchemy.Stack(
     const fmpApiKey = yield* appSecret("FmpApiKey", "FMP_API_KEY");
     const stripeSecretKey = yield* appSecret("StripeSecretKey", "STRIPE_SECRET_KEY");
     const stripeWebhookSecret = yield* appSecret("StripeWebhookSecret", "STRIPE_WEBHOOK_SECRET");
+    const screenToken = yield* Config.option(Config.redacted("SCREEN_ADMIN_TOKEN"));
+    const screenAdminToken = Option.isSome(screenToken)
+      ? yield* Cloudflare.SecretsStore.Secret("ScreenAdminToken", {
+          store,
+          name: "BURSA_SCREEN_ADMIN_TOKEN",
+          value: screenToken.value,
+        }).pipe(Alchemy.RemovalPolicy.retain(prod))
+      : undefined;
 
     const website = yield* Cloudflare.Website.Vite("Website", {
       routes: prod ? [{ pattern: "bursa.mohshoo.com/*" }] : [],
       env: {
         DB: database,
+        SCREEN_ADMIN_TOKEN: screenAdminToken,
         BETTER_AUTH_URL: prod ? "https://bursa.mohshoo.com" : Config.string("BETTER_AUTH_URL"),
         AUTH_SECRET: authSecret,
         GOOGLE_CLIENT_ID: Config.string("GOOGLE_CLIENT_ID"),

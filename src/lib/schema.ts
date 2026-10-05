@@ -1,4 +1,13 @@
-import { sqliteTable, text, integer, real, index, unique } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  unique,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 const now = () => new Date();
 
@@ -283,6 +292,9 @@ export const screenRun = sqliteTable(
     runAt: integer("run_at", { mode: "timestamp" }).notNull().$defaultFn(now),
     status: text("status").notNull().default("running"), // running | done | failed
     params: text("params").notNull(), // JSON snapshot of thresholds
+    methodologyVersion: integer("methodology_version").notNull().default(1),
+    lockToken: text("lock_token"),
+    lockUntil: integer("lock_until", { mode: "timestamp" }),
     fxRates: text("fx_rates"), // JSON: { ccy: unitsPerEur }
     universeCount: integer("universe_count").notNull().default(0),
     processedCount: integer("processed_count").notNull().default(0),
@@ -290,7 +302,12 @@ export const screenRun = sqliteTable(
     passedRevision: integer("passed_revision").notNull().default(0),
     survivorCount: integer("survivor_count").notNull().default(0),
   },
-  (t) => [index("idx_screen_run_run_at").on(t.runAt)],
+  (t) => [
+    index("idx_screen_run_run_at").on(t.runAt),
+    uniqueIndex("idx_screen_single_running")
+      .on(t.status)
+      .where(sql`${t.status} = 'running'`),
+  ],
 );
 
 export const screenStock = sqliteTable(
@@ -328,21 +345,71 @@ export const screenStock = sqliteTable(
     upLast30d: real("up_last_30d"),
     downLast30d: real("down_last_30d"),
     composite: real("composite"),
-    passUniverse: integer("pass_universe", { mode: "boolean" }).notNull().default(false),
-    passRevision: integer("pass_revision", { mode: "boolean" }).notNull().default(false),
-    passQuality: integer("pass_quality", { mode: "boolean" }).notNull().default(false),
-    passExpectations: integer("pass_expectations", { mode: "boolean" }).notNull().default(false),
-    strict: integer("strict", { mode: "boolean" }).notNull().default(false),
+    // SQL defaults avoid binding every default for every row in D1 queue inserts.
+    passUniverse: integer("pass_universe", { mode: "boolean" })
+      .notNull()
+      .default(sql`0`),
+    passRevision: integer("pass_revision", { mode: "boolean" })
+      .notNull()
+      .default(sql`0`),
+    passQuality: integer("pass_quality", { mode: "boolean" })
+      .notNull()
+      .default(sql`0`),
+    passExpectations: integer("pass_expectations", { mode: "boolean" })
+      .notNull()
+      .default(sql`0`),
+    strict: integer("strict", { mode: "boolean" })
+      .notNull()
+      .default(sql`0`),
     weight: real("weight"),
     // Advisory Jev-style classification of revision drivers (see lib/screen/jev.ts).
     jevVerdict: text("jev_verdict"), // RECURRING | ONE_OFF | MIXED
     jevProbability: real("jev_probability"),
     jevRationale: text("jev_rationale"),
-    processed: integer("processed", { mode: "boolean" }).notNull().default(false),
+    processed: integer("processed", { mode: "boolean" })
+      .notNull()
+      .default(sql`0`),
     error: text("error"),
+    dataIssues: text("data_issues")
+      .notNull()
+      .default(sql`'[]'`),
+    inputSnapshot: text("input_snapshot"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(now),
   },
-  (t) => [index("idx_screen_stock_run").on(t.runId), index("idx_screen_stock_symbol").on(t.symbol)],
+  (t) => [
+    index("idx_screen_stock_run").on(t.runId),
+    index("idx_screen_stock_symbol").on(t.symbol),
+    uniqueIndex("idx_screen_stock_run_symbol").on(t.runId, t.symbol),
+  ],
+);
+
+// ─── Screen outcomes (forward returns of each run's picks) ────────────────────
+// One row per survivor per horizon, upserted as time passes. Excess is vs the
+// equal-weight survivor cohort benchmark plus the STOXX 600 market benchmark.
+
+export const screenOutcome = sqliteTable(
+  "screen_outcome",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    runId: text("run_id")
+      .notNull()
+      .references(() => screenRun.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    strict: integer("strict", { mode: "boolean" }).notNull().default(false),
+    horizonDays: integer("horizon_days").notNull(), // trading sessions
+    priceAtRun: real("price_at_run").notNull(),
+    priceAtEnd: real("price_at_end").notNull(),
+    returnPct: real("return_pct").notNull(),
+    benchmarkReturnPct: real("benchmark_return_pct").notNull(),
+    excessReturnPct: real("excess_return_pct").notNull(),
+    computedAt: integer("computed_at", { mode: "timestamp" }).notNull().$defaultFn(now),
+  },
+  (t) => [
+    uniqueIndex("uq_screen_outcome").on(t.runId, t.symbol, t.horizonDays),
+    index("idx_screen_outcome_run").on(t.runId),
+  ],
 );
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -359,3 +426,4 @@ export type WalletTopUp = typeof walletTopUp.$inferSelect;
 export type UsageLog = typeof usageLog.$inferSelect;
 export type ScreenRun = typeof screenRun.$inferSelect;
 export type ScreenStock = typeof screenStock.$inferSelect;
+export type ScreenOutcome = typeof screenOutcome.$inferSelect;

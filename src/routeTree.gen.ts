@@ -17,6 +17,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiScreenRunRouteImport } from './routes/api/screen/run'
+import { Route as ApiScreenOutcomesRouteImport } from './routes/api/screen/outcomes'
 import { Route as ApiScreenJevRouteImport } from './routes/api/screen/jev'
 import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing/webhook'
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
@@ -64,6 +65,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
 const ApiScreenRunRoute = ApiScreenRunRouteImport.update({
   id: '/api/screen/run',
   path: '/api/screen/run',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiScreenOutcomesRoute = ApiScreenOutcomesRouteImport.update({
+  id: '/api/screen/outcomes',
+  path: '/api/screen/outcomes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiScreenJevRoute = ApiScreenJevRouteImport.update({
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/screen/jev': typeof ApiScreenJevRoute
+  '/api/screen/outcomes': typeof ApiScreenOutcomesRoute
   '/api/screen/run': typeof ApiScreenRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/screen/jev': typeof ApiScreenJevRoute
+  '/api/screen/outcomes': typeof ApiScreenOutcomesRoute
   '/api/screen/run': typeof ApiScreenRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/screen/jev': typeof ApiScreenJevRoute
+  '/api/screen/outcomes': typeof ApiScreenOutcomesRoute
   '/api/screen/run': typeof ApiScreenRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | '/api/billing/portal'
     | '/api/billing/webhook'
     | '/api/screen/jev'
+    | '/api/screen/outcomes'
     | '/api/screen/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
@@ -196,6 +206,7 @@ export interface FileRouteTypes {
     | '/api/billing/portal'
     | '/api/billing/webhook'
     | '/api/screen/jev'
+    | '/api/screen/outcomes'
     | '/api/screen/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/api/billing/portal'
     | '/api/billing/webhook'
     | '/api/screen/jev'
+    | '/api/screen/outcomes'
     | '/api/screen/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
@@ -233,6 +245,7 @@ export interface RootRouteChildren {
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
   ApiScreenJevRoute: typeof ApiScreenJevRoute
+  ApiScreenOutcomesRoute: typeof ApiScreenOutcomesRoute
   ApiScreenRunRoute: typeof ApiScreenRunRoute
   ApiAuthGoogleCallbackRoute: typeof ApiAuthGoogleCallbackRoute
   ApiAuthGoogleStartRoute: typeof ApiAuthGoogleStartRoute
@@ -294,6 +307,13 @@ declare module '@tanstack/react-router' {
       path: '/api/screen/run'
       fullPath: '/api/screen/run'
       preLoaderRoute: typeof ApiScreenRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/screen/outcomes': {
+      id: '/api/screen/outcomes'
+      path: '/api/screen/outcomes'
+      fullPath: '/api/screen/outcomes'
+      preLoaderRoute: typeof ApiScreenOutcomesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/screen/jev': {
@@ -369,6 +389,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiBillingWebhookRoute: ApiBillingWebhookRoute,
   ApiScreenJevRoute: ApiScreenJevRoute,
+  ApiScreenOutcomesRoute: ApiScreenOutcomesRoute,
   ApiScreenRunRoute: ApiScreenRunRoute,
   ApiAuthGoogleCallbackRoute: ApiAuthGoogleCallbackRoute,
   ApiAuthGoogleStartRoute: ApiAuthGoogleStartRoute,

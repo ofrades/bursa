@@ -1,26 +1,39 @@
 #!/usr/bin/env bash
-# Scheduled screen driver for bursa — designed for a system cron line like:
-#   0 6 1,15 * *  SCREEN_ADMIN_TOKEN=... BASE_URL=https://bursa... /path/screen-cron.sh
-# Advances the screen in batches until done, then runs the revision-quality
-# classifier over the strict quintile. Requires SCREEN_ADMIN_TOKEN and BASE_URL.
+# Weekly example (host timezone):
+# 0 6 * * 1 SCREEN_ADMIN_TOKEN=... BASE_URL=https://bursa.mohshoo.com /path/screen-cron.sh
+# Free-data screen only. Paid AI classification is an explicit separate action.
 set -euo pipefail
 
 : "${SCREEN_ADMIN_TOKEN:?SCREEN_ADMIN_TOKEN required}"
 : "${BASE_URL:?BASE_URL required}"
 
-status="running"
-for _ in $(seq 1 40); do
-  response=$(curl -sS -X POST "$BASE_URL/api/screen/run" \
-    -H "x-screen-token: $SCREEN_ADMIN_TOKEN")
-  status=$(echo "$response" | sed -n 's/.*"status":"\([a-z]*\)".*/\1/p')
+body='{}'
+for _ in $(seq 1 120); do
+  response=$(curl --fail-with-body --silent --show-error --max-time 600 \
+    -X POST "$BASE_URL/api/screen/run" \
+    -H "x-screen-token: $SCREEN_ADMIN_TOKEN" \
+    -H 'content-type: application/json' --data "$body")
+  status=$(printf '%s' "$response" | node --input-type=module -e '
+    let text=""; for await (const chunk of process.stdin) text+=chunk;
+    const data=JSON.parse(text);
+    if (!["running","done","failed"].includes(data.status)) throw new Error("Invalid screen response");
+    console.log(data.status);')
   echo "[screen-cron] batch: $response"
-  [ "$status" != "running" ] && break
+  if [ "$status" = "done" ]; then
+  outcomes=$(curl --fail-with-body --silent --show-error --max-time 600 \
+    -X POST "$BASE_URL/api/screen/outcomes" \
+    -H "x-screen-token: $SCREEN_ADMIN_TOKEN" \
+    -H 'content-type: application/json' --data '{}')
+  echo "[screen-cron] outcomes: $outcomes"
+  exit 0
+fi
+  if [ "$status" = "failed" ]; then echo 'Screen failed' >&2; exit 1; fi
+  body=$(printf '%s' "$response" | node --input-type=module -e '
+    let text=""; for await (const chunk of process.stdin) text+=chunk;
+    const data=JSON.parse(text); if (!data.runId) throw new Error("Missing run ID");
+    console.log(JSON.stringify({runId:data.runId}));')
   sleep 5
 done
 
-if [ "$status" = "done" ]; then
-  response=$(curl -sS -X POST "$BASE_URL/api/screen/jev" \
-    -H "x-screen-token: $SCREEN_ADMIN_TOKEN" \
-    -H "content-type: application/json" -d '{}')
-  echo "[screen-cron] classify: $response"
-fi
+echo 'Screen did not complete within 120 batches; rerun to resume.' >&2
+exit 1

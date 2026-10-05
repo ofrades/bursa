@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 function applyMigration(sqlite: Database.Database, path: string) {
@@ -13,8 +13,9 @@ describe("fresh database migrations", () => {
   it("builds a complete empty schema without production data dumps", () => {
     const sqlite = new Database(":memory:");
     try {
-      applyMigration(sqlite, "drizzle/20260612104338_soft_argent/migration.sql");
-      applyMigration(sqlite, "drizzle/20260824000000_security_state/migration.sql");
+      for (const folder of readdirSync("drizzle").sort()) {
+        applyMigration(sqlite, `drizzle/${folder}/migration.sql`);
+      }
 
       const tables = sqlite
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
@@ -28,6 +29,22 @@ describe("fresh database migrations", () => {
         name: string;
       }>;
       expect(usageColumns.map((column) => column.name)).toContain("reservation_id");
+      const screenColumns = sqlite.prepare("PRAGMA table_info(screen_stock)").all() as Array<{
+        name: string;
+      }>;
+      expect(screenColumns.map((column) => column.name)).toContain("input_snapshot");
+      sqlite
+        .prepare(
+          "INSERT INTO screen_run (id, run_at, status, params) VALUES ('r1', 1, 'running', '{}')",
+        )
+        .run();
+      expect(() =>
+        sqlite
+          .prepare(
+            "INSERT INTO screen_run (id, run_at, status, params) VALUES ('r2', 2, 'running', '{}')",
+          )
+          .run(),
+      ).toThrow();
     } finally {
       sqlite.close();
     }

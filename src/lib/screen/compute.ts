@@ -199,6 +199,10 @@ export function computePiotroski(s: Statements): number | null {
     !isNum(ca1) ||
     !isNum(cl0) ||
     !isNum(cl1) ||
+    !isNum(ltd0) ||
+    !isNum(ltd1) ||
+    ta0 <= 0 ||
+    ta1 <= 0 ||
     !isNum(sh0) ||
     !isNum(sh1) ||
     !isNum(s.operatingCashFlow)
@@ -239,16 +243,19 @@ export function evaluateSymbol(
   const advEur = isNum(data.adv) && perEur ? (data.adv * perEur) / (pence ? 100 : 1) / 1e6 : null;
 
   const revAvg = isNum(data.fy1Rev) && isNum(data.fy2Rev) ? (data.fy1Rev + data.fy2Rev) / 2 : null;
-  const sign = (v: number) => (v > 0 ? 1 : v < 0 ? -1 : 0);
+  const up = data.upLast30d;
+  const down = data.downLast30d;
   const breadth =
-    isNum(data.fy1Rev) && isNum(data.fy2Rev) ? (sign(data.fy1Rev) + sign(data.fy2Rev)) / 2 : null;
+    isNum(up) && isNum(down) && up >= 0 && down >= 0 && up + down > 0
+      ? (up - down) / (up + down)
+      : null;
 
   const financial = isFinancial(data.sector);
   const roic = computeRoic(data.statements);
   const ndEbitda = computeNdEbitda(
     data.statements.totalDebt,
     data.statements.cash,
-    data.statements.ebit ?? null,
+    null,
     data.statements,
   );
   const fscore = computePiotroski(data.statements);
@@ -298,6 +305,10 @@ export function evaluateSymbol(
   const passRevision =
     isNum(revAvg) &&
     isNum(breadth) &&
+    isNum(data.fy1Rev) &&
+    data.fy1Rev > 0 &&
+    isNum(data.fy2Rev) &&
+    data.fy2Rev > 0 &&
     revAvg > params.gateRevisionGt &&
     breadth > params.gateBreadthGt;
 
@@ -333,7 +344,10 @@ export function evaluateSymbol(
     fy2Rev: data.fy2Rev,
     revAvg,
     breadth,
-    sue: computeSue(data.surprises),
+    sue:
+      data.surprises.length >= params.sueQuarters
+        ? computeSue(data.surprises.slice(0, params.sueQuarters))
+        : null,
     roic,
     ndEbitda,
     fscore,
@@ -356,27 +370,31 @@ export function evaluateSymbol(
   };
 }
 
-/** 3-month average daily traded value (close × volume on traded bars). */
+/** Average daily traded value; known zero-volume sessions contribute zero. */
 export function advFromBars(
   bars: readonly { close?: number | null; volume?: number | null }[],
 ): number | null {
   const values = bars
-    .map((b) => (isNum(b.close) && isNum(b.volume) && b.volume > 0 ? b.close * b.volume : null))
+    .map((b) =>
+      isNum(b.close) && b.close > 0 && isNum(b.volume) && b.volume >= 0 ? b.close * b.volume : null,
+    )
     .filter(isNum);
   if (!values.length) return null;
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-/** 12-1 momentum over adjusted closes: last `skip`-sessions-ago close vs
- * `skip + back` sessions ago. Null when history is shorter than the window. */
+/** 12-1 momentum: adjusted close one month ago / close twelve months ago - 1.
+ * `back` and `skip` are endpoint offsets in trading sessions. */
 export function momentumFromCloses(
   closes: readonly (number | null | undefined)[],
   back: number,
   skip: number,
 ): number | null {
   const c = closes.filter(isNum);
-  if (c.length < back + skip) return null;
-  return c[c.length - 1 - skip] / c[c.length - 1 - skip - back] - 1;
+  if (back <= skip || skip < 0 || closes.some((v) => !isNum(v)) || c.length <= back) return null;
+  const start = c[c.length - 1 - back];
+  const end = c[c.length - 1 - skip];
+  return start > 0 && end > 0 ? end / start - 1 : null;
 }
 
 function zClip(values: number[], clip: number): number[] {
@@ -391,6 +409,7 @@ function zClip(values: number[], clip: number): number[] {
  * survivor population. Mutates rows in place — z-scores need the full set. */
 export function finalize(rows: ScreenRow[], params: ScreenParams): void {
   const survivors = rows.filter((r) => r.passUniverse && r.passRevision && r.passQuality);
+  if (!survivors.length) return;
   const pick = (key: "revAvg" | "breadth" | "sue" | "mom121") => survivors.map((r) => r[key]);
   const fill = (xs: (number | null)[]) => {
     const known = xs.filter(isNum) as number[];
@@ -406,7 +425,7 @@ export function finalize(rows: ScreenRow[], params: ScreenParams): void {
     sue: zClip(fill(pick("sue")), params.zClip),
     momentum: zClip(fill(pick("mom121")), params.zClip),
   };
-  const momentumWeight = 1 - w.revision - w.breadth - w.sue;
+  const momentumWeight = w.momentum;
   survivors.forEach((r, i) => {
     r.composite =
       w.revision * z.revision[i] +
