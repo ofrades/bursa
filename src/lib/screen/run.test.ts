@@ -5,12 +5,37 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "../db";
 import { advanceScreen } from "./run";
 import { fetchScreenData } from "./fetch";
+import { fetchFxRates, FxCoverageError } from "./fx";
 import type { SymbolData } from "./compute";
 
-vi.mock("./fetch", () => ({
-  fetchFxRates: vi.fn().mockResolvedValue({ EUR: 1 }),
-  fetchScreenData: vi.fn(),
+vi.mock("./fetch", () => ({ fetchScreenData: vi.fn() }));
+vi.mock("./fx", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./fx")>()),
+  fetchFxRates: vi.fn(),
 }));
+const fx = {
+  source: "https://www.exchangerate-api.com",
+  asOf: new Date().toISOString(),
+  rates: {
+    EUR: 1,
+    USD: 1.125,
+    GBP: 0.85,
+    CHF: 0.94,
+    SEK: 11,
+    DKK: 7.46,
+    NOK: 11.5,
+    JPY: 178,
+    CNY: 8,
+    HKD: 8.8,
+    TWD: 36,
+    KRW: 1500,
+    INR: 95,
+    CAD: 1.55,
+    AUD: 1.75,
+    BRL: 6,
+    SAR: 4.22,
+  },
+};
 
 function createDb() {
   const sqlite = new Database(":memory:");
@@ -79,9 +104,60 @@ const data: SymbolData = {
 afterEach(() => vi.clearAllMocks());
 
 describe("screen run persistence", () => {
+  it("does not create a queue when the FX source is unavailable", async () => {
+    vi.mocked(fetchFxRates).mockRejectedValue(new FxCoverageError("source unavailable"));
+    const { sqlite, db } = createDb();
+    try {
+      await expect(advanceScreen(db)).rejects.toThrow(FxCoverageError);
+      expect(sqlite.prepare("SELECT count(*) AS n FROM screen_run").get()).toEqual({ n: 0 });
+      expect(fetchScreenData).not.toHaveBeenCalled();
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("rejects an incomplete FX snapshot before inserting a run", async () => {
+    vi.mocked(fetchFxRates).mockResolvedValue({ ...fx, rates: { EUR: 1 } });
+    const { sqlite, db } = createDb();
+    try {
+      await expect(advanceScreen(db)).rejects.toThrow(FxCoverageError);
+      expect(sqlite.prepare("SELECT count(*) AS n FROM screen_run").get()).toEqual({ n: 0 });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("does not complete a run when a stock encounters an FX coverage error", async () => {
+    vi.mocked(fetchFxRates).mockResolvedValue(fx);
+    vi.mocked(fetchScreenData).mockRejectedValue(new FxCoverageError("unsupported currency XYZ"));
+    const { sqlite, db } = createDb();
+    try {
+      await expect(advanceScreen(db)).rejects.toThrow("XYZ");
+      expect(sqlite.prepare("SELECT status FROM screen_run").get()).toEqual({ status: "failed" });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("fails an active partial-FX run before processing or ranking any stocks", async () => {
+    const { sqlite, db } = createDb();
+    try {
+      sqlite
+        .prepare(
+          "INSERT INTO screen_run (id, run_at, params, fx_rates, status) VALUES ('partial', ?, ?, ?, 'running')",
+        )
+        .run(Math.floor(Date.now() / 1000), "{}", '{"EUR":1}');
+      await expect(advanceScreen(db, "partial")).rejects.toThrow(FxCoverageError);
+      expect(sqlite.prepare("SELECT status FROM screen_run WHERE id = 'partial'").get()).toEqual({
+        status: "failed",
+      });
+      expect(fetchScreenData).not.toHaveBeenCalled();
+    } finally {
+      sqlite.close();
+    }
+  });
   it("claims batches once, persists audits and never restarts a pinned completed run", async () => {
-    const { fetchFxRates } = await import("./fetch");
-    vi.mocked(fetchFxRates).mockResolvedValue({ EUR: 1 });
+    vi.mocked(fetchFxRates).mockResolvedValue(fx);
     vi.mocked(fetchScreenData).mockResolvedValue({
       name: "Fixture company",
       data,
@@ -125,6 +201,10 @@ describe("screen run persistence", () => {
       while (run.status === "running") run = await advanceScreen(db, id);
       expect(run.status).toBe("done");
       expect(run.processed).toBe(run.universe);
+      const stored = sqlite.prepare("SELECT params FROM screen_run WHERE id = ?").get(id) as {
+        params: string;
+      };
+      expect(JSON.parse(stored.params).fx).toEqual({ source: fx.source, asOf: fx.asOf });
       expect(
         sqlite
           .prepare("SELECT count(*) AS n FROM screen_stock WHERE input_snapshot IS NOT NULL")
@@ -138,8 +218,7 @@ describe("screen run persistence", () => {
   });
 
   it("fails a run when every symbol fetch fails", async () => {
-    const { fetchFxRates } = await import("./fetch");
-    vi.mocked(fetchFxRates).mockResolvedValue({ EUR: 1 });
+    vi.mocked(fetchFxRates).mockResolvedValue(fx);
     vi.mocked(fetchScreenData).mockRejectedValue(new Error("Yahoo unavailable"));
     const { sqlite, db } = createDb();
     try {

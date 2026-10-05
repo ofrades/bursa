@@ -1,4 +1,3 @@
-import { z } from "zod";
 import {
   getEarningsSurprises,
   getFundamentalsTimeSeries,
@@ -131,51 +130,4 @@ export async function fetchScreenData(symbol: string, params: ScreenParams) {
       data,
     },
   };
-}
-
-export async function fetchFxRates(): Promise<Record<string, number>> {
-  const eurPairs = ["EURUSD", "EURGBP", "EURCHF", "EURSEK", "EURDKK", "EURNOK", "EURJPY"];
-  const usdPairs = ["CNY", "HKD", "TWD", "KRW", "INR", "CAD", "AUD", "BRL", "SAR"];
-  type FxRates = Record<string, number>;
-  const unitsPerEur: FxRates = { EUR: 1 };
-
-  await Promise.all(
-    eurPairs.map(async (pair) => {
-      const ccy = pair.replace("EUR", "");
-      const v = await fetchYahooRate(pair + "=X");
-      if (v !== null && Number.isFinite(v) && v > 0) unitsPerEur[ccy] = v;
-    }),
-  );
-  const eurusd = unitsPerEur["USD"];
-  await Promise.all(
-    usdPairs.map(async (ccy) => {
-      const v = await fetchYahooRate(ccy + "=X");
-      if (v !== null && Number.isFinite(v) && v > 0 && eurusd !== undefined)
-        unitsPerEur[ccy] = v * eurusd;
-    }),
-  );
-  return unitsPerEur;
-}
-
-async function fetchYahooRate(pair: string): Promise<number | null> {
-  try {
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${pair}?range=5d&interval=1d`,
-      { signal: AbortSignal.timeout(30000) },
-    );
-    if (!res.ok) {
-      await res.body?.cancel();
-      return null;
-    }
-    const payload = z
-      .object({
-        chart: z.object({
-          result: z.array(z.object({ meta: z.object({ regularMarketPrice: z.number() }) })),
-        }),
-      })
-      .safeParse(await res.json());
-    return payload.success ? payload.data.chart.result[0].meta.regularMarketPrice : null;
-  } catch {
-    return null;
-  }
 }

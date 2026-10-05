@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import type { Db } from "./db";
 import {
   capAnalysisCharge,
-  completedAnalysisCharge,
   getAnalysisMaxChargeCents,
   releaseAnalysis,
   reserveAnalysis,
@@ -68,10 +67,5 @@ describe("analysis reservations", () => {
     expect(capAnalysisCharge(40, 25)).toBe(25);
     expect(capAnalysisCharge(4.2, 25)).toBe(5);
     expect(capAnalysisCharge(-1, 25)).toBe(0);
-  });
-
-  it("charges the full hold when a completed stream has no provider usage event", () => {
-    expect(completedAnalysisCharge(null, 25)).toBe(25);
-    expect(completedAnalysisCharge(4, 25)).toBe(4);
   });
 });

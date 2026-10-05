@@ -1,93 +1,90 @@
-import { describe, expect, it } from "vitest";
-import { buildClassifyUserPrompt, extractVerdict, parseVerdict } from "./jev";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Effect } from "effect";
+import { ExternalServiceError } from "../effect/errors";
+import type { Db } from "../db";
+import { classifyLatestRun } from "./jev";
 
-describe("buildClassifyUserPrompt", () => {
-  it("includes metrics, headlines and business summary", () => {
-    const prompt = buildClassifyUserPrompt(
-      {
-        symbol: "RR.L",
-        name: "Rolls-Royce",
-        region: "EU",
-        sector: "Industrials",
-        revAvg: 0.15,
-        fy1Rev: 0.18,
-        fy2Rev: 0.12,
-        sue: 2.1,
-        upLast30d: 14,
-        downLast30d: 1,
-        mom121: 0.4,
-      },
-      "Power systems for aerospace.",
-      ["Rolls-Royce raises guidance on strong Trent demand"],
-    );
-    expect(prompt).toContain('"symbol":"RR.L"');
-    expect(prompt).toContain("guidance raises from core operations");
-    expect(prompt).toContain("Rolls-Royce raises guidance");
-    expect(prompt).toContain("Power systems for aerospace.");
-  });
+const mocks = vi.hoisted(() => ({ key: vi.fn(), evaluate: vi.fn(), news: vi.fn() }));
+vi.mock("../../secrets", () => ({ getSecret: mocks.key }));
+vi.mock("../../server/jev", () => ({
+  evaluateChoices: mocks.evaluate,
+  gatherNewsEvidence: mocks.news,
+  revisionQuestion: { type: "choice", criteria: { INSUFFICIENT_EVIDENCE: "Missing evidence" } },
+}));
 
-  it("omits empty evidence sections", () => {
-    const prompt = buildClassifyUserPrompt(
-      {
-        symbol: "X",
-        name: "X",
-        region: null,
-        sector: null,
-        revAvg: 0.1,
-        fy1Rev: 0.1,
-        fy2Rev: 0.1,
-        sue: null,
-        upLast30d: null,
-        downLast30d: null,
-        mom121: null,
-      },
-      null,
-      [],
-    );
-    expect(prompt).not.toContain("Recent headlines");
-    expect(prompt).not.toContain("Business:");
-  });
+function database() {
+  const set = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+  const db: Partial<Db> = {
+    select: vi
+      .fn()
+      .mockReturnValueOnce({
+        from: () => ({
+          where: () => ({ orderBy: () => ({ limit: async () => [{ id: "run-1" }] }) }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [
+            {
+              id: "row-1",
+              symbol: "X",
+              name: "Example",
+              fy1Rev: 0.1,
+              fy2Rev: 0.2,
+              upLast30d: 4,
+              downLast30d: 1,
+            },
+          ],
+        }),
+      }),
+    update: vi.fn().mockReturnValue({ set }),
+  };
+  return { db: db as Db, set };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.key.mockResolvedValue("test-key");
+  mocks.news.mockResolvedValue([]);
+  mocks.evaluate.mockReturnValue(
+    Effect.succeed({
+      result: { revisionQuality: { value: "INSUFFICIENT_EVIDENCE", probability: 0.95 } },
+    }),
+  );
 });
 
-describe("parseVerdict", () => {
-  it("accepts a valid verdict and clamps probability", () => {
-    const v = parseVerdict({ classification: "RECURRING", probability: 1.7, rationale: "x" });
-    expect(v).toEqual({ classification: "RECURRING", probability: 1, rationale: "x" });
-  });
-
-  it("rejects unknown classifications and non-numeric probabilities", () => {
-    expect(
-      parseVerdict({ classification: "SOMETHING", probability: 0.5, rationale: "" }),
-    ).toBeNull();
-    expect(parseVerdict({ classification: "RECURRING", probability: "high" })).toBeNull();
-    expect(parseVerdict({})).toBeNull();
-  });
-});
-
-describe("extractVerdict", () => {
-  it("parses OpenRouter chat completions content", () => {
-    const payload = {
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              classification: "ONE_OFF",
-              probability: 0.8,
-              rationale: "FX-driven.",
-            }),
-          },
-        },
-      ],
-    };
-    expect(extractVerdict(payload)).toEqual({
-      classification: "ONE_OFF",
-      probability: 0.8,
-      rationale: "FX-driven.",
+describe("screen revision judgments", () => {
+  it("persists explicit insufficient evidence as an advisory classification, without changing gates", async () => {
+    const { db, set } = database();
+    expect(await classifyLatestRun(db)).toEqual({ classified: 1, failed: 0 });
+    expect(set).toHaveBeenCalledWith({
+      jevVerdict: "INSUFFICIENT_EVIDENCE",
+      jevProbability: 0.95,
+      jevRationale: "Supplied evidence does not identify a revision driver.",
     });
+    expect(mocks.key).toHaveBeenCalledWith("OPENROUTER_API_KEY");
+    expect(mocks.evaluate.mock.calls[0][0].evidence).toEqual([]);
   });
 
-  it("returns null on malformed payloads", () => {
-    expect(extractVerdict({ choices: [{ message: { content: "not json" } }] })).toBeNull();
-    expect(extractVerdict({})).toBeNull();
+  it("skips before reading the run if the new credential is missing", async () => {
+    mocks.key.mockResolvedValue(undefined);
+    const { db } = database();
+    expect(await classifyLatestRun(db)).toEqual({
+      classified: 0,
+      failed: 0,
+      skipped: "OPENROUTER_API_KEY not configured",
+    });
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it("counts failed provider calls without fabricating a verdict", async () => {
+    mocks.evaluate.mockReturnValue(
+      Effect.fail(
+        new ExternalServiceError({ service: "openrouter", cause: "provider unavailable" }),
+      ),
+    );
+    const { db, set } = database();
+    expect(await classifyLatestRun(db)).toEqual({ classified: 0, failed: 1 });
+    expect(set).not.toHaveBeenCalled();
   });
 });

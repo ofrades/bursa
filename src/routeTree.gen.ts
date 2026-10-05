@@ -16,6 +16,7 @@ import { Route as SymbolRouteImport } from './routes/$symbol'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiAnalyzeRouteImport } from './routes/api/analyze'
 import { Route as ApiScreenRunRouteImport } from './routes/api/screen/run'
 import { Route as ApiScreenOutcomesRouteImport } from './routes/api/screen/outcomes'
 import { Route as ApiScreenJevRouteImport } from './routes/api/screen/jev'
@@ -23,7 +24,6 @@ import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing/webh
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiBillingCheckoutRouteImport } from './routes/api/billing/checkout'
 import { Route as ApiAuthSignoutRouteImport } from './routes/api/auth/signout'
-import { Route as ApiAnalyzeStreamRouteImport } from './routes/api/analyze/stream'
 import { Route as ApiAuthGoogleStartRouteImport } from './routes/api/auth/google/start'
 import { Route as ApiAuthGoogleCallbackRouteImport } from './routes/api/auth/google/callback'
 
@@ -62,6 +62,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
   path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAnalyzeRoute = ApiAnalyzeRouteImport.update({
+  id: '/api/analyze',
+  path: '/api/analyze',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiScreenRunRoute = ApiScreenRunRouteImport.update({
   id: '/api/screen/run',
   path: '/api/screen/run',
@@ -97,11 +102,6 @@ const ApiAuthSignoutRoute = ApiAuthSignoutRouteImport.update({
   path: '/api/auth/signout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAnalyzeStreamRoute = ApiAnalyzeStreamRouteImport.update({
-  id: '/api/analyze/stream',
-  path: '/api/analyze/stream',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiAuthGoogleStartRoute = ApiAuthGoogleStartRouteImport.update({
   id: '/api/auth/google/start',
   path: '/api/auth/google/start',
@@ -119,9 +119,9 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
   '/screen': typeof ScreenRoute
+  '/api/analyze': typeof ApiAnalyzeRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
-  '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
   '/api/auth/signout': typeof ApiAuthSignoutRoute
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
@@ -138,9 +138,9 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
   '/screen': typeof ScreenRoute
+  '/api/analyze': typeof ApiAnalyzeRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
-  '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
   '/api/auth/signout': typeof ApiAuthSignoutRoute
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
@@ -158,9 +158,9 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
   '/screen': typeof ScreenRoute
+  '/api/analyze': typeof ApiAnalyzeRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
-  '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
   '/api/auth/signout': typeof ApiAuthSignoutRoute
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
@@ -179,9 +179,9 @@ export interface FileRouteTypes {
     | '/about'
     | '/dashboard'
     | '/screen'
+    | '/api/analyze'
     | '/api/health'
     | '/stocks/$symbol'
-    | '/api/analyze/stream'
     | '/api/auth/signout'
     | '/api/billing/checkout'
     | '/api/billing/portal'
@@ -198,9 +198,9 @@ export interface FileRouteTypes {
     | '/about'
     | '/dashboard'
     | '/screen'
+    | '/api/analyze'
     | '/api/health'
     | '/stocks/$symbol'
-    | '/api/analyze/stream'
     | '/api/auth/signout'
     | '/api/billing/checkout'
     | '/api/billing/portal'
@@ -217,9 +217,9 @@ export interface FileRouteTypes {
     | '/about'
     | '/dashboard'
     | '/screen'
+    | '/api/analyze'
     | '/api/health'
     | '/stocks/$symbol'
-    | '/api/analyze/stream'
     | '/api/auth/signout'
     | '/api/billing/checkout'
     | '/api/billing/portal'
@@ -237,9 +237,9 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   DashboardRoute: typeof DashboardRoute
   ScreenRoute: typeof ScreenRoute
+  ApiAnalyzeRoute: typeof ApiAnalyzeRoute
   ApiHealthRoute: typeof ApiHealthRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
-  ApiAnalyzeStreamRoute: typeof ApiAnalyzeStreamRoute
   ApiAuthSignoutRoute: typeof ApiAuthSignoutRoute
   ApiBillingCheckoutRoute: typeof ApiBillingCheckoutRoute
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
@@ -302,6 +302,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/analyze': {
+      id: '/api/analyze'
+      path: '/api/analyze'
+      fullPath: '/api/analyze'
+      preLoaderRoute: typeof ApiAnalyzeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/screen/run': {
       id: '/api/screen/run'
       path: '/api/screen/run'
@@ -351,13 +358,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSignoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/analyze/stream': {
-      id: '/api/analyze/stream'
-      path: '/api/analyze/stream'
-      fullPath: '/api/analyze/stream'
-      preLoaderRoute: typeof ApiAnalyzeStreamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/auth/google/start': {
       id: '/api/auth/google/start'
       path: '/api/auth/google/start'
@@ -381,9 +381,9 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   DashboardRoute: DashboardRoute,
   ScreenRoute: ScreenRoute,
+  ApiAnalyzeRoute: ApiAnalyzeRoute,
   ApiHealthRoute: ApiHealthRoute,
   StocksSymbolRoute: StocksSymbolRoute,
-  ApiAnalyzeStreamRoute: ApiAnalyzeStreamRoute,
   ApiAuthSignoutRoute: ApiAuthSignoutRoute,
   ApiBillingCheckoutRoute: ApiBillingCheckoutRoute,
   ApiBillingPortalRoute: ApiBillingPortalRoute,

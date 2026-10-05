@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_PARAMS } from "./compute";
-import { fetchFxRates, fetchScreenData } from "./fetch";
+import { fetchScreenData } from "./fetch";
 import {
   getRevisionSummary,
   getRevisionPrices,
@@ -23,11 +23,6 @@ afterEach(() => {
 });
 
 describe("screen data collection", () => {
-  it("always includes EUR=1 even if other FX requests fail", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
-    expect(await fetchFxRates()).toEqual({ EUR: 1 });
-  });
-
   it("records real consensus inputs, fiscal dates and fetch time", async () => {
     vi.mocked(getEarningsSurprises).mockResolvedValue([]);
     vi.useFakeTimers();

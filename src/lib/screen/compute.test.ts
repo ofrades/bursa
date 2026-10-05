@@ -133,6 +133,24 @@ describe("computePiotroski", () => {
 });
 
 describe("evaluateSymbol", () => {
+  it.each([
+    { currency: "USD", rate: 2 },
+    { currency: "JPY", rate: 100 },
+  ])(
+    "does not reject a liquid $currency stock when complete FX is supplied",
+    ({ currency, rate }) => {
+      const row = evaluateSymbol(
+        { symbol: "X", name: "X", region: "Global", country: null },
+        symbolData({ currency, mcap: 40e9 * rate, adv: 100e6 * rate }),
+        { ...FX, [currency]: rate },
+        DEFAULT_PARAMS,
+      );
+      expect(row.mcapEur).toBe(40);
+      expect(row.advEur).toBe(100);
+      expect(row.passUniverse).toBe(true);
+    },
+  );
+
   it("converts listing currency to EUR (DKK)", () => {
     const row = evaluateSymbol(
       { symbol: "NOVO-B.CO", name: "Novo Nordisk", region: "EU", country: "DK" },

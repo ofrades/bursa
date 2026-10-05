@@ -9,6 +9,7 @@ import { Database } from "../../../lib/effect/services/database";
 import { ExternalServiceError, ValidationError } from "../../../lib/effect/errors";
 import { toResponse } from "../../../lib/effect/respond";
 import { advanceScreen } from "../../../lib/screen/run";
+import { FxCoverageError } from "../../../lib/screen/fx";
 import { getSecret } from "../../../secrets";
 
 const runProgram = Effect.fn("screen.run")(function* (request: Request, runId?: string) {
@@ -38,8 +39,14 @@ export const Route = createFileRoute("/api/screen/run")({
         const token = request.headers.get("x-screen-token");
         if (expected && token === expected) {
           const { getDb } = await import("../../../lib/db");
-          const result = await advanceScreen(getDb(), input.data.runId);
-          return Response.json(result);
+          try {
+            const result = await advanceScreen(getDb(), input.data.runId);
+            return Response.json(result);
+          } catch (cause) {
+            if (cause instanceof FxCoverageError)
+              return Response.json({ error: cause.message }, { status: 503 });
+            throw cause;
+          }
         }
         return toResponse(
           runProgram(request, input.data.runId).pipe(Effect.provide(Database.layer)),

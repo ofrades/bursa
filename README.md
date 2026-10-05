@@ -38,14 +38,16 @@ Important variables:
 - `DB_PATH`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
-- `OPENROUTER_API_KEY`
+- `OPENROUTER_API_KEY` for Jev decisions
 - `FMP_API_KEY` for Financial Modeling Prep market data
 - `MARKET_DATA_PROVIDER` (`fmp` or `yahoo`)
 - `BETTER_AUTH_URL` in production
 
 Market data now supports an official-provider path. When `FMP_API_KEY` is set, the app prefers Financial Modeling Prep and falls back to Yahoo if an FMP request fails. Without `FMP_API_KEY`, Yahoo remains the default.
 
-AI requests use `moonshotai/kimi-k2.6` via OpenRouter.
+AI requests use TanStack AI's non-streaming `decide()` API and the OpenRouter adapter, using `typesafe/jev-1.13` through `/api/alpha/decisions`. `POST /api/analyze` returns JSON only after persistence and billing. Jev classifies revision drivers and operating momentum from supplied headlines; it does not write essays, update AI memory, invent price targets, or generate trade recommendations. Metrics and thesis cards are assembled in code. The weekly action remains WAIT until an entry policy is evaluated; EMA direction is displayed as trend context, with no invented forecast confidence. Missing causal evidence has an explicit `INSUFFICIENT_EVIDENCE` outcome. Model confidence concerns the classification, not future returns.
+
+Billing uses OpenRouter's reported `usage.cost`, not a token-price estimate. Missing cost is an error rather than an invented charge. The existing wallet markup and charge cap still apply. Keep the existing `OPENROUTER_API_KEY` locally and for deployment; no TypeSafe account or additional API key is needed.
 
 ## Production deploy
 
@@ -82,7 +84,13 @@ results remain stored but are not compared against corrected calculations.
   decoded at the boundary. Every evaluated row saves its inputs, source, fetch
   time, consensus fiscal targets and aligned statement dates.
 - Universe: market cap ≥ €40bn, 63-session average daily turnover ≥ €100m,
-  analyst coverage ≥ 20. Missing FX or inputs are reported, not inferred.
+  analyst coverage ≥ 20. Missing company inputs are reported, not inferred.
+- FX uses one free daily EUR-based ExchangeRate-API snapshot, covering every
+  currency in the universe (including TWD and SAR). Missing/non-positive rates,
+  incorrect EUR bases, or provider timestamps over 72 hours old block screening
+  rather than exclude entire markets. FX source/as-of metadata is saved in each
+  new run's parameters; rates remain stored as units per EUR. No historical runs
+  are rewritten by this fix.
 - Revisions: positive 90-day FY1 **and** FY2 EPS changes with positive EPS baselines;
   positive 30-day analyst breadth `(up-down)/(up+down)`. Loss/zero-baseline names
   and missing breadth are explicitly excluded, not treated as negative signals.
@@ -105,8 +113,7 @@ results remain stored but are not compared against corrected calculations.
 
 Admin: "Run screen" advances/resumes the run. Batches are atomically leased;
 creation/queue insertion is atomic, and stale runs over 24 hours are abandoned.
-Optional "Classify revisions (paid AI)" invokes OpenRouter; its probabilities are
-uncalibrated advisory judgments. The weekly driver never invokes paid AI.
+Optional "Classify revisions (paid AI)" invokes Jev through the same TanStack decision API. Its probabilities require domain validation and remain advisory, never screen-gate inputs. The weekly driver never invokes paid AI.
 
 Headless: `POST /api/screen/run` with `{ "runId": "..." }` after the first response,
 using the `x-screen-token` header matching a deployed `SCREEN_ADMIN_TOKEN` binding.

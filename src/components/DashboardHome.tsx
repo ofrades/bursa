@@ -14,6 +14,7 @@ import {
   getRecentSharedAnalyses,
   refreshMultipleMetrics,
 } from "../server/stocks";
+import { requestAnalysis } from "../lib/analyze-client";
 import { getSession } from "../server/session";
 import type { StockAnalysis } from "../lib/schema";
 import type { SharedAnalysisRow } from "../lib/types";
@@ -80,6 +81,7 @@ export function DashboardHome({
   const [toggling, setToggling] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState<string>("1");
   const [searchQuery, setSearchQuery] = useState("");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analyzingSymbols, setAnalyzingSymbols] = useState<Set<string>>(new Set());
   const analyzingAbortsRef = useRef<Map<string, () => void>>(new Map());
 
@@ -196,71 +198,24 @@ export function DashboardHome({
         return next;
       });
 
+      setAnalysisError(null);
       const abortController = new AbortController();
       analyzingAbortsRef.current.set(symbol, () => abortController.abort());
 
       try {
-        const response = await fetch("/api/analyze/stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ symbol }),
-          signal: abortController.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Analysis failed: ${response.status}`);
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) throw new Error("No response body");
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop() ?? "";
-
-          for (const part of parts) {
-            const trimmed = part.trim();
-            if (!trimmed.startsWith("data: ")) continue;
-            const payload = trimmed.slice(6).trim();
-
-            try {
-              const parsed = JSON.parse(payload) as {
-                name?: string;
-                value?: { analysisId?: string };
-              };
-              if (parsed.name === "analysis-saved") {
-                void reload();
-                setAnalyzingSymbols((prev) => {
-                  const next = new Set(prev);
-                  next.delete(symbol);
-                  return next;
-                });
-                return;
-              }
-            } catch {
-              // ignore unparseable lines
-            }
-          }
-        }
+        await requestAnalysis(symbol, abortController.signal);
+        await reload();
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") return;
+        setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
       } finally {
         analyzingAbortsRef.current.delete(symbol);
+        setAnalyzingSymbols((prev) => {
+          const next = new Set(prev);
+          next.delete(symbol);
+          return next;
+        });
       }
-
-      // If we get here without analysis-saved, clean up and refresh anyway
-      void reload();
-      setAnalyzingSymbols((prev) => {
-        const next = new Set(prev);
-        next.delete(symbol);
-        return next;
-      });
     },
     [reload],
   );
@@ -369,6 +324,11 @@ export function DashboardHome({
 
   return (
     <div className="min-h-screen">
+      {analysisError && (
+        <p role="alert" className="px-6 py-3 text-sm text-red-500">
+          {analysisError}
+        </p>
+      )}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
         <div className="max-w-5xl mx-auto w-full px-6 h-13 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 font-semibold text-sm">

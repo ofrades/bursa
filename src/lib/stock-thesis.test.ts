@@ -4,7 +4,6 @@ import { buildSimpleAnalysisEvidence, type SimpleAnalysisInputs } from "./simple
 import {
   buildStockThesis,
   diffStockThesis,
-  parseAIStockThesis,
   parseStockThesis,
   stockThesisChangeTone,
   stockThesisChangesTone,
@@ -249,63 +248,6 @@ describe("buildStockThesis", () => {
       survivability: { value: "Fragile" },
     });
     expect(thesis?.limits.join(" ")).toContain("earnings event");
-  });
-
-  it("grounds an AI thesis against strained metrics", () => {
-    const evidence = buildSimpleAnalysisEvidence(createStrainedInput());
-    const thesis = parseAIStockThesis(
-      {
-        title: "BAD has a clean breakout and deserves aggressive exposure",
-        summary: "The setup and business both look excellent.",
-        tone: "supportive",
-        confidence: 88,
-        ownability: {
-          value: "Own",
-          tone: "supportive",
-          summary: "Own it because momentum is strong.",
-        },
-        actionability: {
-          value: "Buy now",
-          tone: "supportive",
-          summary: "The entry is immediate.",
-        },
-        survivability: {
-          value: "Safe",
-          tone: "supportive",
-          summary: "Risk is low.",
-        },
-        alignment: {
-          value: "Aligned",
-          tone: "supportive",
-          summary: "Every horizon agrees.",
-        },
-        support: ["Momentum is improving"],
-        limits: [],
-      },
-      72,
-      {
-        evidence,
-        weekly: {
-          signal: "BUY",
-          cycle: "MARKUP",
-          cycleTimeframe: "SHORT",
-          confidence: 72,
-          riskLevel: "HIGH",
-          weeklyTrend: "uptrend",
-          earningsEventRisk: "imminent",
-          earningsEstimateDelta30dPct: -9,
-          revisionBalance30d: -3,
-        },
-        hasExtremeRisk: true,
-      },
-    );
-
-    expect(thesis).not.toBeNull();
-    expect(thesis?.tone).toBe("cautious");
-    expect(thesis?.ownability.value).toBe("Avoid");
-    expect(thesis?.survivability.value).toBe("Fragile");
-    expect(thesis?.confidence.adjusted).toBeLessThan(72);
-    expect(thesis?.limits.join(" ")).toContain("smaller size");
   });
 
   it("parses a persisted thesis snapshot", () => {

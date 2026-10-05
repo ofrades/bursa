@@ -64,7 +64,6 @@ export default Alchemy.Stack(
         BILLING_MARKUP_MULTIPLIER: Config.string("BILLING_MARKUP_MULTIPLIER").pipe(
           Config.withDefault("1.8"),
         ),
-        AI_TIMEOUT_MS: Config.string("AI_TIMEOUT_MS").pipe(Config.withDefault("300000")),
         ANALYSIS_MAX_CHARGE_CENTS: Config.string("ANALYSIS_MAX_CHARGE_CENTS").pipe(
           Config.withDefault("25"),
         ),

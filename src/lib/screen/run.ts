@@ -2,7 +2,8 @@ import { and, asc, desc, eq, isNull, lt, or } from "drizzle-orm";
 import type { Db } from "../db";
 import { screenRun, screenStock } from "../schema";
 import { UNIVERSE } from "./universe";
-import { fetchFxRates, fetchScreenData } from "./fetch";
+import { fetchScreenData } from "./fetch";
+import { fetchFxRates, FxCoverageError, readFxRates, requireFxCoverage, type FxRates } from "./fx";
 import {
   DEFAULT_PARAMS,
   evaluateSymbol,
@@ -33,6 +34,7 @@ async function startScreenRun(db: Db, params: ScreenParams = DEFAULT_PARAMS) {
   }
 
   const fxRates = await fetchFxRates();
+  requireFxCoverage(fxRates.rates);
   const id = crypto.randomUUID();
   const queue = UNIVERSE.map((entry) => ({
     runId: id,
@@ -49,8 +51,8 @@ async function startScreenRun(db: Db, params: ScreenParams = DEFAULT_PARAMS) {
     await db.batch([
       db.insert(screenRun).values({
         id,
-        params: JSON.stringify(params),
-        fxRates: JSON.stringify(fxRates),
+        params: JSON.stringify({ ...params, fx: { source: fxRates.source, asOf: fxRates.asOf } }),
+        fxRates: JSON.stringify(fxRates.rates),
         universeCount: queue.length,
         methodologyVersion: METHODOLOGY_VERSION,
       }),
@@ -76,7 +78,13 @@ async function runScreenBatch(db: Db, runId: string, batchSize = BATCH_SIZE) {
     .orderBy(asc(screenStock.createdAt))
     .limit(batchSize);
 
-  const fxRates = JSON.parse(run.fxRates ?? "{}") as Record<string, number>;
+  let fxRates: FxRates;
+  try {
+    fxRates = readFxRates(run.fxRates, run.params);
+  } catch (cause) {
+    await db.update(screenRun).set({ status: "failed" }).where(eq(screenRun.id, runId));
+    throw cause;
+  }
   const params = JSON.parse(run.params) as ScreenParams;
 
   for (let i = 0; i < pending.length; i += FETCH_CONCURRENCY) {
@@ -86,6 +94,10 @@ async function runScreenBatch(db: Db, runId: string, batchSize = BATCH_SIZE) {
         let row: ScreenRow;
         try {
           const fetched = await fetchScreenData(stock.symbol, params);
+          const currencies = [fetched.data.currency, fetched.data.financialCurrency].filter(
+            (c): c is string => c !== null,
+          );
+          requireFxCoverage(fxRates, currencies);
           row = evaluateSymbol(
             {
               symbol: stock.symbol,
@@ -116,6 +128,10 @@ async function runScreenBatch(db: Db, runId: string, batchSize = BATCH_SIZE) {
             .update(screenStock)
             .set({ processed: true, error: cause instanceof Error ? cause.message : "error" })
             .where(eq(screenStock.id, stock.id));
+          if (cause instanceof FxCoverageError) {
+            await db.update(screenRun).set({ status: "failed" }).where(eq(screenRun.id, runId));
+            throw cause;
+          }
           return;
         }
         await db

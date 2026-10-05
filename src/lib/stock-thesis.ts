@@ -69,28 +69,6 @@ export type StockThesisChange = {
 
 export type StockThesisChangeTone = "positive" | "negative" | "neutral";
 
-type AIStockThesisGrounding = {
-  evidence?: SimpleAnalysisEvidence | null;
-  weekly?: WeeklyRecommendationContext | null;
-  macroThesis?: MacroThesis | null;
-  hasExtremeRisk?: boolean;
-};
-
-const PILLAR_TITLES = {
-  ownability: "Long-term exposure",
-  actionability: "Entry window",
-  survivability: "Risk check",
-  alignment: "Alignment",
-} as const;
-
-type ThesisToneInput = string | number | boolean | null | undefined;
-
-function asThesisTone(value: ThesisToneInput): ThesisTone {
-  return value === "supportive" || value === "cautious" || value === "balanced"
-    ? value
-    : "balanced";
-}
-
 export function parseStockThesis(value: string | null | undefined): StockThesis | null {
   if (!value) return null;
   try {
@@ -111,129 +89,6 @@ export function parseStockThesis(value: string | null | undefined): StockThesis 
   } catch {
     return null;
   }
-}
-
-/**
- * Inflate an AI-generated THESIS_JSON object into the full StockThesis shape.
- * The AI writes the narrative, then (optionally) a deterministic grounding
- * layer reconciles its pillars/confidence with the same metrics card the user
- * sees. This keeps the output expressive without letting it contradict the
- * evidence layer.
- */
-const aiPillarInput = z.looseObject({
-  title: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-  value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-  tone: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-  summary: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-});
-
-const aiThesisInput = z.looseObject({
-  title: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-  summary: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-  tone: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-  confidence: z.union([z.number(), z.string(), z.null()]).optional(),
-  ownability: aiPillarInput.nullable().optional(),
-  actionability: aiPillarInput.nullable().optional(),
-  survivability: aiPillarInput.nullable().optional(),
-  alignment: aiPillarInput.nullable().optional(),
-  support: z.array(z.unknown()).nullish(),
-  limits: z.array(z.unknown()).nullish(),
-});
-
-export function parseAIStockThesis<R extends object>(
-  raw: R,
-  signalConfidence: number | null,
-  grounding?: AIStockThesisGrounding,
-): StockThesis | null {
-  try {
-    const input = aiThesisInput.safeParse(raw);
-    if (!input.success) return null;
-    const data = input.data;
-
-    const base = normalizeScore(signalConfidence);
-    const adjusted = normalizeScore(data.confidence) ?? base;
-    const delta = base != null && adjusted != null ? Math.round(adjusted - base) : 0;
-
-    const pillar = (
-      key: keyof typeof PILLAR_TITLES,
-      p: z.infer<typeof aiPillarInput> | null | undefined,
-    ): ThesisPillar => {
-      return {
-        title: String(p?.title ?? PILLAR_TITLES[key]),
-        value: String(p?.value ?? ""),
-        tone: asThesisTone(p?.tone),
-        summary: String(p?.summary ?? ""),
-      };
-    };
-
-    const thesis: StockThesis = {
-      version: STOCK_THESIS_VERSION,
-      title: String(data.title ?? ""),
-      summary: String(data.summary ?? ""),
-      tone: asThesisTone(data.tone),
-      confidence: { base, adjusted, delta },
-      ownability: pillar("ownability", data.ownability),
-      actionability: pillar("actionability", data.actionability),
-      survivability: pillar("survivability", data.survivability),
-      alignment: pillar("alignment", data.alignment),
-      support: Array.isArray(data.support) ? data.support.map(String) : [],
-      limits: Array.isArray(data.limits) ? data.limits.map(String) : [],
-    };
-
-    return groundAIStockThesis(thesis, grounding);
-  } catch {
-    return null;
-  }
-}
-
-function groundAIStockThesis(
-  thesis: StockThesis,
-  grounding: AIStockThesisGrounding | undefined,
-): StockThesis {
-  if (!grounding?.evidence || !grounding.weekly) return thesis;
-
-  const reference = buildStockThesis(grounding.weekly, grounding.evidence, {
-    hasExtremeRisk: grounding.hasExtremeRisk,
-    macroThesis: grounding.macroThesis,
-  });
-  if (!reference) return thesis;
-
-  const mergePillar = (ai: ThesisPillar, ref: ThesisPillar): ThesisPillar => {
-    const sameValue = ai.value.trim().toLowerCase() === ref.value.trim().toLowerCase();
-    const sameTone = ai.tone === ref.tone;
-    return {
-      title: ref.title,
-      value: ref.value,
-      tone: ref.tone,
-      summary: sameValue && sameTone && ai.summary.trim() ? ai.summary : ref.summary,
-    };
-  };
-
-  const refAdjusted = reference.confidence.adjusted;
-  let adjusted = thesis.confidence.adjusted;
-  if (refAdjusted != null) {
-    adjusted =
-      adjusted == null
-        ? refAdjusted
-        : clamp(Math.round(adjusted), refAdjusted - 12, refAdjusted + 8);
-  }
-  const base = thesis.confidence.base;
-  const delta = base != null && adjusted != null ? Math.round(adjusted - base) : 0;
-  const severeToneMismatch = thesis.tone === "supportive" && reference.tone === "cautious";
-
-  return {
-    ...thesis,
-    title: severeToneMismatch ? reference.title : thesis.title || reference.title,
-    summary: severeToneMismatch ? reference.summary : thesis.summary || reference.summary,
-    tone: reference.tone,
-    confidence: { base, adjusted, delta },
-    ownability: mergePillar(thesis.ownability, reference.ownability),
-    actionability: mergePillar(thesis.actionability, reference.actionability),
-    survivability: mergePillar(thesis.survivability, reference.survivability),
-    alignment: mergePillar(thesis.alignment, reference.alignment),
-    support: dedupe([...reference.support, ...thesis.support]).slice(0, 4),
-    limits: dedupe([...reference.limits, ...thesis.limits]).slice(0, 4),
-  };
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -428,8 +283,7 @@ function confidenceAdjustment(
 
   if (hasExtremeRisk) delta -= 12;
 
-  // Macro opportunity thesis delta. Normalize because provider output can
-  // occasionally arrive as 0-1 during partial/streaming phases.
+  // Macro scores can be expressed as fractions or percentages.
   if (macroThesis != null) {
     const score = normalizeScore(macroThesis.opportunityScore) ?? macroThesis.opportunityScore;
     if (score >= 70 && weekly.signal === "BUY") delta += 6;

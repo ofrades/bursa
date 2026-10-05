@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { BarChart3, ChevronLeft, CircleAlert, Loader2, Sparkles } from "lucide-react";
@@ -10,9 +10,8 @@ import {
   getStockPageSupplementalData,
   getStockDividendData,
 } from "../server/stocks";
-import { isAnalysisRunning } from "../server/active-analyses";
-import { useStreamingAnalysis } from "../hooks/useStreamingAnalysis";
-import { StreamingAnalysis } from "../components/StreamingAnalysis";
+import { requestAnalysis } from "../lib/analyze-client";
+import { BusinessJudgmentsCard } from "../components/BusinessJudgmentsCard";
 import { StockThesisCard } from "../components/StockThesisCard";
 import { JsonSpecRenderer, buildMacroThesisSpec } from "../lib/json-render";
 import { buildSimpleAnalysisSpec } from "../lib/simple-analysis-spec";
@@ -47,7 +46,7 @@ export const Route = createFileRoute("/$symbol")({
   loader: async ({ params }) => {
     const symbol = params.symbol.toUpperCase();
     const pageData = await getStockPageData({ data: { symbol } });
-    return { ...pageData, isAnalyzing: isAnalysisRunning(symbol) };
+    return pageData;
   },
   component: StockPage,
 });
@@ -61,44 +60,18 @@ function StockPage() {
   const router = useRouter();
   const symbol = params.symbol.toUpperCase();
 
-  // If a server-side analysis is running (e.g. after a page refresh), poll
-  // every 4 s until it finishes and the loader data includes the saved result.
-  useEffect(() => {
-    if (!data.isAnalyzing) return;
-    const id = setInterval(() => {
-      void router.invalidate();
-    }, 4_000);
-    return () => clearInterval(id);
-  }, [data.isAnalyzing, router]);
-
-  const {
-    state: streamState,
-    start: startStream,
-    reset: resetStream,
-  } = useStreamingAnalysis(symbol);
-
-  const handleAnalyze = () => {
-    startStream();
-  };
+  const analysis = useMutation({
+    mutationFn: () => requestAnalysis(symbol),
+    onSuccess: () => router.invalidate(),
+  });
+  const handleAnalyze = () => analysis.mutate();
 
   useEffect(() => {
-    if (!search.analyze || !session || streamState.isLoading) return;
+    if (!search.analyze || !session || analysis.isPending) return;
+    void navigate({ search: {}, replace: true });
+    analysis.mutate();
+  }, [navigate, search.analyze, session, analysis.isPending, analysis.mutate]);
 
-    navigate({
-      search: (prev) => ({ ...prev, analyze: undefined }),
-      replace: true,
-    });
-    handleAnalyze();
-  }, [handleAnalyze, navigate, search.analyze, session, streamState.isLoading]);
-
-  // Reload page data when the server signals the analysis has been persisted,
-  // then clear the store so the saved analysis view takes over.
-  useEffect(() => {
-    if (!streamState.analysisSaved) return;
-    void router.invalidate().then(() => {
-      resetStream();
-    });
-  }, [resetStream, streamState.analysisSaved, router, symbol]);
   const supplementalQuery = useQuery({
     queryKey: ["stock-supplemental", symbol, data.latestAnalysis?.id ?? "none"],
     queryFn: () => getStockPageSupplementalData({ data: { symbol } }),
@@ -128,8 +101,6 @@ function StockPage() {
     longTermRecommendation,
   } = deriveStockPageState(latestAnalysis, simpleAnalysisEvidence);
   const macroThesisSpec = persistedMacroThesis ? buildMacroThesisSpec(persistedMacroThesis) : null;
-  const hasStreamingAnalysis =
-    streamState.isLoading || streamState.isComplete || Boolean(streamState.text);
 
   return (
     <div className="min-h-screen">
@@ -167,30 +138,23 @@ function StockPage() {
           </div>
           {session && (
             <div className="flex items-center gap-2">
-              {(streamState.error || streamState.warning) && (
-                <span
-                  className="max-w-md text-xs text-red-500"
-                  title={
-                    streamState.chunksBeforeError != null
-                      ? `Stream died after ${streamState.chunksBeforeError} chunks / ${streamState.elapsedBeforeError?.toFixed(1)}s`
-                      : undefined
-                  }
-                >
-                  {streamState.error ?? streamState.warning}
+              {analysis.error && (
+                <span role="alert" className="max-w-md text-xs text-red-500">
+                  {analysis.error.message}
                 </span>
               )}
               <Button
                 size="sm"
                 variant="outline"
-                disabled={streamState.isLoading || data.isAnalyzing}
+                disabled={analysis.isPending}
                 onClick={handleAnalyze}
               >
-                {streamState.isLoading || data.isAnalyzing ? (
+                {analysis.isPending ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <Sparkles className="size-3.5" />
                 )}
-                {streamState.isLoading || data.isAnalyzing ? "Analyzing…" : "Analyze"}
+                {analysis.isPending ? "Analyzing…" : "Analyze"}
               </Button>
             </div>
           )}
@@ -229,47 +193,36 @@ function StockPage() {
           </CardHeader>
         </Card>
 
-        {/* Metrics section — fundamentals (KPI grid / charts / CAGR / balance
-            sheet) plus the dividends subsection. Both live under one
-            "Metrics" header so the page reads as a single fundamentals block.
-            The fundamentals part is hidden during streaming/analysis (the
-            streaming card has its own copy of the fundamentals). */}
-        {!hasStreamingAnalysis &&
-          !data.isAnalyzing &&
-          (simpleAnalysisSpec || supplementalQuery.isLoading || dividendQuery.data) && (
-            <section aria-label="Metrics" className="flex flex-col gap-4">
-              <h2 className="text-xs uppercase tracking-wider text-muted-foreground">Metrics</h2>
-              {!streamState.isLoading &&
-                !streamState.isComplete &&
-                !streamState.text &&
-                !data.isAnalyzing &&
-                (simpleAnalysisSpec ? (
-                  <JsonSpecRenderer spec={simpleAnalysisSpec} />
-                ) : supplementalQuery.isLoading ? (
-                  <Card>
-                    <CardContent className="flex items-center gap-3 pt-5">
-                      <Loader2 className="size-5 animate-spin text-muted-foreground shrink-0" />
-                      <div>
-                        <p className="font-semibold mb-1">Loading fundamentals</p>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          Pulling sales, cash, and growth data for {symbol}.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : null)}
-              {dividendQuery.data && <DividendCard data={dividendQuery.data} />}
-            </section>
-          )}
+        {(simpleAnalysisSpec || supplementalQuery.isLoading || dividendQuery.data) && (
+          <section aria-label="Metrics" className="flex flex-col gap-4">
+            <h2 className="text-xs uppercase tracking-wider text-muted-foreground">Metrics</h2>
+            {simpleAnalysisSpec ? (
+              <JsonSpecRenderer spec={simpleAnalysisSpec} />
+            ) : supplementalQuery.isLoading ? (
+              <Card>
+                <CardContent className="flex items-center gap-3 pt-5">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="font-semibold mb-1">Loading fundamentals</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Pulling sales, cash, and growth data for {symbol}.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+            {dividendQuery.data && <DividendCard data={dividendQuery.data} />}
+          </section>
+        )}
 
-        {/* Streaming analysis or saved analysis */}
-        {hasStreamingAnalysis ? (
-          <StreamingAnalysis
-            state={streamState}
-            simpleAnalysis={simpleAnalysisEvidence}
-            dividendData={dividendQuery.data ?? null}
-          />
-        ) : latestAnalysis && !data.isAnalyzing ? (
+        {analysis.isPending && (
+          <Card>
+            <CardContent role="status" className="flex items-center gap-3 pt-5">
+              <Loader2 className="size-4 animate-spin" /> Evaluating evidence for {symbol}…
+            </CardContent>
+          </Card>
+        )}
+        {latestAnalysis ? (
           <section aria-label="Thesis" className="flex flex-col gap-4">
             <h2 className="text-xs uppercase tracking-wider text-muted-foreground">Thesis</h2>
 
@@ -291,11 +244,13 @@ function StockPage() {
               </Card>
             ) : null}
 
+            <BusinessJudgmentsCard reasoning={latestAnalysis.reasoning} />
+
             {effectiveThesis && <StockThesisCard thesis={effectiveThesis} />}
 
             {macroThesisSpec && <JsonSpecRenderer spec={macroThesisSpec} />}
           </section>
-        ) : !data.isAnalyzing ? (
+        ) : !analysis.isPending ? (
           /* No analysis state */
           <Card>
             <CardContent className="flex items-start gap-3 pt-5">
@@ -303,7 +258,7 @@ function StockPage() {
               <div>
                 <p className="font-semibold mb-1">No analysis generated for {symbol} yet</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Click Analyze above to run a new streaming analysis.
+                  Click Analyze above to evaluate the current evidence.
                 </p>
               </div>
             </CardContent>
@@ -314,15 +269,11 @@ function StockPage() {
         {data.analysisHistory.length > 0 && (
           <section aria-label="History" className="flex flex-col gap-4">
             <h2 className="text-xs uppercase tracking-wider text-muted-foreground">History</h2>
-            {!streamState.isLoading &&
-              !streamState.isComplete &&
-              !streamState.text &&
-              !data.isAnalyzing &&
-              data.analysisHistory.length >= 2 && (
-                <AnalysisAuditCard
-                  diff={buildAnalysisDiff(data.analysisHistory[0], data.analysisHistory[1])}
-                />
-              )}
+            {data.analysisHistory.length >= 2 && (
+              <AnalysisAuditCard
+                diff={buildAnalysisDiff(data.analysisHistory[0], data.analysisHistory[1])}
+              />
+            )}
             <Card className="p-0 overflow-hidden gap-0">
               <CardHeader className="border-b px-5 py-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">

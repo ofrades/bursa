@@ -19,15 +19,6 @@ export function capAnalysisCharge(calculatedCents: number, reservedCents: number
   return Math.min(Math.max(0, Math.ceil(calculatedCents)), Math.max(0, reservedCents));
 }
 
-export function completedAnalysisCharge(
-  calculatedCents: number | null,
-  reservedCents: number,
-): number {
-  return calculatedCents === null
-    ? Math.max(0, reservedCents)
-    : capAnalysisCharge(calculatedCents, reservedCents);
-}
-
 export const analysisUsageInsertSql = `
   INSERT INTO usage_log (
     id, reservation_id, user_id, symbol, model, prompt_tokens, completion_tokens,
