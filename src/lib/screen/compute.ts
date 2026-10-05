@@ -296,6 +296,29 @@ export function evaluateSymbol(
   };
 }
 
+/** 3-month average daily traded value (close × volume on traded bars). */
+export function advFromBars(
+  bars: readonly { close?: number | null; volume?: number | null }[],
+): number | null {
+  const values = bars
+    .map((b) => (isNum(b.close) && isNum(b.volume) && b.volume > 0 ? b.close * b.volume : null))
+    .filter(isNum);
+  if (!values.length) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/** 12-1 momentum over adjusted closes: last `skip`-sessions-ago close vs
+ * `skip + back` sessions ago. Null when history is shorter than the window. */
+export function momentumFromCloses(
+  closes: readonly (number | null | undefined)[],
+  back: number,
+  skip: number,
+): number | null {
+  const c = closes.filter(isNum);
+  if (c.length < back + skip) return null;
+  return c[c.length - 1 - skip] / c[c.length - 1 - skip - back] - 1;
+}
+
 function zClip(values: number[], clip: number): number[] {
   const n = values.length;
   const mean = values.reduce((a, b) => a + b, 0) / n;

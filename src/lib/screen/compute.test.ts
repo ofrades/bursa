@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  advFromBars,
   computeNdEbitda,
   computePiotroski,
   computeRoic,
   computeSue,
   evaluateSymbol,
   finalize,
+  momentumFromCloses,
   DEFAULT_PARAMS,
   type Statements,
   type SymbolData,
@@ -177,6 +179,42 @@ describe("evaluateSymbol", () => {
     );
     expect(row.passRevision).toBe(false);
     expect(row.breadth).toBe(0);
+  });
+});
+
+describe("advFromBars", () => {
+  it("averages close*volume over traded bars only", () => {
+    expect(
+      advFromBars([
+        { close: 10, volume: 100 },
+        { close: 20, volume: 0 }, // zero-volume day excluded
+        { close: 30, volume: null },
+        { close: 20, volume: 100 },
+      ]),
+    ).toBeCloseTo(1500, 0);
+  });
+
+  it("returns null with no traded bars", () => {
+    expect(advFromBars([{ close: 10, volume: 0 }])).toBeNull();
+  });
+});
+
+describe("momentumFromCloses", () => {
+  const series = Array.from({ length: 300 }, (_, i) => 100 + i); // 100..399
+
+  it("skips the last month and uses the 12-month-ago close", () => {
+    // c[300-1-21]=378, c[300-1-273]=126 -> (378/126)-1 = 2
+    const m = momentumFromCloses(series, 252, 21);
+    expect(m).toBeCloseTo(2, 6);
+  });
+
+  it("returns null when history is too short", () => {
+    expect(momentumFromCloses(series.slice(0, 250), 252, 21)).toBeNull();
+  });
+
+  it("survives interior nulls", () => {
+    const withNulls = series.map((v, i) => (i === 5 ? null : v));
+    expect(momentumFromCloses(withNulls, 252, 21)).toBeCloseTo(2, 6);
   });
 });
 

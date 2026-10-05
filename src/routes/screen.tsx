@@ -2,7 +2,12 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Loader2, Play } from "lucide-react";
-import { getScreenDashboard, advanceScreenRun, type ScreenDashboard } from "../server/screen";
+import {
+  advanceScreenRun,
+  classifyScreenSurvivors,
+  getScreenDashboard,
+  type ScreenDashboard,
+} from "../server/screen";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -30,6 +35,7 @@ function ScreenPage() {
   const queryClient = useQueryClient();
   const [strictOnly, setStrictOnly] = useState(false);
   const [running, setRunning] = useState(false);
+  const [classifying, setClassifying] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const query = useQuery<ScreenDashboard, Error>({
     queryKey: ["screen"],
@@ -64,6 +70,20 @@ function ScreenPage() {
     }
   }
 
+  async function classify() {
+    setClassifying(true);
+    setRunError(null);
+    try {
+      const result = await classifyScreenSurvivors();
+      if (result.skipped) setRunError(result.skipped);
+      await queryClient.invalidateQueries({ queryKey: ["screen"] });
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : "classification failed");
+    } finally {
+      setClassifying(false);
+    }
+  }
+
   const run = data.run;
   const financials = survivors.filter((r) => r.sector?.includes("Financial")).length;
   const financialShare = survivors.length ? financials / survivors.length : 0;
@@ -83,16 +103,26 @@ function ScreenPage() {
           </p>
         </div>
         {isAdmin ? (
-          <Button onClick={runScreen} disabled={running}>
-            {running ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <Play className="mr-2 size-4" />
-            )}
-            {running
-              ? `Screening… ${run?.processedCount ?? 0}/${run?.universeCount ?? 0}`
-              : "Run screen"}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={runScreen} disabled={running || classifying}>
+              {running ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Play className="mr-2 size-4" />
+              )}
+              {running
+                ? `Screening… ${run?.processedCount ?? 0}/${run?.universeCount ?? 0}`
+                : "Run screen"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={classify}
+              disabled={running || classifying || run?.status !== "done"}
+            >
+              {classifying ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Classify revisions
+            </Button>
+          </div>
         ) : null}
       </div>
       {runError ? <p className="text-sm text-rose-600">{runError}</p> : null}
@@ -141,6 +171,7 @@ function ScreenPage() {
                   <TableHead className="text-right">F</TableHead>
                   <TableHead className="text-right">Mom 12-1</TableHead>
                   <TableHead className="text-right">Composite</TableHead>
+                  <TableHead className="text-right">Jev</TableHead>
                   <TableHead className="text-right">Weight</TableHead>
                 </TableRow>
               </TableHeader>
@@ -184,6 +215,27 @@ function ScreenPage() {
                     </TableCell>
                     <TableCell className="text-right">{pct(r.mom121)}</TableCell>
                     <TableCell className="text-right">{num(r.composite)}</TableCell>
+                    <TableCell className="text-right">
+                      {r.jevVerdict ? (
+                        <span
+                          title={r.jevRationale ?? ""}
+                          className={
+                            r.jevVerdict === "RECURRING"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : r.jevVerdict === "ONE_OFF"
+                                ? "text-rose-600 dark:text-rose-400"
+                                : "text-amber-600 dark:text-amber-400"
+                          }
+                        >
+                          {r.jevVerdict.toLowerCase()}{" "}
+                          {r.jevProbability != null
+                            ? `${(r.jevProbability * 100).toFixed(0)}%`
+                            : ""}
+                        </span>
+                      ) : (
+                        "\u2014"
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       {r.weight == null ? "—" : `${(r.weight * 100).toFixed(1)}%`}
                     </TableCell>

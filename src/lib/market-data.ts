@@ -15,6 +15,7 @@ type HistoricalPoint = {
   high?: number | null;
   low?: number | null;
   close?: number | null;
+  adjClose?: number | null; // split+dividend adjusted — use for multi-month returns
   volume?: number | null;
 };
 
@@ -77,6 +78,7 @@ type SummaryData = {
   price?: {
     regularMarketPrice?: number | null;
     marketCap?: number | null;
+    currency?: string | null;
   } | null;
   calendarEvents?: {
     earnings?: {
@@ -95,6 +97,13 @@ type SummaryData = {
         downLast30days?: number | null;
       } | null;
     }>;
+  } | null;
+  earningsHistory?: {
+    history?: Array<{
+      quarter?: { fmt?: string | null } | string | null;
+      epsActual?: { raw?: number | null } | null;
+      epsEstimate?: { raw?: number | null } | null;
+    }> | null;
   } | null;
 };
 
@@ -167,6 +176,7 @@ function normalizeHistoricalRows(payload: RawHistoricalPayload): HistoricalPoint
       high: asNumber(row.high),
       low: asNumber(row.low),
       close: asNumber(row.close),
+      adjClose: asNumber(row.adjClose),
       volume: asNumber(row.volume),
     }))
     .filter((row: HistoricalPoint) => !Number.isNaN(row.date.getTime()))
@@ -218,17 +228,23 @@ async function yahooGetJson(url: string, cookie?: string): Promise<any> {
     accept: "application/json",
   });
   if (cookie) headers.set("cookie", cookie);
-  const response = await fetch(url, { headers });
-  if (!response.ok) {
-    // See fmpGet: unread error bodies stall workerd's fetch concurrency pool.
+  // A screen run is ~1.1k requests; occasional 429/5xx bursts get a short
+  // backoff instead of poisoning whole symbols with errors.
+  const retryStatuses = new Set([429, 500, 502, 503, 504]);
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(url, { headers });
+    if (response.ok) return response.json();
     try {
-      await response.body?.cancel();
+      await response.body?.cancel(); // unread bodies stall workerd's fetch pool
     } catch {
       // already closed
     }
+    if (attempt < 2 && retryStatuses.has(response.status)) {
+      await new Promise((resolve) => setTimeout(resolve, 800 * 2 ** attempt));
+      continue;
+    }
     throw new Error(`Yahoo request failed: ${response.status} ${url}`);
   }
-  return response.json();
 }
 
 let _yahooCrumb: { crumb: string; cookie: string } | null = null;
@@ -409,6 +425,7 @@ async function yahooGetSummary(symbol: string): Promise<SummaryData> {
       "calendarEvents",
       "assetProfile",
       "earningsTrend",
+      "earningsHistory",
       "summaryDetail",
       "price",
     ].join(",");
@@ -425,6 +442,7 @@ async function yahooGetSummary(symbol: string): Promise<SummaryData> {
       price: result?.price ?? null,
       calendarEvents: result?.calendarEvents ?? null,
       earningsTrend: result?.earningsTrend ?? null,
+      earningsHistory: result?.earningsHistory ?? null,
     };
   } catch (error) {
     // Yahoo's quoteSummary is the last-rung fallback (and EU-hostile);
@@ -441,6 +459,7 @@ async function yahooGetSummary(symbol: string): Promise<SummaryData> {
       price: null,
       calendarEvents: null,
       earningsTrend: null,
+      earningsHistory: null,
     };
   }
 }
@@ -583,6 +602,7 @@ async function yahooGetHistoricalPrices(
   const result = res?.chart?.result?.[0];
   const timestamps: unknown[] = Array.isArray(result?.timestamp) ? result.timestamp : [];
   const quote = result?.indicators?.quote?.[0] ?? {};
+  const adj = result?.indicators?.adjclose?.[0]?.adjclose ?? [];
 
   const rows = timestamps.map((ts, i) => ({
     date: new Date(Number(ts) * 1000),
@@ -590,6 +610,7 @@ async function yahooGetHistoricalPrices(
     high: asNumber((quote as any).high?.[i]),
     low: asNumber((quote as any).low?.[i]),
     close: asNumber((quote as any).close?.[i]),
+    adjClose: asNumber(adj[i]),
     volume: asNumber((quote as any).volume?.[i]),
   }));
   return normalizeHistoricalRows(rows);
@@ -718,7 +739,30 @@ export type EarningsSurprise = {
   epsEstimate: number | null;
 };
 
-export async function getEarningsSurprises(symbol: string): Promise<EarningsSurprise[]> {
+export async function getEarningsSurprises(
+  symbol: string,
+  summary?: SummaryData,
+): Promise<EarningsSurprise[]> {
+  const historySchema = z.object({
+    quarter: z.union([z.string(), z.object({ fmt: z.string() }).transform((o) => o.fmt)]),
+    epsActual: z
+      .object({ raw: z.number().nullable() })
+      .nullable()
+      .optional()
+      .transform((o) => asNumber(o?.raw)),
+    epsEstimate: z
+      .object({ raw: z.number().nullable() })
+      .nullable()
+      .optional()
+      .transform((o) => asNumber(o?.raw)),
+  });
+  const fromSummary = z
+    .array(historySchema)
+    .catch([])
+    .parse(summary?.earningsHistory?.history ?? [])
+    .filter((s) => s.quarter !== "");
+  if (fromSummary.length) return fromSummary;
+
   if ((await providerFromEnv()) === "fmp") {
     try {
       return await fmpGetEarningsSurprises(symbol);

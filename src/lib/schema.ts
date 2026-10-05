@@ -329,6 +329,10 @@ export const screenStock = sqliteTable(
     passQuality: integer("pass_quality", { mode: "boolean" }).notNull().default(false),
     strict: integer("strict", { mode: "boolean" }).notNull().default(false),
     weight: real("weight"),
+    // Advisory Jev-style classification of revision drivers (see lib/screen/jev.ts).
+    jevVerdict: text("jev_verdict"), // RECURRING | ONE_OFF | MIXED
+    jevProbability: real("jev_probability"),
+    jevRationale: text("jev_rationale"),
     processed: integer("processed", { mode: "boolean" }).notNull().default(false),
     error: text("error"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(now),

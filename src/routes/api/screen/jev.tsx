@@ -1,28 +1,31 @@
-// POST /api/screen/run — admin-only: starts a screen run if none is active,
-// otherwise processes the next batch of symbols. Call repeatedly until
-// status === "done" (the /screen page's Run button does this for you).
+// POST /api/screen/jev — admin-only (or x-screen-token): run the revision-
+// quality classifier over the latest completed screen run's strict quintile.
+// Pass { all: true } to classify every survivor.
 import { Effect } from "effect";
 import { createFileRoute } from "@tanstack/react-router";
 import { authenticatedUserEffect } from "../../../lib/auth";
 import { Database } from "../../../lib/effect/services/database";
 import { ExternalServiceError, ValidationError } from "../../../lib/effect/errors";
 import { toResponse } from "../../../lib/effect/respond";
-import { advanceScreen } from "../../../lib/screen/run";
+import { classifyLatestRun } from "../../../lib/screen/jev";
 import { getSecret } from "../../../secrets";
 
-const runProgram = Effect.fn("screen.run")(function* (request: Request) {
+const jevProgram = Effect.fn("screen.jev")(function* (request: Request) {
   const session = yield* authenticatedUserEffect(request);
   if (!session.isAdmin) {
     return yield* new ValidationError({ message: "admin only" });
   }
+  const body = (yield* Effect.promise(() => request.json().catch(() => ({})))) as {
+    all?: boolean;
+  };
   const { db } = yield* Database;
   return yield* Effect.tryPromise({
-    try: () => advanceScreen(db),
-    catch: (cause) => new ExternalServiceError({ service: "d1", cause }),
+    try: () => classifyLatestRun(db, { all: body.all === true }),
+    catch: (cause) => new ExternalServiceError({ service: "openrouter", cause }),
   });
 });
 
-export const Route = createFileRoute("/api/screen/run")({
+export const Route = createFileRoute("/api/screen/jev")({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -30,11 +33,12 @@ export const Route = createFileRoute("/api/screen/run")({
         const expected = await getSecret("SCREEN_ADMIN_TOKEN");
         const token = request.headers.get("x-screen-token");
         if (expected && token === expected) {
+          const body = (await request.json().catch(() => ({}))) as { all?: boolean };
           const { getDb } = await import("../../../lib/db");
-          const result = await advanceScreen(getDb());
+          const result = await classifyLatestRun(getDb(), { all: body.all === true });
           return Response.json(result);
         }
-        return toResponse(runProgram(request).pipe(Effect.provide(Database.layer)), Response.json);
+        return toResponse(jevProgram(request).pipe(Effect.provide(Database.layer)), Response.json);
       },
     },
   },

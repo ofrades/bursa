@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   getEarningsSurprises,
   getFundamentalsTimeSeries,
@@ -5,14 +6,14 @@ import {
   getMarketQuote,
   getMarketSummary,
 } from "../market-data";
-import type { Statements, SymbolData } from "./compute";
+import { advFromBars, momentumFromCloses, type Statements, type SymbolData } from "./compute";
 
 // 16 months of daily bars: 12-1 momentum needs 12*21 + 1*21 sessions, and the
 // tail feeds the 3-month ADV average.
 const PRICE_MONTHS = 16;
-const MOM_SESSIONS = 12 * 21 + 1 * 21;
+const MOM_BACK = 12 * 21;
+const MOM_SKIP = 1 * 21;
 const ADV_SESSIONS = 63;
-const SKIP_SESSIONS = 21;
 
 const STATEMENT_TYPES = [
   "annualEBIT",
@@ -37,29 +38,36 @@ const STATEMENT_TYPES = [
   "annualOperatingCashFlow",
 ];
 
-function latestTwo(series: { date: string; value: number | null }[] | undefined) {
-  const points = (series ?? [])
-    .filter((p) => p.value !== null)
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  return [points[0]?.value ?? null, points[1]?.value ?? null] as [number | null, number | null];
+type SeriesPoint = { date: string; value: number | null };
+
+function sortedDesc(series: SeriesPoint[] | undefined) {
+  return (series ?? []).filter((p) => p.value !== null).sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
-function latest(series: { date: string; value: number | null }[] | undefined) {
-  const points = (series ?? [])
-    .filter((p) => p.value !== null)
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  return points[0]?.value ?? null;
+function latest(series: SeriesPoint[] | undefined): number | null {
+  return sortedDesc(series)[0]?.value ?? null;
 }
 
-function trendEntry(summary: Awaited<ReturnType<typeof getMarketSummary>>, period: string) {
-  return summary.earningsTrend?.trend?.find((t) => t.period === period) ?? null;
+function latestTwo(series: SeriesPoint[] | undefined): [number | null, number | null] {
+  const rows = sortedDesc(series);
+  return [rows[0]?.value ?? null, rows[1]?.value ?? null];
 }
 
-function revision(entry: ReturnType<typeof trendEntry>): number | null {
+type TrendRevision = { revision: number | null; up30: number | null; down30: number | null };
+
+function trendRevision(
+  summary: Awaited<ReturnType<typeof getMarketSummary>>,
+  period: string,
+): TrendRevision {
+  const entry = summary.earningsTrend?.trend?.find((t) => t.period === period) ?? null;
   const cur = entry?.epsTrend?.current ?? null;
   const old = entry?.epsTrend?.["90daysAgo"] ?? null;
-  if (cur === null || old === null || old === 0) return null;
-  return cur / old - 1;
+  const revision = cur !== null && old !== null && old !== 0 ? cur / old - 1 : null;
+  return {
+    revision,
+    up30: entry?.epsRevisions?.upLast30days ?? null,
+    down30: entry?.epsRevisions?.downLast30days ?? null,
+  };
 }
 
 async function fetchStatements(symbol: string): Promise<Statements> {
@@ -68,21 +76,13 @@ async function fetchStatements(symbol: string): Promise<Statements> {
     ...STATEMENT_TYPES,
   ]);
   const s = (type: string) => series[type];
-  const [ebit, depreciation] = [
-    latest(s("annualEBIT")),
-    latest(s("annualReconciledDepreciation")) ??
-      latest(s("annualDepreciationAmortizationDepletion")),
-  ];
-  const totalDebt =
-    latest(s("annualTotalDebt")) ??
-    (() => {
-      const ltd = latest(s("annualLongTermDebt"));
-      const cd = latest(s("annualCurrentDebt"));
-      return ltd === null && cd === null ? null : (ltd ?? 0) + (cd ?? 0);
-    })();
+  const ltd = latest(s("annualLongTermDebt"));
+  const currentDebt = latest(s("annualCurrentDebt"));
   return {
-    ebit,
-    depreciation,
+    ebit: latest(s("annualEBIT")),
+    depreciation:
+      latest(s("annualReconciledDepreciation")) ??
+      latest(s("annualDepreciationAmortizationDepletion")),
     pretaxIncome: latest(s("annualPretaxIncome")),
     taxProvision: latest(s("annualTaxProvision")),
     netIncome: latestTwo(s("annualNetIncome")),
@@ -91,7 +91,9 @@ async function fetchStatements(symbol: string): Promise<Statements> {
     totalAssets: latestTwo(s("annualTotalAssets")),
     currentAssets: latestTwo(s("annualCurrentAssets")),
     currentLiabilities: latestTwo(s("annualCurrentLiabilities")),
-    totalDebt,
+    totalDebt:
+      latest(s("annualTotalDebt")) ??
+      (ltd === null && currentDebt === null ? null : (ltd ?? 0) + (currentDebt ?? 0)),
     longTermDebt: latestTwo(s("annualLongTermDebt")),
     stockholdersEquity: latest(s("annualStockholdersEquity")),
     cash: latest(s("annualCashAndCashEquivalents")),
@@ -102,48 +104,48 @@ async function fetchStatements(symbol: string): Promise<Statements> {
   };
 }
 
+/** Three requests per symbol in the happy path: summary (8 modules incl.
+ * estimates + surprises), 16mo chart (prices + currency), statements. */
 export async function fetchScreenData(symbol: string): Promise<SymbolData> {
   const period1 = new Date(Date.now() - PRICE_MONTHS * 31 * 24 * 3600 * 1000);
-  const [quote, summary, prices, surprises] = await Promise.all([
-    getMarketQuote(symbol),
+  const [summary, prices, statements] = await Promise.all([
     getMarketSummary(symbol),
     getHistoricalPrices(symbol, { period1, period2: new Date() }),
-    getEarningsSurprises(symbol),
+    fetchStatements(symbol),
   ]);
+  const surprises = await getEarningsSurprises(symbol, summary);
 
-  const closes = prices
-    .map((p) => p.close)
-    .filter((c): c is number => c !== null && c !== undefined);
-  const bars = prices.slice(-ADV_SESSIONS);
-  const advValues = bars
-    .map((p) => (p.close !== null && p.close !== undefined ? p.close * (p.volume ?? 0) : null))
-    .filter((v): v is number => v !== null);
-  const adv = advValues.length ? advValues.reduce((a, b) => a + b, 0) / advValues.length : null;
-  const mom121 =
-    closes.length >= MOM_SESSIONS
-      ? closes[closes.length - 1 - SKIP_SESSIONS] / closes[closes.length - MOM_SESSIONS] - 1
-      : null;
+  let currency = summary.price?.currency ?? null;
+  let mcap = summary.price?.marketCap ?? null;
+  if (currency === null || mcap === null) {
+    const quote = await getMarketQuote(symbol);
+    currency = currency ?? quote.currency ?? null;
+    mcap = mcap ?? quote.marketCap ?? null;
+  }
 
-  const fy1 = trendEntry(summary, "0y");
-  const fy2 = trendEntry(summary, "+1y");
+  const fy1 = trendRevision(summary, "0y");
+  const fy2 = trendRevision(summary, "+1y");
   const surpriseFractions = surprises
+    .slice()
+    .sort((a, b) => (a.quarter < b.quarter ? 1 : -1)) // newest first
     .filter((s) => s.epsActual !== null && s.epsEstimate !== null && s.epsEstimate !== 0)
     .map((s) => (s.epsActual! - s.epsEstimate!) / Math.abs(s.epsEstimate!));
 
+  const closes = prices.map((p) => p.adjClose ?? p.close ?? null);
   return {
-    currency: quote.currency ?? null,
+    currency,
     sector: summary.assetProfile?.sector ?? null,
-    mcap: summary.price?.marketCap ?? quote.marketCap ?? null,
-    adv,
+    mcap,
+    adv: advFromBars(prices.slice(-ADV_SESSIONS)),
     analysts: summary.financialData?.numberOfAnalystOpinions ?? null,
-    fy1Rev: revision(fy1),
-    fy2Rev: revision(fy2),
-    upLast30d: fy1?.epsRevisions?.upLast30days ?? null,
-    downLast30d: fy1?.epsRevisions?.downLast30days ?? null,
+    fy1Rev: fy1.revision,
+    fy2Rev: fy2.revision,
+    upLast30d: fy1.up30,
+    downLast30d: fy1.down30,
     surprises: surpriseFractions,
-    statements: await fetchStatements(symbol),
-    mom121,
-    fwdPe: summary.summaryDetail?.forwardPE ?? quote.forwardPE ?? null,
+    statements,
+    mom121: momentumFromCloses(closes, MOM_BACK, MOM_SKIP),
+    fwdPe: summary.summaryDetail?.forwardPE ?? null,
   };
 }
 
@@ -175,12 +177,14 @@ async function fetchYahooRate(pair: string): Promise<number | null> {
       `https://query1.finance.yahoo.com/v8/finance/chart/${pair}?range=5d&interval=1d`,
     );
     if (!res.ok) return null;
-    const json = (await res.json()) as {
-      chart?: { result?: { indicators?: { quote?: { close?: (number | null)[] }[] } }[] };
-    };
-    const closes = json.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-    const valid = Array.isArray(closes) ? closes.filter((c): c is number => c !== null) : [];
-    return valid.length ? valid[valid.length - 1] : null;
+    const payload = z
+      .object({
+        chart: z.object({
+          result: z.array(z.object({ meta: z.object({ regularMarketPrice: z.number() }) })),
+        }),
+      })
+      .safeParse(await res.json());
+    return payload.success ? payload.data.chart.result[0].meta.regularMarketPrice : null;
   } catch {
     return null;
   }

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../lib/db";
 import { screenRun, screenStock, type ScreenStock } from "../lib/schema";
+import { classifyLatestRun } from "../lib/screen/jev";
 import { advanceScreen } from "../lib/screen/run";
 import { authMiddleware } from "./middleware";
 
@@ -70,6 +71,15 @@ export const getScreenDashboard = createServerFn({ method: "GET" }).handler(
     };
   },
 );
+
+export const classifyScreenSurvivors = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    if (!context.isAdmin) {
+      throw new Error("admin only");
+    }
+    return classifyLatestRun(getDb());
+  });
 
 export const advanceScreenRun = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

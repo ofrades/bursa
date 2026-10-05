@@ -68,3 +68,16 @@ on every deploy.
 
 - public URL: `https://bursa.mohshoo.com`
 - health endpoint: `https://bursa.mohshoo.com/api/health`
+
+## EPS-revision screen
+
+`/screen` runs the Mare Nostrum-style screen (90-day FY1/FY2 consensus revisions,
+breadth, SUE, ROIC/leverage/Piotroski gates, composite ranking) over the curated
+global large-cap universe in `src/lib/screen/universe.ts`. The list is data-driven:
+every survivor, ranked, equal-weighted; the strict top-revision-quintile subset is
+flagged. Admin: "Run screen" advances the batched run; "Classify revisions" runs the
+OpenRouter revision-quality classifier (RECURRING/ONE_OFF/MIXED) over the strict set.
+
+Headless runs (cron / CI): `POST /api/screen/run` then `POST /api/screen/jev` with
+the `x-screen-token` header matching the `SCREEN_ADMIN_TOKEN` secret — or just use
+`scripts/screen-cron.sh`.
