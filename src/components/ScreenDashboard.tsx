@@ -6,6 +6,8 @@ import {
   advanceScreenRun,
   classifyScreenSurvivors,
   getScreenDashboard,
+  getScreenTrackRecord,
+  type RunRecord,
   type ScreenDashboard as ScreenDashboardData,
 } from "../server/screen";
 import { exclusionReasons, isSurvivor } from "../lib/screen/report";
@@ -46,6 +48,11 @@ export function ScreenDashboard({
     refetchInterval: (q) => (q.state.data?.latest?.status === "running" ? 5000 : false),
   });
   const data: ScreenDashboardData = query.data ?? initial;
+  const recordQuery = useQuery<RunRecord[], Error>({
+    queryKey: ["screen-record"],
+    queryFn: () => getScreenTrackRecord(),
+  });
+  const record = recordQuery.data ?? [];
 
   const survivors = data.rows
     .filter(isSurvivor)
@@ -218,6 +225,49 @@ export function ScreenDashboard({
           </CardContent>
         </Card>
       )}
+
+      {record.some((r) => r.horizons.some((h) => h.names > 0)) ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Track record — excess vs STOXX 600</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Run</TableHead>
+                  <TableHead>Names</TableHead>
+                  <TableHead className="text-right">1M win / avg</TableHead>
+                  <TableHead className="text-right">3M win / avg</TableHead>
+                  <TableHead className="text-right">6M win / avg</TableHead>
+                  <TableHead className="text-right">12M win / avg</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {record.map((r) => (
+                  <TableRow key={r.runId}>
+                    <TableCell>{r.runAt.slice(0, 10)}</TableCell>
+                    <TableCell>{r.names}</TableCell>
+                    {r.horizons.map((h) => (
+                      <TableCell key={h.horizonDays} className="text-right">
+                        {h.names === 0
+                          ? "—"
+                          : `${((h.beatMarketRate ?? 0) * 100).toFixed(0)}% · ${
+                              (h.avgExcess ?? 0) >= 0 ? "+" : ""
+                            }${((h.avgExcess ?? 0) * 100).toFixed(1)}%`}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Win = positive excess vs STOXX 600 over 21/63/126/252-session horizons; avg = mean
+              excess return. Cells fill in as windows elapse.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {survivors.length ? (
         <Card>
