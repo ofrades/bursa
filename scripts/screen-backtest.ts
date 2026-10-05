@@ -16,16 +16,14 @@
  */
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
-import {
-  getFundamentalsTimeSeries,
-  getRevisionPrices,
-} from "../src/lib/market-data";
+import { getFundamentalsTimeSeries, getRevisionPrices } from "../src/lib/market-data";
 import {
   computeNdEbitda,
   computePiotroski,
   computeRoic,
   DEFAULT_PARAMS,
 } from "../src/lib/screen/compute";
+import { METHODOLOGY_VERSION } from "../src/lib/screen/report";
 import { UNIVERSE } from "../src/lib/screen/universe";
 
 function arg(name: string, fallback: string): string {
@@ -171,7 +169,9 @@ async function fetchSymbol(symbol: string, from: Date, to: Date): Promise<Cached
       const seen = new Set((series[type] ?? []).map((p) => p[0]));
       series[type] = [
         ...(series[type] ?? []),
-        ...pts.filter((p) => p.value !== null && !seen.has(p.date)).map((p) => [p.date, p.value] as [string, number]),
+        ...pts
+          .filter((p) => p.value !== null && !seen.has(p.date))
+          .map((p) => [p.date, p.value] as [string, number]),
       ];
     }
   }
@@ -190,10 +190,7 @@ async function pool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>)
 
 type Statements = Parameters<typeof computeRoic>[0];
 
-function statementsAsOf(
-  series: Record<string, [string, number][]>,
-  cutoff: string,
-): Statements {
+function statementsAsOf(series: Record<string, [string, number][]>, cutoff: string): Statements {
   const dates = [...new Set((series.annualTotalAssets ?? []).map((p) => p[0]))]
     .filter((d) => d <= cutoff)
     .sort()
@@ -209,9 +206,8 @@ function statementsAsOf(
   const currentDebt = latest("annualCurrentDebt");
   return {
     ebit: latest("annualEBIT"),
-    depreciation: latest("annualReconciledDepreciation") ?? latest(
-      "annualDepreciationAmortizationDepletion",
-    ),
+    depreciation:
+      latest("annualReconciledDepreciation") ?? latest("annualDepreciationAmortizationDepletion"),
     pretaxIncome: latest("annualPretaxIncome"),
     taxProvision: latest("annualTaxProvision"),
     netIncome: two("annualNetIncome"),
@@ -306,7 +302,9 @@ async function main() {
   writeFileSync(CACHE, JSON.stringify(cacheFile));
 
   // FX + benchmark series
-  const fxRaw = await Promise.all(FX_PAIRS.map((p) => fetchBars(`${p}=X`, HISTORY_FROM, new Date())));
+  const fxRaw = await Promise.all(
+    FX_PAIRS.map((p) => fetchBars(`${p}=X`, HISTORY_FROM, new Date())),
+  );
   const fxSeries = Object.fromEntries(
     FX_PAIRS.map((p, i) => [p.replace("EUR", ""), fxRaw[i]]),
   ) as Record<string, Bar[]>;
@@ -328,7 +326,12 @@ async function main() {
   }
   quarterEnds.sort();
 
-  type Pick2 = { symbol: string; strictGarp: boolean; excess63: number | null; excess252: number | null };
+  type Pick2 = {
+    symbol: string;
+    strictGarp: boolean;
+    excess63: number | null;
+    excess252: number | null;
+  };
   const results: {
     date: string;
     evaluated: number;
@@ -372,9 +375,7 @@ async function main() {
       const fcf = isNum(ocf) && isNum(capex) ? ocf - Math.abs(capex) : null;
       const penceDiv = priceCcy === "GBp" ? 100 : 1;
       const mcapEur =
-        isNum(price) && isNum(shares) && perEur
-          ? (price * shares * perEur) / penceDiv / 1e9
-          : null;
+        isNum(price) && isNum(shares) && perEur ? (price * shares * perEur) / penceDiv / 1e9 : null;
       const fcfEur = isNum(fcf) && perEur ? fcf * perEur : null;
       const fcfYield = fcfEur !== null && mcapEur ? fcfEur / mcapEur : null;
       const conversion = isNum(fcf) && isNum(ni) && ni > 0 ? fcf / ni : null;
@@ -387,8 +388,7 @@ async function main() {
       const passUniverse =
         (mcapEur ?? -1) >= UNIVERSE_PARAMS.minMarketCapEur / 1e9 &&
         (advEur ?? -1) >= UNIVERSE_PARAMS.minAdvEur / 1e6;
-      const roeNow =
-        isNum(ni) && isNum(equity) && equity > 0 ? ni / equity : null;
+      const roeNow = isNum(ni) && isNum(equity) && equity > 0 ? ni / equity : null;
       const garp =
         growth !== null &&
         growth >= UNIVERSE_PARAMS.epsGrowthMin &&
@@ -475,7 +475,16 @@ async function main() {
     );
   }
 
-  writeFileSync(`${OUT_DIR}/picks.csv`, "date,symbol,garp,excess63,excess252\n" + picksLog.map((p) => `${p.date},${p.symbol},${p.strictGarp},${p.excess63 ?? ""},${p.excess252 ?? ""}`).join("\n") + "\n");
+  writeFileSync(
+    `${OUT_DIR}/picks.csv`,
+    "date,symbol,garp,excess63,excess252\n" +
+      picksLog
+        .map(
+          (p) => `${p.date},${p.symbol},${p.strictGarp},${p.excess63 ?? ""},${p.excess252 ?? ""}`,
+        )
+        .join("\n") +
+      "\n",
+  );
 
   const elapsed = results.filter((r) => r.win63 !== null);
   const full = results.filter((r) => r.win252 !== null);
@@ -512,7 +521,80 @@ async function main() {
     `- Coverage (>=20 analysts) not retroactively checkable.`,
   ].join("\n");
   writeFileSync(arg("out", `${OUT_DIR}/report.md`), report);
+  const snapshot = {
+    methodologyVersion: METHODOLOGY_VERSION,
+    kind: "proxy" as const,
+    generatedAt: new Date().toISOString(),
+    quarters: results.map((r) => ({
+      date: r.date,
+      evaluated: r.evaluated,
+      qualityPass: r.survivors,
+      garpPass: r.garp,
+      picks: r.picks,
+      win63: r.win63,
+      excess63: r.excess63,
+      win252: r.win252,
+      excess252: r.excess252,
+    })),
+    averages: {
+      win63: meanOf(results.filter((r) => r.win63 !== null).map((r) => r.win63!)),
+      excess63: meanOf(results.filter((r) => r.excess63 !== null).map((r) => r.excess63!)),
+      quarters63: results.filter((r) => r.win63 !== null).length,
+      win252: meanOf(results.filter((r) => r.win252 !== null).map((r) => r.win252!)),
+      excess252: meanOf(results.filter((r) => r.excess252 !== null).map((r) => r.excess252!)),
+      quarters252: results.filter((r) => r.win252 !== null).length,
+    },
+  };
+  const snapshotTs = [
+    "// GENERATED by scripts/screen-backtest.ts — do not edit by hand.",
+    "// PROXY retro results: quality + GARP + momentum skeleton, WITHOUT the",
+    "// consensus-revision signal; survivorship and hindsight biases apply.",
+    'import { METHODOLOGY_VERSION } from "./report";',
+    "",
+    "export type BacktestQuarter = {",
+    "  date: string;",
+    "  evaluated: number;",
+    "  qualityPass: number;",
+    "  garpPass: number;",
+    "  picks: number;",
+    "  win63: number | null;",
+    "  excess63: number | null;",
+    "  win252: number | null;",
+    "  excess252: number | null;",
+    "};",
+    "",
+    "export const backtestSnapshot = {",
+    `  methodologyVersion: METHODOLOGY_VERSION,`,
+    `  kind: "${snapshot.kind}" as const,`,
+    `  generatedAt: "${snapshot.generatedAt}",`,
+    "  quarters: [",
+    ...snapshot.quarters.map(
+      (q) =>
+        `    { date: "${q.date}", evaluated: ${q.evaluated}, qualityPass: ${q.qualityPass}, garpPass: ${q.garpPass}, picks: ${q.picks}, win63: ${q.win63 === null ? "null" : q.win63.toFixed(4)}, excess63: ${q.excess63 === null ? "null" : q.excess63.toFixed(4)}, win252: ${q.win252 === null ? "null" : q.win252.toFixed(4)}, excess252: ${q.excess252 === null ? "null" : q.excess252.toFixed(4)} },`,
+    ),
+    "  ],",
+    "  averages: {",
+    `    win63: ${snapshot.averages.win63 === null ? "null" : snapshot.averages.win63!.toFixed(4)},`,
+    `    excess63: ${snapshot.averages.excess63 === null ? "null" : snapshot.averages.excess63!.toFixed(4)},`,
+    `    quarters63: ${snapshot.averages.quarters63},`,
+    `    win252: ${snapshot.averages.win252 === null ? "null" : snapshot.averages.win252!.toFixed(4)},`,
+    `    excess252: ${snapshot.averages.excess252 === null ? "null" : snapshot.averages.excess252!.toFixed(4)},`,
+    `    quarters252: ${snapshot.averages.quarters252},`,
+    "  },",
+    "} satisfies { methodologyVersion: number; kind: \u0022proxy\u0022; generatedAt: string; quarters: BacktestQuarter[]; averages: Record<string, number | null> };",
+    "",
+  ].join("\n");
+  writeFileSync(
+    new URL("../src/lib/screen/backtest-snapshot.ts", import.meta.url).pathname,
+    snapshotTs,
+  );
+  writeFileSync(arg("out", `${OUT_DIR}/report.md`), report);
+  console.log(`snapshot -> src/lib/screen/backtest-snapshot.ts`);
   console.log(`report -> ${arg("out", `${OUT_DIR}/report.md`)}`);
+}
+
+function meanOf(xs: number[]): number | null {
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 }
 
 function fmtRate(v: number | null): string {

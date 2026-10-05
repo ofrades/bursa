@@ -22,3 +22,6 @@ data/*.sqlite-*
 drizzle/*_import_prod_data_*/
 /.pi/todos
 /.pi-agent
+
+# backtest working data (large cache; report + picks are committed)
+data/backtest/cache.json

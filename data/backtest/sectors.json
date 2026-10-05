@@ -1,1486 +1,1486 @@
 {
-"SAP.DE": {
-"sector": "Technology",
-"currency": "EUR"
-},
-"SIE.DE": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"SHL.DE": {
-"sector": "Healthcare",
-"currency": "EUR"
-},
-"ENR.DE": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"DTE.DE": {
-"sector": "Communication Services",
-"currency": "EUR"
-},
-"ALV.DE": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"MUV2.DE": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"MBG.DE": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"BMW.DE": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"VOW3.DE": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"RHM.DE": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"BAS.DE": {
-"sector": "Basic Materials",
-"currency": "EUR"
-},
-"DHL.DE": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"EOAN.DE": {
-"sector": "Utilities",
-"currency": "EUR"
-},
-"IFX.DE": {
-"sector": "Technology",
-"currency": "EUR"
-},
-"MRK.DE": {
-"sector": "Healthcare",
-"currency": "EUR"
-},
-"DB1.DE": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"DBK.DE": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"ADS.DE": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"MC.PA": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"RMS.PA": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"CDI.PA": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"OR.PA": {
-"sector": "Consumer Defensive",
-"currency": "EUR"
-},
-"EL.PA": {
-"sector": "Healthcare",
-"currency": "EUR"
-},
-"TTE.PA": {
-"sector": "Energy",
-"currency": "EUR"
-},
-"SAN.PA": {
-"sector": "Healthcare",
-"currency": "EUR"
-},
-"AI.PA": {
-"sector": "Basic Materials",
-"currency": "EUR"
-},
-"AIR.PA": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"SAF.PA": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"HO.PA": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"SU.PA": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"DG.PA": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"BNP.PA": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"ACA.PA": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"CS.PA": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"BN.PA": {
-"sector": "Consumer Defensive",
-"currency": "EUR"
-},
-"SGO.PA": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"AM.PA": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"ENGI.PA": {
-"sector": "Utilities",
-"currency": "EUR"
-},
-"SHEL.L": {
-"sector": "Energy",
-"currency": "GBp"
-},
-"AZN.L": {
-"sector": "Healthcare",
-"currency": "GBp"
-},
-"HSBA.L": {
-"sector": "Financial Services",
-"currency": "GBp"
-},
-"BP.L": {
-"sector": "Energy",
-"currency": "GBp"
-},
-"ULVR.L": {
-"sector": "Consumer Defensive",
-"currency": "GBp"
-},
-"RIO.L": {
-"sector": "Basic Materials",
-"currency": "GBp"
-},
-"BHP.L": {
-"sector": "Basic Materials",
-"currency": "GBp"
-},
-"GSK.L": {
-"sector": "Healthcare",
-"currency": "GBp"
-},
-"DGE.L": {
-"sector": "Consumer Defensive",
-"currency": "GBp"
-},
-"REL.L": {
-"sector": "Industrials",
-"currency": "GBp"
-},
-"LSEG.L": {
-"sector": "Financial Services",
-"currency": "GBp"
-},
-"RR.L": {
-"sector": "Industrials",
-"currency": "GBp"
-},
-"BA.L": {
-"sector": "Industrials",
-"currency": "GBp"
-},
-"GLEN.L": {
-"sector": "Basic Materials",
-"currency": "GBp"
-},
-"AAL.L": {
-"sector": "Basic Materials",
-"currency": "GBp"
-},
-"BARC.L": {
-"sector": "Financial Services",
-"currency": "GBp"
-},
-"LLOY.L": {
-"sector": "Financial Services",
-"currency": "GBp"
-},
-"NWG.L": {
-"sector": "Financial Services",
-"currency": "GBp"
-},
-"NG.L": {
-"sector": "Utilities",
-"currency": "GBp"
-},
-"PRU.L": {
-"sector": "Financial Services",
-"currency": "GBp"
-},
-"EXPN.L": {
-"sector": "Industrials",
-"currency": "GBp"
-},
-"AV.L": {
-"sector": "Financial Services",
-"currency": "GBp"
-},
-"BATS.L": {
-"sector": "Consumer Defensive",
-"currency": "GBp"
-},
-"RKT.L": {
-"sector": "Consumer Defensive",
-"currency": "GBp"
-},
-"NESN.SW": {
-"sector": "Consumer Defensive",
-"currency": "CHF"
-},
-"RO.SW": {
-"sector": "Healthcare",
-"currency": "CHF"
-},
-"NOVN.SW": {
-"sector": "Healthcare",
-"currency": "CHF"
-},
-"UBSG.SW": {
-"sector": "Financial Services",
-"currency": "CHF"
-},
-"ZURN.SW": {
-"sector": "Financial Services",
-"currency": "CHF"
-},
-"SREN.SW": {
-"sector": "Financial Services",
-"currency": "CHF"
-},
-"ABBN.SW": {
-"sector": "Industrials",
-"currency": "CHF"
-},
-"CFR.SW": {
-"sector": "Consumer Cyclical",
-"currency": "CHF"
-},
-"SGSN.SW": {
-"sector": "Industrials",
-"currency": "CHF"
-},
-"ASML.AS": {
-"sector": "Technology",
-"currency": "EUR"
-},
-"ADYEN.AS": {
-"sector": "Technology",
-"currency": "EUR"
-},
-"INGA.AS": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"HEIA.AS": {
-"sector": "Consumer Defensive",
-"currency": "EUR"
-},
-"PRX.AS": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"UMG.AS": {
-"sector": "Communication Services",
-"currency": "EUR"
-},
-"WKL.AS": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"ABI.BR": {
-"sector": "Consumer Defensive",
-"currency": "EUR"
-},
-"ENI.MI": {
-"sector": "Energy",
-"currency": "EUR"
-},
-"ENEL.MI": {
-"sector": "Utilities",
-"currency": "EUR"
-},
-"ISP.MI": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"UCG.MI": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"G.MI": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"RACE.MI": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"LDO.MI": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"ITX.MC": {
-"sector": "Consumer Cyclical",
-"currency": "EUR"
-},
-"IBE.MC": {
-"sector": "Utilities",
-"currency": "EUR"
-},
-"SAN.MC": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"BBVA.MC": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"CABK.MC": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"ATCO-B.ST": {
-"sector": "Industrials",
-"currency": "SEK"
-},
-"VOLV-B.ST": {
-"sector": "Industrials",
-"currency": "SEK"
-},
-"INVE-B.ST": {
-"sector": "Financial Services",
-"currency": "SEK"
-},
-"NOVO-B.CO": {
-"sector": "Healthcare",
-"currency": "DKK"
-},
-"SAMPO.HE": {
-"sector": "Financial Services",
-"currency": "EUR"
-},
-"EQNR.OL": {
-"sector": "Energy",
-"currency": "NOK"
-},
-"RYA.IR": {
-"sector": "Industrials",
-"currency": "EUR"
-},
-"SPOT": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"AAPL": {
-"sector": "Technology",
-"currency": "USD"
-},
-"MSFT": {
-"sector": "Technology",
-"currency": "USD"
-},
-"NVDA": {
-"sector": "Technology",
-"currency": "USD"
-},
-"GOOGL": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"AMZN": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"META": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"AVGO": {
-"sector": "Technology",
-"currency": "USD"
-},
-"ORCL": {
-"sector": "Technology",
-"currency": "USD"
-},
-"CRM": {
-"sector": "Technology",
-"currency": "USD"
-},
-"ADBE": {
-"sector": "Technology",
-"currency": "USD"
-},
-"NFLX": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"AMD": {
-"sector": "Technology",
-"currency": "USD"
-},
-"INTC": {
-"sector": "Technology",
-"currency": "USD"
-},
-"QCOM": {
-"sector": "Technology",
-"currency": "USD"
-},
-"TXN": {
-"sector": "Technology",
-"currency": "USD"
-},
-"MU": {
-"sector": "Technology",
-"currency": "USD"
-},
-"AMAT": {
-"sector": "Technology",
-"currency": "USD"
-},
-"LRCX": {
-"sector": "Technology",
-"currency": "USD"
-},
-"KLAC": {
-"sector": "Technology",
-"currency": "USD"
-},
-"ADI": {
-"sector": "Technology",
-"currency": "USD"
-},
-"SNPS": {
-"sector": "Technology",
-"currency": "USD"
-},
-"CDNS": {
-"sector": "Technology",
-"currency": "USD"
-},
-"CSCO": {
-"sector": "Technology",
-"currency": "USD"
-},
-"ACN": {
-"sector": "Technology",
-"currency": "USD"
-},
-"IBM": {
-"sector": "Technology",
-"currency": "USD"
-},
-"NOW": {
-"sector": "Technology",
-"currency": "USD"
-},
-"INTU": {
-"sector": "Technology",
-"currency": "USD"
-},
-"WDAY": {
-"sector": "Technology",
-"currency": "USD"
-},
-"CRWD": {
-"sector": "Technology",
-"currency": "USD"
-},
-"PANW": {
-"sector": "Technology",
-"currency": "USD"
-},
-"PLTR": {
-"sector": "Technology",
-"currency": "USD"
-},
-"ANET": {
-"sector": "Technology",
-"currency": "USD"
-},
-"NXPI": {
-"sector": "Technology",
-"currency": "USD"
-},
-"LIN": {
-"sector": "Basic Materials",
-"currency": "USD"
-},
-"T": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"TMUS": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"VZ": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"DIS": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"CMCSA": {
-"sector": "Communication Services",
-"currency": "USD"
-},
-"WMT": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"COST": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"HD": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"PG": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"KO": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"PEP": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"MCD": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"NKE": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"SBUX": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"TGT": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"TJX": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"F": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"GM": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"ABNB": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"UBER": {
-"sector": "Technology",
-"currency": "USD"
-},
-"PYPL": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"LLY": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"UNH": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"JNJ": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"ABBV": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"MRK": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"PFE": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"TMO": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"ABT": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"DHR": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"AMGN": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"ISRG": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"BMY": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"GILD": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"VRTX": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"REGN": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"ZTS": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"MDT": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"SYK": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"BSX": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"CI": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"CVS": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"ELV": {
-"sector": "Healthcare",
-"currency": "USD"
-},
-"BRK.B": {
-"sector": null,
-"currency": null
-},
-"JPM": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"V": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"MA": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"AXP": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"COF": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"BAC": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"WFC": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"C": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"GS": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"MS": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"SCHW": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"BLK": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"BX": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"KKR": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"ICE": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"CME": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"MCO": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"SPGI": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"AJG": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"AON": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"MMC": {
-"sector": null,
-"currency": null
-},
-"CB": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"PGR": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"ALL": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"TRV": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"AIG": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"MET": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"PRU": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"USB": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"PNC": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"TFC": {
-"sector": "Financial Services",
-"currency": "USD"
-},
-"XOM": {
-"sector": "Energy",
-"currency": "USD"
-},
-"CVX": {
-"sector": "Energy",
-"currency": "USD"
-},
-"COP": {
-"sector": "Energy",
-"currency": "USD"
-},
-"EOG": {
-"sector": "Energy",
-"currency": "USD"
-},
-"SLB": {
-"sector": "Energy",
-"currency": "USD"
-},
-"PSX": {
-"sector": "Energy",
-"currency": "USD"
-},
-"MPC": {
-"sector": "Energy",
-"currency": "USD"
-},
-"OXY": {
-"sector": "Energy",
-"currency": "USD"
-},
-"KMI": {
-"sector": "Energy",
-"currency": "USD"
-},
-"WMB": {
-"sector": "Energy",
-"currency": "USD"
-},
-"OKE": {
-"sector": "Energy",
-"currency": "USD"
-},
-"ET": {
-"sector": "Energy",
-"currency": "USD"
-},
-"EPD": {
-"sector": "Energy",
-"currency": "USD"
-},
-"LNG": {
-"sector": "Energy",
-"currency": "USD"
-},
-"GE": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"GEV": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"CAT": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"DE": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"HON": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"ETN": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"PH": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"CMI": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"MMM": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"BA": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"LMT": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"RTX": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"GD": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"NOC": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"HWM": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"TDG": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"FDX": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"UPS": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"WM": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"RSG": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"CTAS": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"ADP": {
-"sector": "Technology",
-"currency": "USD"
-},
-"CPRT": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"UNP": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"CSX": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"VRT": {
-"sector": "Industrials",
-"currency": "USD"
-},
-"PM": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"MO": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"MNST": {
-"sector": "Consumer Defensive",
-"currency": "USD"
-},
-"NEE": {
-"sector": "Utilities",
-"currency": "USD"
-},
-"DUK": {
-"sector": "Utilities",
-"currency": "USD"
-},
-"AMT": {
-"sector": "Real Estate",
-"currency": "USD"
-},
-"PLD": {
-"sector": "Real Estate",
-"currency": "USD"
-},
-"7203.T": {
-"sector": "Consumer Cyclical",
-"currency": "JPY"
-},
-"6758.T": {
-"sector": "Technology",
-"currency": "JPY"
-},
-"6861.T": {
-"sector": "Technology",
-"currency": "JPY"
-},
-"6501.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"9984.T": {
-"sector": "Communication Services",
-"currency": "JPY"
-},
-"9434.T": {
-"sector": "Communication Services",
-"currency": "JPY"
-},
-"9432.T": {
-"sector": "Communication Services",
-"currency": "JPY"
-},
-"9433.T": {
-"sector": "Communication Services",
-"currency": "JPY"
-},
-"8035.T": {
-"sector": "Technology",
-"currency": "JPY"
-},
-"6857.T": {
-"sector": "Technology",
-"currency": "JPY"
-},
-"4063.T": {
-"sector": "Basic Materials",
-"currency": "JPY"
-},
-"7741.T": {
-"sector": "Healthcare",
-"currency": "JPY"
-},
-"6902.T": {
-"sector": "Consumer Cyclical",
-"currency": "JPY"
-},
-"7267.T": {
-"sector": "Consumer Cyclical",
-"currency": "JPY"
-},
-"6367.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"4901.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"6503.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"7011.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"6301.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"4502.T": {
-"sector": "Healthcare",
-"currency": "JPY"
-},
-"4507.T": {
-"sector": "Healthcare",
-"currency": "JPY"
-},
-"8306.T": {
-"sector": "Financial Services",
-"currency": "JPY"
-},
-"8316.T": {
-"sector": "Financial Services",
-"currency": "JPY"
-},
-"8411.T": {
-"sector": "Financial Services",
-"currency": "JPY"
-},
-"8058.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"8001.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"8031.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"8053.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"8002.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"2914.T": {
-"sector": "Consumer Defensive",
-"currency": "JPY"
-},
-"8766.T": {
-"sector": "Financial Services",
-"currency": "JPY"
-},
-"9983.T": {
-"sector": "Consumer Cyclical",
-"currency": "JPY"
-},
-"7974.T": {
-"sector": "Communication Services",
-"currency": "JPY"
-},
-"6098.T": {
-"sector": "Communication Services",
-"currency": "JPY"
-},
-"2413.T": {
-"sector": "Healthcare",
-"currency": "JPY"
-},
-"8830.T": {
-"sector": "Real Estate",
-"currency": "JPY"
-},
-"8802.T": {
-"sector": "Real Estate",
-"currency": "JPY"
-},
-"6273.T": {
-"sector": "Industrials",
-"currency": "JPY"
-},
-"0700.HK": {
-"sector": "Communication Services",
-"currency": "HKD"
-},
-"9988.HK": {
-"sector": "Consumer Cyclical",
-"currency": "HKD"
-},
-"3690.HK": {
-"sector": "Consumer Cyclical",
-"currency": "HKD"
-},
-"1810.HK": {
-"sector": "Technology",
-"currency": "HKD"
-},
-"9618.HK": {
-"sector": "Consumer Cyclical",
-"currency": "HKD"
-},
-"9999.HK": {
-"sector": "Communication Services",
-"currency": "HKD"
-},
-"1211.HK": {
-"sector": "Consumer Cyclical",
-"currency": "HKD"
-},
-"0175.HK": {
-"sector": "Consumer Cyclical",
-"currency": "HKD"
-},
-"0981.HK": {
-"sector": "Technology",
-"currency": "HKD"
-},
-"1398.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"0939.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"1288.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"3988.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"3328.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"3968.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"2628.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"2318.HK": {
-"sector": "Financial Services",
-"currency": "HKD"
-},
-"0941.HK": {
-"sector": "Communication Services",
-"currency": "HKD"
-},
-"0386.HK": {
-"sector": "Energy",
-"currency": "HKD"
-},
-"0857.HK": {
-"sector": "Energy",
-"currency": "HKD"
-},
-"0883.HK": {
-"sector": "Energy",
-"currency": "HKD"
-},
-"1088.HK": {
-"sector": "Energy",
-"currency": "HKD"
-},
-"600519.SS": {
-"sector": "Consumer Defensive",
-"currency": "CNY"
-},
-"300750.SZ": {
-"sector": "Industrials",
-"currency": "CNY"
-},
-"000858.SZ": {
-"sector": "Consumer Defensive",
-"currency": "CNY"
-},
-"000568.SZ": {
-"sector": "Consumer Defensive",
-"currency": "CNY"
-},
-"000333.SZ": {
-"sector": "Consumer Cyclical",
-"currency": "CNY"
-},
-"601166.SS": {
-"sector": "Financial Services",
-"currency": "CNY"
-},
-"PDD": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"TCOM": {
-"sector": "Consumer Cyclical",
-"currency": "USD"
-},
-"2330.TW": {
-"sector": "Technology",
-"currency": "TWD"
-},
-"2317.TW": {
-"sector": "Technology",
-"currency": "TWD"
-},
-"2454.TW": {
-"sector": "Technology",
-"currency": "TWD"
-},
-"2308.TW": {
-"sector": "Technology",
-"currency": "TWD"
-},
-"3231.TW": {
-"sector": "Technology",
-"currency": "TWD"
-},
-"005930.KS": {
-"sector": "Technology",
-"currency": "KRW"
-},
-"000660.KS": {
-"sector": "Technology",
-"currency": "KRW"
-},
-"005380.KS": {
-"sector": "Consumer Cyclical",
-"currency": "KRW"
-},
-"RELIANCE.NS": {
-"sector": "Energy",
-"currency": "INR"
-},
-"TCS.NS": {
-"sector": "Technology",
-"currency": "INR"
-},
-"HDFCBANK.NS": {
-"sector": "Financial Services",
-"currency": "INR"
-},
-"ICICIBANK.NS": {
-"sector": "Financial Services",
-"currency": "INR"
-},
-"BHARTIARTL.NS": {
-"sector": "Communication Services",
-"currency": "INR"
-},
-"INFY.NS": {
-"sector": "Technology",
-"currency": "INR"
-},
-"SBIN.NS": {
-"sector": "Financial Services",
-"currency": "INR"
-},
-"ITC.NS": {
-"sector": "Consumer Defensive",
-"currency": "INR"
-},
-"HINDUNILVR.NS": {
-"sector": "Consumer Defensive",
-"currency": "INR"
-},
-"LT.NS": {
-"sector": "Industrials",
-"currency": "INR"
-},
-"HCLTECH.NS": {
-"sector": "Technology",
-"currency": "INR"
-},
-"SUNPHARMA.NS": {
-"sector": "Healthcare",
-"currency": "INR"
-},
-"KOTAKBANK.NS": {
-"sector": "Financial Services",
-"currency": "INR"
-},
-"ULTRACEMCO.NS": {
-"sector": "Basic Materials",
-"currency": "INR"
-},
-"BAJFINANCE.NS": {
-"sector": "Financial Services",
-"currency": "INR"
-},
-"M&M.NS": {
-"sector": "Consumer Cyclical",
-"currency": "INR"
-},
-"RY.TO": {
-"sector": "Financial Services",
-"currency": "CAD"
-},
-"TD.TO": {
-"sector": "Financial Services",
-"currency": "CAD"
-},
-"BNS.TO": {
-"sector": "Financial Services",
-"currency": "CAD"
-},
-"BMO.TO": {
-"sector": "Financial Services",
-"currency": "CAD"
-},
-"CP.TO": {
-"sector": "Industrials",
-"currency": "CAD"
-},
-"CNR.TO": {
-"sector": "Industrials",
-"currency": "CAD"
-},
-"ENB.TO": {
-"sector": "Energy",
-"currency": "CAD"
-},
-"CNQ.TO": {
-"sector": "Energy",
-"currency": "CAD"
-},
-"SHOP.TO": {
-"sector": "Technology",
-"currency": "CAD"
-},
-"CSU.TO": {
-"sector": "Technology",
-"currency": "CAD"
-},
-"BN.TO": {
-"sector": "Financial Services",
-"currency": "CAD"
-},
-"ATD.TO": {
-"sector": "Consumer Cyclical",
-"currency": "CAD"
-},
-"CBA.AX": {
-"sector": "Financial Services",
-"currency": "AUD"
-},
-"NAB.AX": {
-"sector": "Financial Services",
-"currency": "AUD"
-},
-"WBC.AX": {
-"sector": "Financial Services",
-"currency": "AUD"
-},
-"ANZ.AX": {
-"sector": "Financial Services",
-"currency": "AUD"
-},
-"MQG.AX": {
-"sector": "Financial Services",
-"currency": "AUD"
-},
-"CSL.AX": {
-"sector": "Healthcare",
-"currency": "AUD"
-},
-"WES.AX": {
-"sector": "Consumer Cyclical",
-"currency": "AUD"
-},
-"PETR4.SA": {
-"sector": "Energy",
-"currency": "BRL"
-},
-"VALE3.SA": {
-"sector": "Basic Materials",
-"currency": "BRL"
-},
-"ITUB4.SA": {
-"sector": "Financial Services",
-"currency": "BRL"
-},
-"2222.SR": {
-"sector": "Energy",
-"currency": "SAR"
-}
+  "SAP.DE": {
+    "sector": "Technology",
+    "currency": "EUR"
+  },
+  "SIE.DE": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "SHL.DE": {
+    "sector": "Healthcare",
+    "currency": "EUR"
+  },
+  "ENR.DE": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "DTE.DE": {
+    "sector": "Communication Services",
+    "currency": "EUR"
+  },
+  "ALV.DE": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "MUV2.DE": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "MBG.DE": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "BMW.DE": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "VOW3.DE": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "RHM.DE": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "BAS.DE": {
+    "sector": "Basic Materials",
+    "currency": "EUR"
+  },
+  "DHL.DE": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "EOAN.DE": {
+    "sector": "Utilities",
+    "currency": "EUR"
+  },
+  "IFX.DE": {
+    "sector": "Technology",
+    "currency": "EUR"
+  },
+  "MRK.DE": {
+    "sector": "Healthcare",
+    "currency": "EUR"
+  },
+  "DB1.DE": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "DBK.DE": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "ADS.DE": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "MC.PA": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "RMS.PA": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "CDI.PA": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "OR.PA": {
+    "sector": "Consumer Defensive",
+    "currency": "EUR"
+  },
+  "EL.PA": {
+    "sector": "Healthcare",
+    "currency": "EUR"
+  },
+  "TTE.PA": {
+    "sector": "Energy",
+    "currency": "EUR"
+  },
+  "SAN.PA": {
+    "sector": "Healthcare",
+    "currency": "EUR"
+  },
+  "AI.PA": {
+    "sector": "Basic Materials",
+    "currency": "EUR"
+  },
+  "AIR.PA": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "SAF.PA": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "HO.PA": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "SU.PA": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "DG.PA": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "BNP.PA": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "ACA.PA": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "CS.PA": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "BN.PA": {
+    "sector": "Consumer Defensive",
+    "currency": "EUR"
+  },
+  "SGO.PA": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "AM.PA": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "ENGI.PA": {
+    "sector": "Utilities",
+    "currency": "EUR"
+  },
+  "SHEL.L": {
+    "sector": "Energy",
+    "currency": "GBp"
+  },
+  "AZN.L": {
+    "sector": "Healthcare",
+    "currency": "GBp"
+  },
+  "HSBA.L": {
+    "sector": "Financial Services",
+    "currency": "GBp"
+  },
+  "BP.L": {
+    "sector": "Energy",
+    "currency": "GBp"
+  },
+  "ULVR.L": {
+    "sector": "Consumer Defensive",
+    "currency": "GBp"
+  },
+  "RIO.L": {
+    "sector": "Basic Materials",
+    "currency": "GBp"
+  },
+  "BHP.L": {
+    "sector": "Basic Materials",
+    "currency": "GBp"
+  },
+  "GSK.L": {
+    "sector": "Healthcare",
+    "currency": "GBp"
+  },
+  "DGE.L": {
+    "sector": "Consumer Defensive",
+    "currency": "GBp"
+  },
+  "REL.L": {
+    "sector": "Industrials",
+    "currency": "GBp"
+  },
+  "LSEG.L": {
+    "sector": "Financial Services",
+    "currency": "GBp"
+  },
+  "RR.L": {
+    "sector": "Industrials",
+    "currency": "GBp"
+  },
+  "BA.L": {
+    "sector": "Industrials",
+    "currency": "GBp"
+  },
+  "GLEN.L": {
+    "sector": "Basic Materials",
+    "currency": "GBp"
+  },
+  "AAL.L": {
+    "sector": "Basic Materials",
+    "currency": "GBp"
+  },
+  "BARC.L": {
+    "sector": "Financial Services",
+    "currency": "GBp"
+  },
+  "LLOY.L": {
+    "sector": "Financial Services",
+    "currency": "GBp"
+  },
+  "NWG.L": {
+    "sector": "Financial Services",
+    "currency": "GBp"
+  },
+  "NG.L": {
+    "sector": "Utilities",
+    "currency": "GBp"
+  },
+  "PRU.L": {
+    "sector": "Financial Services",
+    "currency": "GBp"
+  },
+  "EXPN.L": {
+    "sector": "Industrials",
+    "currency": "GBp"
+  },
+  "AV.L": {
+    "sector": "Financial Services",
+    "currency": "GBp"
+  },
+  "BATS.L": {
+    "sector": "Consumer Defensive",
+    "currency": "GBp"
+  },
+  "RKT.L": {
+    "sector": "Consumer Defensive",
+    "currency": "GBp"
+  },
+  "NESN.SW": {
+    "sector": "Consumer Defensive",
+    "currency": "CHF"
+  },
+  "RO.SW": {
+    "sector": "Healthcare",
+    "currency": "CHF"
+  },
+  "NOVN.SW": {
+    "sector": "Healthcare",
+    "currency": "CHF"
+  },
+  "UBSG.SW": {
+    "sector": "Financial Services",
+    "currency": "CHF"
+  },
+  "ZURN.SW": {
+    "sector": "Financial Services",
+    "currency": "CHF"
+  },
+  "SREN.SW": {
+    "sector": "Financial Services",
+    "currency": "CHF"
+  },
+  "ABBN.SW": {
+    "sector": "Industrials",
+    "currency": "CHF"
+  },
+  "CFR.SW": {
+    "sector": "Consumer Cyclical",
+    "currency": "CHF"
+  },
+  "SGSN.SW": {
+    "sector": "Industrials",
+    "currency": "CHF"
+  },
+  "ASML.AS": {
+    "sector": "Technology",
+    "currency": "EUR"
+  },
+  "ADYEN.AS": {
+    "sector": "Technology",
+    "currency": "EUR"
+  },
+  "INGA.AS": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "HEIA.AS": {
+    "sector": "Consumer Defensive",
+    "currency": "EUR"
+  },
+  "PRX.AS": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "UMG.AS": {
+    "sector": "Communication Services",
+    "currency": "EUR"
+  },
+  "WKL.AS": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "ABI.BR": {
+    "sector": "Consumer Defensive",
+    "currency": "EUR"
+  },
+  "ENI.MI": {
+    "sector": "Energy",
+    "currency": "EUR"
+  },
+  "ENEL.MI": {
+    "sector": "Utilities",
+    "currency": "EUR"
+  },
+  "ISP.MI": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "UCG.MI": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "G.MI": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "RACE.MI": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "LDO.MI": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "ITX.MC": {
+    "sector": "Consumer Cyclical",
+    "currency": "EUR"
+  },
+  "IBE.MC": {
+    "sector": "Utilities",
+    "currency": "EUR"
+  },
+  "SAN.MC": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "BBVA.MC": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "CABK.MC": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "ATCO-B.ST": {
+    "sector": "Industrials",
+    "currency": "SEK"
+  },
+  "VOLV-B.ST": {
+    "sector": "Industrials",
+    "currency": "SEK"
+  },
+  "INVE-B.ST": {
+    "sector": "Financial Services",
+    "currency": "SEK"
+  },
+  "NOVO-B.CO": {
+    "sector": "Healthcare",
+    "currency": "DKK"
+  },
+  "SAMPO.HE": {
+    "sector": "Financial Services",
+    "currency": "EUR"
+  },
+  "EQNR.OL": {
+    "sector": "Energy",
+    "currency": "NOK"
+  },
+  "RYA.IR": {
+    "sector": "Industrials",
+    "currency": "EUR"
+  },
+  "SPOT": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "AAPL": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "MSFT": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "NVDA": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "GOOGL": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "AMZN": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "META": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "AVGO": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "ORCL": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "CRM": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "ADBE": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "NFLX": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "AMD": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "INTC": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "QCOM": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "TXN": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "MU": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "AMAT": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "LRCX": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "KLAC": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "ADI": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "SNPS": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "CDNS": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "CSCO": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "ACN": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "IBM": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "NOW": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "INTU": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "WDAY": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "CRWD": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "PANW": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "PLTR": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "ANET": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "NXPI": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "LIN": {
+    "sector": "Basic Materials",
+    "currency": "USD"
+  },
+  "T": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "TMUS": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "VZ": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "DIS": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "CMCSA": {
+    "sector": "Communication Services",
+    "currency": "USD"
+  },
+  "WMT": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "COST": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "HD": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "PG": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "KO": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "PEP": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "MCD": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "NKE": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "SBUX": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "TGT": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "TJX": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "F": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "GM": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "ABNB": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "UBER": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "PYPL": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "LLY": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "UNH": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "JNJ": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "ABBV": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "MRK": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "PFE": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "TMO": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "ABT": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "DHR": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "AMGN": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "ISRG": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "BMY": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "GILD": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "VRTX": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "REGN": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "ZTS": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "MDT": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "SYK": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "BSX": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "CI": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "CVS": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "ELV": {
+    "sector": "Healthcare",
+    "currency": "USD"
+  },
+  "BRK.B": {
+    "sector": null,
+    "currency": null
+  },
+  "JPM": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "V": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "MA": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "AXP": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "COF": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "BAC": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "WFC": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "C": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "GS": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "MS": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "SCHW": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "BLK": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "BX": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "KKR": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "ICE": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "CME": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "MCO": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "SPGI": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "AJG": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "AON": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "MMC": {
+    "sector": null,
+    "currency": null
+  },
+  "CB": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "PGR": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "ALL": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "TRV": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "AIG": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "MET": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "PRU": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "USB": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "PNC": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "TFC": {
+    "sector": "Financial Services",
+    "currency": "USD"
+  },
+  "XOM": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "CVX": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "COP": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "EOG": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "SLB": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "PSX": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "MPC": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "OXY": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "KMI": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "WMB": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "OKE": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "ET": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "EPD": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "LNG": {
+    "sector": "Energy",
+    "currency": "USD"
+  },
+  "GE": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "GEV": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "CAT": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "DE": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "HON": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "ETN": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "PH": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "CMI": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "MMM": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "BA": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "LMT": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "RTX": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "GD": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "NOC": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "HWM": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "TDG": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "FDX": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "UPS": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "WM": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "RSG": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "CTAS": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "ADP": {
+    "sector": "Technology",
+    "currency": "USD"
+  },
+  "CPRT": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "UNP": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "CSX": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "VRT": {
+    "sector": "Industrials",
+    "currency": "USD"
+  },
+  "PM": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "MO": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "MNST": {
+    "sector": "Consumer Defensive",
+    "currency": "USD"
+  },
+  "NEE": {
+    "sector": "Utilities",
+    "currency": "USD"
+  },
+  "DUK": {
+    "sector": "Utilities",
+    "currency": "USD"
+  },
+  "AMT": {
+    "sector": "Real Estate",
+    "currency": "USD"
+  },
+  "PLD": {
+    "sector": "Real Estate",
+    "currency": "USD"
+  },
+  "7203.T": {
+    "sector": "Consumer Cyclical",
+    "currency": "JPY"
+  },
+  "6758.T": {
+    "sector": "Technology",
+    "currency": "JPY"
+  },
+  "6861.T": {
+    "sector": "Technology",
+    "currency": "JPY"
+  },
+  "6501.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "9984.T": {
+    "sector": "Communication Services",
+    "currency": "JPY"
+  },
+  "9434.T": {
+    "sector": "Communication Services",
+    "currency": "JPY"
+  },
+  "9432.T": {
+    "sector": "Communication Services",
+    "currency": "JPY"
+  },
+  "9433.T": {
+    "sector": "Communication Services",
+    "currency": "JPY"
+  },
+  "8035.T": {
+    "sector": "Technology",
+    "currency": "JPY"
+  },
+  "6857.T": {
+    "sector": "Technology",
+    "currency": "JPY"
+  },
+  "4063.T": {
+    "sector": "Basic Materials",
+    "currency": "JPY"
+  },
+  "7741.T": {
+    "sector": "Healthcare",
+    "currency": "JPY"
+  },
+  "6902.T": {
+    "sector": "Consumer Cyclical",
+    "currency": "JPY"
+  },
+  "7267.T": {
+    "sector": "Consumer Cyclical",
+    "currency": "JPY"
+  },
+  "6367.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "4901.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "6503.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "7011.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "6301.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "4502.T": {
+    "sector": "Healthcare",
+    "currency": "JPY"
+  },
+  "4507.T": {
+    "sector": "Healthcare",
+    "currency": "JPY"
+  },
+  "8306.T": {
+    "sector": "Financial Services",
+    "currency": "JPY"
+  },
+  "8316.T": {
+    "sector": "Financial Services",
+    "currency": "JPY"
+  },
+  "8411.T": {
+    "sector": "Financial Services",
+    "currency": "JPY"
+  },
+  "8058.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "8001.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "8031.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "8053.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "8002.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "2914.T": {
+    "sector": "Consumer Defensive",
+    "currency": "JPY"
+  },
+  "8766.T": {
+    "sector": "Financial Services",
+    "currency": "JPY"
+  },
+  "9983.T": {
+    "sector": "Consumer Cyclical",
+    "currency": "JPY"
+  },
+  "7974.T": {
+    "sector": "Communication Services",
+    "currency": "JPY"
+  },
+  "6098.T": {
+    "sector": "Communication Services",
+    "currency": "JPY"
+  },
+  "2413.T": {
+    "sector": "Healthcare",
+    "currency": "JPY"
+  },
+  "8830.T": {
+    "sector": "Real Estate",
+    "currency": "JPY"
+  },
+  "8802.T": {
+    "sector": "Real Estate",
+    "currency": "JPY"
+  },
+  "6273.T": {
+    "sector": "Industrials",
+    "currency": "JPY"
+  },
+  "0700.HK": {
+    "sector": "Communication Services",
+    "currency": "HKD"
+  },
+  "9988.HK": {
+    "sector": "Consumer Cyclical",
+    "currency": "HKD"
+  },
+  "3690.HK": {
+    "sector": "Consumer Cyclical",
+    "currency": "HKD"
+  },
+  "1810.HK": {
+    "sector": "Technology",
+    "currency": "HKD"
+  },
+  "9618.HK": {
+    "sector": "Consumer Cyclical",
+    "currency": "HKD"
+  },
+  "9999.HK": {
+    "sector": "Communication Services",
+    "currency": "HKD"
+  },
+  "1211.HK": {
+    "sector": "Consumer Cyclical",
+    "currency": "HKD"
+  },
+  "0175.HK": {
+    "sector": "Consumer Cyclical",
+    "currency": "HKD"
+  },
+  "0981.HK": {
+    "sector": "Technology",
+    "currency": "HKD"
+  },
+  "1398.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "0939.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "1288.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "3988.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "3328.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "3968.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "2628.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "2318.HK": {
+    "sector": "Financial Services",
+    "currency": "HKD"
+  },
+  "0941.HK": {
+    "sector": "Communication Services",
+    "currency": "HKD"
+  },
+  "0386.HK": {
+    "sector": "Energy",
+    "currency": "HKD"
+  },
+  "0857.HK": {
+    "sector": "Energy",
+    "currency": "HKD"
+  },
+  "0883.HK": {
+    "sector": "Energy",
+    "currency": "HKD"
+  },
+  "1088.HK": {
+    "sector": "Energy",
+    "currency": "HKD"
+  },
+  "600519.SS": {
+    "sector": "Consumer Defensive",
+    "currency": "CNY"
+  },
+  "300750.SZ": {
+    "sector": "Industrials",
+    "currency": "CNY"
+  },
+  "000858.SZ": {
+    "sector": "Consumer Defensive",
+    "currency": "CNY"
+  },
+  "000568.SZ": {
+    "sector": "Consumer Defensive",
+    "currency": "CNY"
+  },
+  "000333.SZ": {
+    "sector": "Consumer Cyclical",
+    "currency": "CNY"
+  },
+  "601166.SS": {
+    "sector": "Financial Services",
+    "currency": "CNY"
+  },
+  "PDD": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "TCOM": {
+    "sector": "Consumer Cyclical",
+    "currency": "USD"
+  },
+  "2330.TW": {
+    "sector": "Technology",
+    "currency": "TWD"
+  },
+  "2317.TW": {
+    "sector": "Technology",
+    "currency": "TWD"
+  },
+  "2454.TW": {
+    "sector": "Technology",
+    "currency": "TWD"
+  },
+  "2308.TW": {
+    "sector": "Technology",
+    "currency": "TWD"
+  },
+  "3231.TW": {
+    "sector": "Technology",
+    "currency": "TWD"
+  },
+  "005930.KS": {
+    "sector": "Technology",
+    "currency": "KRW"
+  },
+  "000660.KS": {
+    "sector": "Technology",
+    "currency": "KRW"
+  },
+  "005380.KS": {
+    "sector": "Consumer Cyclical",
+    "currency": "KRW"
+  },
+  "RELIANCE.NS": {
+    "sector": "Energy",
+    "currency": "INR"
+  },
+  "TCS.NS": {
+    "sector": "Technology",
+    "currency": "INR"
+  },
+  "HDFCBANK.NS": {
+    "sector": "Financial Services",
+    "currency": "INR"
+  },
+  "ICICIBANK.NS": {
+    "sector": "Financial Services",
+    "currency": "INR"
+  },
+  "BHARTIARTL.NS": {
+    "sector": "Communication Services",
+    "currency": "INR"
+  },
+  "INFY.NS": {
+    "sector": "Technology",
+    "currency": "INR"
+  },
+  "SBIN.NS": {
+    "sector": "Financial Services",
+    "currency": "INR"
+  },
+  "ITC.NS": {
+    "sector": "Consumer Defensive",
+    "currency": "INR"
+  },
+  "HINDUNILVR.NS": {
+    "sector": "Consumer Defensive",
+    "currency": "INR"
+  },
+  "LT.NS": {
+    "sector": "Industrials",
+    "currency": "INR"
+  },
+  "HCLTECH.NS": {
+    "sector": "Technology",
+    "currency": "INR"
+  },
+  "SUNPHARMA.NS": {
+    "sector": "Healthcare",
+    "currency": "INR"
+  },
+  "KOTAKBANK.NS": {
+    "sector": "Financial Services",
+    "currency": "INR"
+  },
+  "ULTRACEMCO.NS": {
+    "sector": "Basic Materials",
+    "currency": "INR"
+  },
+  "BAJFINANCE.NS": {
+    "sector": "Financial Services",
+    "currency": "INR"
+  },
+  "M&M.NS": {
+    "sector": "Consumer Cyclical",
+    "currency": "INR"
+  },
+  "RY.TO": {
+    "sector": "Financial Services",
+    "currency": "CAD"
+  },
+  "TD.TO": {
+    "sector": "Financial Services",
+    "currency": "CAD"
+  },
+  "BNS.TO": {
+    "sector": "Financial Services",
+    "currency": "CAD"
+  },
+  "BMO.TO": {
+    "sector": "Financial Services",
+    "currency": "CAD"
+  },
+  "CP.TO": {
+    "sector": "Industrials",
+    "currency": "CAD"
+  },
+  "CNR.TO": {
+    "sector": "Industrials",
+    "currency": "CAD"
+  },
+  "ENB.TO": {
+    "sector": "Energy",
+    "currency": "CAD"
+  },
+  "CNQ.TO": {
+    "sector": "Energy",
+    "currency": "CAD"
+  },
+  "SHOP.TO": {
+    "sector": "Technology",
+    "currency": "CAD"
+  },
+  "CSU.TO": {
+    "sector": "Technology",
+    "currency": "CAD"
+  },
+  "BN.TO": {
+    "sector": "Financial Services",
+    "currency": "CAD"
+  },
+  "ATD.TO": {
+    "sector": "Consumer Cyclical",
+    "currency": "CAD"
+  },
+  "CBA.AX": {
+    "sector": "Financial Services",
+    "currency": "AUD"
+  },
+  "NAB.AX": {
+    "sector": "Financial Services",
+    "currency": "AUD"
+  },
+  "WBC.AX": {
+    "sector": "Financial Services",
+    "currency": "AUD"
+  },
+  "ANZ.AX": {
+    "sector": "Financial Services",
+    "currency": "AUD"
+  },
+  "MQG.AX": {
+    "sector": "Financial Services",
+    "currency": "AUD"
+  },
+  "CSL.AX": {
+    "sector": "Healthcare",
+    "currency": "AUD"
+  },
+  "WES.AX": {
+    "sector": "Consumer Cyclical",
+    "currency": "AUD"
+  },
+  "PETR4.SA": {
+    "sector": "Energy",
+    "currency": "BRL"
+  },
+  "VALE3.SA": {
+    "sector": "Basic Materials",
+    "currency": "BRL"
+  },
+  "ITUB4.SA": {
+    "sector": "Financial Services",
+    "currency": "BRL"
+  },
+  "2222.SR": {
+    "sector": "Energy",
+    "currency": "SAR"
+  }
 }

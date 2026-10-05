@@ -11,6 +11,7 @@ import {
   type ScreenDashboard as ScreenDashboardData,
 } from "../server/screen";
 import { exclusionReasons, isSurvivor } from "../lib/screen/report";
+import { backtestSnapshot } from "../lib/screen/backtest-snapshot";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -182,6 +183,13 @@ export function ScreenDashboard({
             Consensus freshness is unverified; snapshots record fetch time, not estimate update
             time.
           </p>
+          <p>
+            Daily FX conversion:{" "}
+            <a href="https://www.exchangerate-api.com" className="underline">
+              Rates By Exchange Rate API
+            </a>
+            . Missing or stale currency rates block screening rather than exclude stocks.
+          </p>
         </CardContent>
       </Card>
       {run ? (
@@ -265,6 +273,64 @@ export function ScreenDashboard({
               Win = positive excess vs STOXX 600 over 21/63/126/252-session horizons; avg = mean
               excess return. Cells fill in as windows elapse.
             </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {backtestSnapshot.quarters.some((q) => q.picks > 0) ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Retro proxy backtest — quality + GARP + momentum skeleton
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Generated {backtestSnapshot.generatedAt.slice(0, 10)}. NOT the revision algorithm: no
+              consensus data retroactively. Survivorship bias (today's universe) and hindsight
+              growth apply. Win = beat STOXX 600.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-2 text-sm">
+              Averages — 3M: win {(backtestSnapshot.averages.win63 * 100).toFixed(0)}%, excess{" "}
+              {pct(backtestSnapshot.averages.excess63)} ({backtestSnapshot.averages.quarters63}{" "}
+              quarters) · 12M: win {(backtestSnapshot.averages.win252 * 100).toFixed(0)}%, excess{" "}
+              {pct(backtestSnapshot.averages.excess252)} ({backtestSnapshot.averages.quarters252}{" "}
+              quarters)
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Quarter-end</TableHead>
+                  <TableHead className="text-right">Quality</TableHead>
+                  <TableHead className="text-right">GARP</TableHead>
+                  <TableHead className="text-right">Picks</TableHead>
+                  <TableHead className="text-right">3M win</TableHead>
+                  <TableHead className="text-right">3M excess</TableHead>
+                  <TableHead className="text-right">12M win</TableHead>
+                  <TableHead className="text-right">12M excess</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {backtestSnapshot.quarters
+                  .filter((q) => q.picks > 0)
+                  .map((q) => (
+                    <TableRow key={q.date}>
+                      <TableCell>{q.date}</TableCell>
+                      <TableCell className="text-right">{q.qualityPass}</TableCell>
+                      <TableCell className="text-right">{q.garpPass}</TableCell>
+                      <TableCell className="text-right">{q.picks}</TableCell>
+                      <TableCell className="text-right">
+                        {q.win63 == null ? "—" : `${(q.win63 * 100).toFixed(0)}%`}
+                      </TableCell>
+                      <TableCell className="text-right">{pct(q.excess63)}</TableCell>
+                      <TableCell className="text-right">
+                        {q.win252 == null ? "—" : `${(q.win252 * 100).toFixed(0)}%`}
+                      </TableCell>
+                      <TableCell className="text-right">{pct(q.excess252)}</TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       ) : null}
