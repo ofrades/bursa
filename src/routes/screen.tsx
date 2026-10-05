@@ -34,6 +34,7 @@ function ScreenPage() {
   const initial = Route.useLoaderData();
   const queryClient = useQueryClient();
   const [strictOnly, setStrictOnly] = useState(false);
+  const [garpOverlay, setGarpOverlay] = useState(true);
   const [running, setRunning] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -50,7 +51,8 @@ function ScreenPage() {
   const survivors = data.rows
     .filter((r) => r.passUniverse && r.passRevision && r.passQuality)
     .sort((a, b) => (b.composite ?? -Infinity) - (a.composite ?? -Infinity));
-  const shown = strictOnly ? survivors.filter((r) => r.strict) : survivors;
+  const base = garpOverlay ? survivors.filter((r) => r.passExpectations) : survivors;
+  const shown = strictOnly ? base.filter((r) => r.strict) : base;
 
   async function runScreen() {
     setRunning(true);
@@ -152,9 +154,14 @@ function ScreenPage() {
             <CardTitle className="text-base">
               {strictOnly ? "Strict spec — top revision quintile" : "All survivors"}
             </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => setStrictOnly((v) => !v)}>
-              {strictOnly ? "Show all survivors" : "Show strict only"}
-            </Button>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => setGarpOverlay((v) => !v)}>
+                {garpOverlay ? "\u2713 GARP" : "GARP"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setStrictOnly((v) => !v)}>
+                {strictOnly ? "Show all survivors" : "Show strict only"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -170,6 +177,10 @@ function ScreenPage() {
                   <TableHead className="text-right">ND/EBITDA</TableHead>
                   <TableHead className="text-right">F</TableHead>
                   <TableHead className="text-right">Mom 12-1</TableHead>
+                  <TableHead className="text-right">Growth FY1</TableHead>
+                  <TableHead className="text-right">ROE fwd</TableHead>
+                  <TableHead className="text-right">FCF yld</TableHead>
+                  <TableHead className="text-right">FCF/NI</TableHead>
                   <TableHead className="text-right">Composite</TableHead>
                   <TableHead className="text-right">Jev</TableHead>
                   <TableHead className="text-right">Weight</TableHead>
@@ -214,6 +225,20 @@ function ScreenPage() {
                       {r.fscore == null ? "—" : r.fscore.toFixed(0)}
                     </TableCell>
                     <TableCell className="text-right">{pct(r.mom121)}</TableCell>
+                    <TableCell className="text-right">
+                      {r.epsGrowthFy1 == null ? "\u2014" : pct(r.epsGrowthFy1, 0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.roeFwd == null ? "\u2014" : pct(r.roeFwd, 0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.fcfYield == null ? "\u2014" : pct(r.fcfYield)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.fcfConversion == null
+                        ? "\u2014"
+                        : `${(r.fcfConversion * 100).toFixed(0)}%`}
+                    </TableCell>
                     <TableCell className="text-right">{num(r.composite)}</TableCell>
                     <TableCell className="text-right">
                       {r.jevVerdict ? (

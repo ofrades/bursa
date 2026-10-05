@@ -30,15 +30,20 @@ function statements(overrides: Partial<Statements> = {}): Statements {
     stockholdersEquity: 1000,
     cash: 100,
     shortTermInvestments: 50,
+    capitalExpenditure: 20,
     sharesOutstanding: [100, 102],
     operatingCashFlow: 120,
     ...overrides,
   };
 }
 
-function symbolData(overrides: Partial<SymbolData> = {}): SymbolData {
+function symbolData(
+  overrides: Partial<SymbolData> = {},
+  statementOverrides: Partial<Statements> = {},
+): SymbolData {
   return {
     currency: "EUR",
+    financialCurrency: "EUR",
     sector: "Technology",
     mcap: 80e9,
     adv: 250e6,
@@ -48,9 +53,10 @@ function symbolData(overrides: Partial<SymbolData> = {}): SymbolData {
     upLast30d: null,
     downLast30d: null,
     surprises: [0.05, 0.04, 0.06, 0.03, 0.02, 0.05, 0.04, 0.03],
-    statements: statements(),
+    statements: statements(statementOverrides),
     mom121: 0.2,
     fwdPe: 15,
+    epsGrowthFy1: 0.1,
     ...overrides,
   };
 }
@@ -215,6 +221,59 @@ describe("momentumFromCloses", () => {
   it("survives interior nulls", () => {
     const withNulls = series.map((v, i) => (i === 5 ? null : v));
     expect(momentumFromCloses(withNulls, 252, 21)).toBeCloseTo(2, 6);
+  });
+});
+
+describe("expectations overlay", () => {
+  // FCF = 120 - 20 = 100; yield vs mcap 2_000 -> 5%; conversion 100/67.5 = 148%;
+  // fwd ROE = (67.5/300)*1.10 = 24.8%; growth 10% inside the 8-15% band.
+  function garpRow(overrides: Partial<SymbolData>, stmtOverrides: Partial<Statements> = {}) {
+    return evaluateSymbol(
+      { symbol: "G", name: "G", region: "US", country: "US" },
+      symbolData({ mcap: 2000, ...overrides }, { ...stmtOverrides }),
+      FX,
+      DEFAULT_PARAMS,
+    );
+  }
+
+  it("passes a name in the growth band with ROE, yield and conversion above floors", () => {
+    expect(garpRow({}, { stockholdersEquity: 300 }).passExpectations).toBe(true);
+  });
+
+  it("fails above the growth ceiling (peak-cycle pricing)", () => {
+    expect(garpRow({ epsGrowthFy1: 0.5 }).passExpectations).toBe(false);
+  });
+
+  it("fails below the growth floor", () => {
+    expect(garpRow({ epsGrowthFy1: 0.05 }).passExpectations).toBe(false);
+  });
+
+  it("fails below the forward-ROE floor", () => {
+    expect(garpRow({ statements: statements({ stockholdersEquity: 3000 }) }).passExpectations).toBe(
+      false,
+    );
+  });
+
+  it("fails below the FCF yield floor", () => {
+    expect(garpRow({ mcap: 5000 }).passExpectations).toBe(false);
+  });
+
+  it("fails when FCF does not convert", () => {
+    expect(garpRow({ statements: statements({ capitalExpenditure: 200 }) }).passExpectations).toBe(
+      false,
+    );
+  });
+
+  it("exempts financials from FCF gates but keeps the ROE gate", () => {
+    const ok = garpRow(
+      { sector: "Financial Services", mcap: 5000 },
+      { capitalExpenditure: 200, stockholdersEquity: 300 },
+    );
+    expect(ok.passExpectations).toBe(true);
+  });
+
+  it("fails when expectations are not computable", () => {
+    expect(garpRow({ epsGrowthFy1: null }).passExpectations).toBe(false);
   });
 });
 

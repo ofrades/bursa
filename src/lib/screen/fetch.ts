@@ -35,6 +35,7 @@ const STATEMENT_TYPES = [
   "annualShareIssued",
   "annualReconciledDepreciation",
   "annualDepreciationAmortizationDepletion",
+  "annualCapitalExpenditure",
   "annualOperatingCashFlow",
 ];
 
@@ -53,7 +54,12 @@ function latestTwo(series: SeriesPoint[] | undefined): [number | null, number | 
   return [rows[0]?.value ?? null, rows[1]?.value ?? null];
 }
 
-type TrendRevision = { revision: number | null; up30: number | null; down30: number | null };
+type TrendRevision = {
+  revision: number | null;
+  epsGrowth: number | null;
+  up30: number | null;
+  down30: number | null;
+};
 
 function trendRevision(
   summary: Awaited<ReturnType<typeof getMarketSummary>>,
@@ -63,8 +69,14 @@ function trendRevision(
   const cur = entry?.epsTrend?.current ?? null;
   const old = entry?.epsTrend?.["90daysAgo"] ?? null;
   const revision = cur !== null && old !== null && old !== 0 ? cur / old - 1 : null;
+  const avg = entry?.earningsEstimate?.avg ?? null;
+  const yearAgo = entry?.earningsEstimate?.yearAgoEps ?? null;
+  const growth = entry?.growth?.growth ?? null;
+  const epsGrowth =
+    growth ?? (avg !== null && yearAgo !== null && yearAgo > 0 ? avg / yearAgo - 1 : null);
   return {
     revision,
+    epsGrowth,
     up30: entry?.epsRevisions?.upLast30days ?? null,
     down30: entry?.epsRevisions?.downLast30days ?? null,
   };
@@ -101,6 +113,7 @@ async function fetchStatements(symbol: string): Promise<Statements> {
     sharesOutstanding:
       latestTwo(s("annualOrdinarySharesNumber")) ?? latestTwo(s("annualShareIssued")),
     operatingCashFlow: latest(s("annualOperatingCashFlow")),
+    capitalExpenditure: latest(s("annualCapitalExpenditure")),
   };
 }
 
@@ -134,6 +147,7 @@ export async function fetchScreenData(symbol: string): Promise<SymbolData> {
   const closes = prices.map((p) => p.adjClose ?? p.close ?? null);
   return {
     currency,
+    financialCurrency: summary.financialData?.financialCurrency ?? null,
     sector: summary.assetProfile?.sector ?? null,
     mcap,
     adv: advFromBars(prices.slice(-ADV_SESSIONS)),
@@ -142,6 +156,7 @@ export async function fetchScreenData(symbol: string): Promise<SymbolData> {
     fy2Rev: fy2.revision,
     upLast30d: fy1.up30,
     downLast30d: fy1.down30,
+    epsGrowthFy1: fy1.epsGrowth,
     surprises: surpriseFractions,
     statements,
     mom121: momentumFromCloses(closes, MOM_BACK, MOM_SKIP),

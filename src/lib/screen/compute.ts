@@ -12,6 +12,11 @@ export type ScreenParams = {
   minRoic: number;
   maxNetDebtEbitda: number;
   minPiotroski: number;
+  epsGrowthMin: number;
+  epsGrowthMax: number;
+  roeFwdMin: number;
+  fcfYieldMin: number;
+  fcfConversionMin: number;
   sueQuarters: number;
   zClip: number;
   weights: { revision: number; breadth: number; sue: number; momentum: number };
@@ -29,6 +34,11 @@ export const DEFAULT_PARAMS: ScreenParams = {
   minRoic: 0.1,
   maxNetDebtEbitda: 3,
   minPiotroski: 7,
+  epsGrowthMin: 0.08, // GARP overlay: consensus FY1 EPS growth band
+  epsGrowthMax: 0.15,
+  roeFwdMin: 0.15, // consensus-implied forward ROE floor
+  fcfYieldMin: 0.04, // current FCF yield floor
+  fcfConversionMin: 0.8, // FCF / net income floor
   sueQuarters: 8,
   zClip: 3,
   weights: { revision: 0.35, breadth: 0.35, sue: 0.2, momentum: 0.1 },
@@ -52,12 +62,14 @@ export type Statements = {
   stockholdersEquity: number | null;
   cash: number | null;
   shortTermInvestments: number | null;
+  capitalExpenditure: number | null;
   sharesOutstanding: [number | null, number | null];
   operatingCashFlow: number | null;
 };
 
 export type SymbolData = {
   currency: string | null;
+  financialCurrency: string | null; // reporting currency of the statements
   sector: string | null;
   mcap: number | null; // listing currency
   adv: number | null; // listing currency, 3m mean of close*volume
@@ -70,6 +82,7 @@ export type SymbolData = {
   statements: Statements;
   mom121: number | null;
   fwdPe: number | null;
+  epsGrowthFy1: number | null; // consensus FY1 EPS growth vs year-ago EPS
 };
 
 export type ScreenRow = {
@@ -94,9 +107,14 @@ export type ScreenRow = {
   fwdPe: number | null;
   upLast30d: number | null;
   downLast30d: number | null;
+  epsGrowthFy1: number | null;
+  roeFwd: number | null;
+  fcfYield: number | null;
+  fcfConversion: number | null;
   passUniverse: boolean;
   passRevision: boolean;
   passQuality: boolean;
+  passExpectations: boolean;
   composite: number | null;
   strict: boolean;
   weight: number | null;
@@ -235,6 +253,43 @@ export function evaluateSymbol(
   );
   const fscore = computePiotroski(data.statements);
 
+  // Expectations overlay — what the market makes us pay for what it promises.
+  // EPS growth band on consensus FY1; forward ROE = current ROE carried by the
+  // consensus EPS growth (currency-safe: all reporting-currency figures); FCF
+  // yield from reporting-currency FCF converted to EUR; conversion = FCF/NI.
+  // Financials: ROE is meaningful, FCF is not (balance-sheet businesses).
+  const epsGrowthFy1 = isNum(data.epsGrowthFy1) ? data.epsGrowthFy1 : null;
+  const [ni0] = data.statements.netIncome;
+  const roeFwd =
+    isNum(ni0) &&
+    isNum(data.statements.stockholdersEquity) &&
+    data.statements.stockholdersEquity > 0 &&
+    epsGrowthFy1 !== null
+      ? (ni0 / data.statements.stockholdersEquity) * (1 + epsGrowthFy1)
+      : null;
+  const finPerEur =
+    data.financialCurrency && fxRates[data.financialCurrency]
+      ? 1 / fxRates[data.financialCurrency]
+      : null;
+  const fcf =
+    isNum(data.statements.operatingCashFlow) && isNum(data.statements.capitalExpenditure)
+      ? data.statements.operatingCashFlow - Math.abs(data.statements.capitalExpenditure)
+      : null;
+  const fcfYield = isNum(fcf) && finPerEur && mcapEur ? (fcf * finPerEur) / (mcapEur * 1e9) : null;
+  const fcfConversion = isNum(fcf) && isNum(ni0) && ni0 > 0 ? fcf / ni0 : null;
+  const passExpectations =
+    epsGrowthFy1 !== null &&
+    epsGrowthFy1 >= params.epsGrowthMin &&
+    epsGrowthFy1 <= params.epsGrowthMax &&
+    roeFwd !== null &&
+    roeFwd >= params.roeFwdMin &&
+    (financial
+      ? true
+      : fcfYield !== null &&
+        fcfYield >= params.fcfYieldMin &&
+        fcfConversion !== null &&
+        fcfConversion >= params.fcfConversionMin);
+
   const passUniverse =
     (mcapEur ?? -1) >= params.minMarketCapEur / 1e9 &&
     (advEur ?? -1) >= params.minAdvEur / 1e6 &&
@@ -286,9 +341,14 @@ export function evaluateSymbol(
     fwdPe: data.fwdPe,
     upLast30d: data.upLast30d,
     downLast30d: data.downLast30d,
+    epsGrowthFy1,
+    roeFwd,
+    fcfYield,
+    fcfConversion,
     passUniverse,
     passRevision,
     passQuality,
+    passExpectations,
     composite: null,
     strict: false,
     weight: null,

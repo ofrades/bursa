@@ -60,6 +60,7 @@ type SummaryData = {
     quickRatio?: number | null;
     debtToEquity?: number | null;
     numberOfAnalystOpinions?: number | null;
+    financialCurrency?: string | null;
   } | null;
   defaultKeyStatistics?: {
     returnOnEquity?: number | null;
@@ -92,6 +93,11 @@ type SummaryData = {
         current?: number | null;
         [key: string]: number | null | undefined;
       } | null;
+      earningsEstimate?: {
+        avg?: number | null;
+        yearAgoEps?: number | null;
+      } | null;
+      growth?: { growth?: number | null } | null;
       epsRevisions?: {
         upLast30days?: number | null;
         downLast30days?: number | null;
