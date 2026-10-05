@@ -9,12 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ScreenRouteImport } from './routes/screen'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as SymbolRouteImport } from './routes/$symbol'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StocksSymbolRouteImport } from './routes/stocks.$symbol'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiScreenRunRouteImport } from './routes/api/screen/run'
 import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing/webhook'
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiBillingCheckoutRouteImport } from './routes/api/billing/checkout'
@@ -23,6 +25,11 @@ import { Route as ApiAnalyzeStreamRouteImport } from './routes/api/analyze/strea
 import { Route as ApiAuthGoogleStartRouteImport } from './routes/api/auth/google/start'
 import { Route as ApiAuthGoogleCallbackRouteImport } from './routes/api/auth/google/callback'
 
+const ScreenRoute = ScreenRouteImport.update({
+  id: '/screen',
+  path: '/screen',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -51,6 +58,11 @@ const StocksSymbolRoute = StocksSymbolRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiScreenRunRoute = ApiScreenRunRouteImport.update({
+  id: '/api/screen/run',
+  path: '/api/screen/run',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBillingWebhookRoute = ApiBillingWebhookRouteImport.update({
@@ -94,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/$symbol': typeof SymbolRoute
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
+  '/screen': typeof ScreenRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
   '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
@@ -101,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
+  '/api/screen/run': typeof ApiScreenRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
 }
@@ -109,6 +123,7 @@ export interface FileRoutesByTo {
   '/$symbol': typeof SymbolRoute
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
+  '/screen': typeof ScreenRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
   '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
@@ -116,6 +131,7 @@ export interface FileRoutesByTo {
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
+  '/api/screen/run': typeof ApiScreenRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
 }
@@ -125,6 +141,7 @@ export interface FileRoutesById {
   '/$symbol': typeof SymbolRoute
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
+  '/screen': typeof ScreenRoute
   '/api/health': typeof ApiHealthRoute
   '/stocks/$symbol': typeof StocksSymbolRoute
   '/api/analyze/stream': typeof ApiAnalyzeStreamRoute
@@ -132,6 +149,7 @@ export interface FileRoutesById {
   '/api/billing/checkout': typeof ApiBillingCheckoutRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/billing/webhook': typeof ApiBillingWebhookRoute
+  '/api/screen/run': typeof ApiScreenRunRoute
   '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
   '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
 }
@@ -142,6 +160,7 @@ export interface FileRouteTypes {
     | '/$symbol'
     | '/about'
     | '/dashboard'
+    | '/screen'
     | '/api/health'
     | '/stocks/$symbol'
     | '/api/analyze/stream'
@@ -149,6 +168,7 @@ export interface FileRouteTypes {
     | '/api/billing/checkout'
     | '/api/billing/portal'
     | '/api/billing/webhook'
+    | '/api/screen/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
   fileRoutesByTo: FileRoutesByTo
@@ -157,6 +177,7 @@ export interface FileRouteTypes {
     | '/$symbol'
     | '/about'
     | '/dashboard'
+    | '/screen'
     | '/api/health'
     | '/stocks/$symbol'
     | '/api/analyze/stream'
@@ -164,6 +185,7 @@ export interface FileRouteTypes {
     | '/api/billing/checkout'
     | '/api/billing/portal'
     | '/api/billing/webhook'
+    | '/api/screen/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
   id:
@@ -172,6 +194,7 @@ export interface FileRouteTypes {
     | '/$symbol'
     | '/about'
     | '/dashboard'
+    | '/screen'
     | '/api/health'
     | '/stocks/$symbol'
     | '/api/analyze/stream'
@@ -179,6 +202,7 @@ export interface FileRouteTypes {
     | '/api/billing/checkout'
     | '/api/billing/portal'
     | '/api/billing/webhook'
+    | '/api/screen/run'
     | '/api/auth/google/callback'
     | '/api/auth/google/start'
   fileRoutesById: FileRoutesById
@@ -188,6 +212,7 @@ export interface RootRouteChildren {
   SymbolRoute: typeof SymbolRoute
   AboutRoute: typeof AboutRoute
   DashboardRoute: typeof DashboardRoute
+  ScreenRoute: typeof ScreenRoute
   ApiHealthRoute: typeof ApiHealthRoute
   StocksSymbolRoute: typeof StocksSymbolRoute
   ApiAnalyzeStreamRoute: typeof ApiAnalyzeStreamRoute
@@ -195,12 +220,20 @@ export interface RootRouteChildren {
   ApiBillingCheckoutRoute: typeof ApiBillingCheckoutRoute
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
+  ApiScreenRunRoute: typeof ApiScreenRunRoute
   ApiAuthGoogleCallbackRoute: typeof ApiAuthGoogleCallbackRoute
   ApiAuthGoogleStartRoute: typeof ApiAuthGoogleStartRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/screen': {
+      id: '/screen'
+      path: '/screen'
+      fullPath: '/screen'
+      preLoaderRoute: typeof ScreenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -241,6 +274,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/screen/run': {
+      id: '/api/screen/run'
+      path: '/api/screen/run'
+      fullPath: '/api/screen/run'
+      preLoaderRoute: typeof ApiScreenRunRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/billing/webhook': {
@@ -300,6 +340,7 @@ const rootRouteChildren: RootRouteChildren = {
   SymbolRoute: SymbolRoute,
   AboutRoute: AboutRoute,
   DashboardRoute: DashboardRoute,
+  ScreenRoute: ScreenRoute,
   ApiHealthRoute: ApiHealthRoute,
   StocksSymbolRoute: StocksSymbolRoute,
   ApiAnalyzeStreamRoute: ApiAnalyzeStreamRoute,
@@ -307,6 +348,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBillingCheckoutRoute: ApiBillingCheckoutRoute,
   ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiBillingWebhookRoute: ApiBillingWebhookRoute,
+  ApiScreenRunRoute: ApiScreenRunRoute,
   ApiAuthGoogleCallbackRoute: ApiAuthGoogleCallbackRoute,
   ApiAuthGoogleStartRoute: ApiAuthGoogleStartRoute,
 }

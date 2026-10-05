@@ -269,6 +269,73 @@ export const usageLog = sqliteTable(
   ],
 );
 
+// ─── EPS-revision screen (João/Mare Nostrum-style revisions + quality) ────────
+// Deterministic quant screen: no AI in these tables. One row per candidate per
+// run; survivors get composite/strict/weight at finalize time (z-scores need
+// the full population).
+
+export const screenRun = sqliteTable(
+  "screen_run",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    runAt: integer("run_at", { mode: "timestamp" }).notNull().$defaultFn(now),
+    status: text("status").notNull().default("running"), // running | done | failed
+    params: text("params").notNull(), // JSON snapshot of thresholds
+    fxRates: text("fx_rates"), // JSON: { ccy: unitsPerEur }
+    universeCount: integer("universe_count").notNull().default(0),
+    processedCount: integer("processed_count").notNull().default(0),
+    passedUniverse: integer("passed_universe").notNull().default(0),
+    passedRevision: integer("passed_revision").notNull().default(0),
+    survivorCount: integer("survivor_count").notNull().default(0),
+  },
+  (t) => [index("idx_screen_run_run_at").on(t.runAt)],
+);
+
+export const screenStock = sqliteTable(
+  "screen_stock",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    runId: text("run_id")
+      .notNull()
+      .references(() => screenRun.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(), // Yahoo symbol; not FK — catalog may not have it
+    name: text("name").notNull(),
+    region: text("region").notNull(),
+    country: text("country"),
+    sector: text("sector"),
+    currency: text("currency"),
+    mcapEur: real("mcap_eur"),
+    advEur: real("adv_eur"),
+    analysts: real("analysts"),
+    fy1Rev: real("fy1_rev"),
+    fy2Rev: real("fy2_rev"),
+    revAvg: real("rev_avg"),
+    breadth: real("breadth"),
+    sue: real("sue"),
+    roic: real("roic"),
+    ndEbitda: real("nd_ebitda"),
+    fscore: real("fscore"),
+    mom121: real("mom_121"),
+    fwdPe: real("fwd_pe"),
+    upLast30d: real("up_last_30d"),
+    downLast30d: real("down_last_30d"),
+    composite: real("composite"),
+    passUniverse: integer("pass_universe", { mode: "boolean" }).notNull().default(false),
+    passRevision: integer("pass_revision", { mode: "boolean" }).notNull().default(false),
+    passQuality: integer("pass_quality", { mode: "boolean" }).notNull().default(false),
+    strict: integer("strict", { mode: "boolean" }).notNull().default(false),
+    weight: real("weight"),
+    processed: integer("processed", { mode: "boolean" }).notNull().default(false),
+    error: text("error"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(now),
+  },
+  (t) => [index("idx_screen_stock_run").on(t.runId), index("idx_screen_stock_symbol").on(t.symbol)],
+);
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type User = typeof user.$inferSelect;
@@ -281,3 +348,5 @@ export type SupervisorAlert = typeof supervisorAlert.$inferSelect;
 export type Watchlist = typeof watchlist.$inferSelect;
 export type WalletTopUp = typeof walletTopUp.$inferSelect;
 export type UsageLog = typeof usageLog.$inferSelect;
+export type ScreenRun = typeof screenRun.$inferSelect;
+export type ScreenStock = typeof screenStock.$inferSelect;

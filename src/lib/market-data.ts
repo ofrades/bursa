@@ -32,6 +32,7 @@ type QuoteData = {
   longName?: string | null;
   shortName?: string | null;
   exchange?: string | null;
+  currency?: string | null;
 };
 
 type SummaryData = {
@@ -57,6 +58,7 @@ type SummaryData = {
     currentRatio?: number | null;
     quickRatio?: number | null;
     debtToEquity?: number | null;
+    numberOfAnalystOpinions?: number | null;
   } | null;
   defaultKeyStatistics?: {
     returnOnEquity?: number | null;
@@ -83,6 +85,7 @@ type SummaryData = {
   } | null;
   earningsTrend?: {
     trend?: Array<{
+      period?: string | null;
       epsTrend?: {
         current?: number | null;
         [key: string]: number | null | undefined;
@@ -352,6 +355,7 @@ async function yahooGetQuote(symbol: string): Promise<QuoteData> {
     regularMarketChangePercent: changePercent,
     regularMarketPreviousClose: previousClose,
     marketCap: asNumber(meta.marketCap),
+    currency: asStringOrNull(meta.currency),
     trailingPE: null,
     forwardPE: null,
     fiftyTwoWeekHigh: asNumber(meta.fiftyTwoWeekHigh),
@@ -381,6 +385,7 @@ async function fmpGetQuote(symbol: string): Promise<QuoteData> {
     longName: asStringOrNull(quote?.name),
     shortName: asStringOrNull(quote?.name),
     exchange: asStringOrNull(quote?.exchange),
+    currency: asStringOrNull(quote?.currency),
   };
 }
 
@@ -535,6 +540,7 @@ async function fmpGetSummary(symbol: string): Promise<SummaryData> {
     earningsTrend: {
       trend: [
         {
+          period: "0y",
           epsTrend: {
             current: estimateCurrent,
             "30daysAgo": estimatePrev,
@@ -616,9 +622,45 @@ export async function getHistoricalPrices(
 }
 
 type YahooTimeSeriesRow = {
+  dataId?: number;
   asOfDate?: string;
   reportedValue?: { raw?: number | null };
 };
+
+// Yahoo switched its fundamentals-timeseries API: with merge=false it now only
+// fills the last requested type, and with merge=true it returns a single array
+// keyed by the comma-joined type list whose rows are only distinguishable by
+// their stable dataId. Demultiplex by dataId (probed 2026-10; ids are global
+// line-item concepts, consistent across symbols and exchanges).
+const FUNDAMENTALS_DATA_IDS = {
+  annualGrossProfit: 20046,
+  annualNetIncome: 20091,
+  annualNetIncomeCommonStockholders: 20093,
+  annualTotalRevenue: 20100,
+  annualPretaxIncome: 20136,
+  annualTaxProvision: 20145,
+  annualEBIT: 20189,
+  annualReconciledDepreciation: 20315,
+  annualCashAndCashEquivalents: 23030,
+  annualCurrentAssets: 23044,
+  annualCurrentDebt: 23045,
+  annualCurrentLiabilities: 23047,
+  annualLongTermDebt: 23123,
+  annualOtherShortTermInvestments: 23163,
+  annualStockholdersEquity: 23215,
+  annualTotalAssets: 23220,
+  annualTotalDebt: 23386,
+  annualOrdinarySharesNumber: 23393,
+  annualShareIssued: 23532,
+  annualOperatingCashFlow: 26014,
+  annualDepreciationAmortizationDepletion: 26061,
+  annualBasicAverageShares: 29010,
+  annualDilutedAverageShares: 29011,
+} satisfies Record<string, number>;
+
+const DATA_ID_TO_TYPE: Record<number, string> = Object.fromEntries(
+  Object.entries(FUNDAMENTALS_DATA_IDS).map(([type, id]) => [id, type]),
+);
 
 async function yahooFundamentalsTimeSeries(
   symbol: string,
@@ -629,18 +671,93 @@ async function yahooFundamentalsTimeSeries(
     type: types.join(","),
     period1: String(Math.floor(options.period1.getTime() / 1000)),
     period2: String(Math.floor(options.period2.getTime() / 1000)),
-    merge: "false",
+    merge: "true",
   });
   const res = await yahooGetJson(
     `https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?${search.toString()}`,
   );
   const result = res?.timeseries?.result?.[0] ?? {};
-  const byType: Record<string, YahooTimeSeriesRow[]> = {};
-  for (const type of types) {
-    const rows = result[type];
-    byType[type] = Array.isArray(rows) ? (rows as YahooTimeSeriesRow[]) : [];
+  const byType: Record<string, YahooTimeSeriesRow[]> = Object.fromEntries(
+    types.map((type) => [type, []]),
+  );
+  for (const rows of Object.values(result)) {
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows as YahooTimeSeriesRow[]) {
+      const type = row.dataId !== undefined ? DATA_ID_TO_TYPE[row.dataId] : undefined;
+      if (type && byType[type]) byType[type].push(row);
+    }
   }
   return byType;
+}
+
+export type FundamentalSeriesPoint = { date: string; value: number | null };
+
+/** Yahoo fundamentals timeseries for arbitrary statement lines — used by the
+ * screen for rows the shared statement helpers don't carry (EBIT, assets, ...).
+ * Yahoo-only by design; the FMP statement path lives in getAnnual*. */
+export async function getFundamentalsTimeSeries(
+  symbol: string,
+  options: AnnualStatementOptions,
+  types: string[],
+): Promise<Record<string, FundamentalSeriesPoint[]>> {
+  const byType = await yahooFundamentalsTimeSeries(symbol, options, types);
+  return Object.fromEntries(
+    Object.entries(byType).map(([type, rows]) => [
+      type,
+      rows.map((row) => ({
+        date: row.asOfDate ?? "",
+        value: asNumber(row.reportedValue?.raw),
+      })),
+    ]),
+  );
+}
+
+export type EarningsSurprise = {
+  quarter: string;
+  epsActual: number | null;
+  epsEstimate: number | null;
+};
+
+export async function getEarningsSurprises(symbol: string): Promise<EarningsSurprise[]> {
+  if ((await providerFromEnv()) === "fmp") {
+    try {
+      return await fmpGetEarningsSurprises(symbol);
+    } catch {
+      return yahooGetEarningsSurprises(symbol);
+    }
+  }
+  return yahooGetEarningsSurprises(symbol);
+}
+
+async function yahooGetEarningsSurprises(symbol: string): Promise<EarningsSurprise[]> {
+  try {
+    const { crumb, cookie } = await yahooCrumb();
+    const res = await yahooGetJson(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=earningsHistory&crumb=${encodeURIComponent(crumb)}`,
+      cookie || undefined,
+    );
+    const history = res?.quoteSummary?.result?.[0]?.earningsHistory?.history ?? [];
+    return (Array.isArray(history) ? history : []).map((row: any) => ({
+      quarter: String(row?.quarter?.fmt ?? row?.date ?? ""),
+      epsActual: asNumber(row?.epsActual?.raw),
+      epsEstimate: asNumber(row?.epsEstimate?.raw),
+    }));
+  } catch (error) {
+    console.warn(
+      `[market-data] getEarningsSurprises degraded for ${symbol}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
+}
+
+async function fmpGetEarningsSurprises(symbol: string): Promise<EarningsSurprise[]> {
+  const rows = (await fmpGet("earnings-surprises", { symbol })) as any[];
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    quarter: String(row.date ?? ""),
+    epsActual: asNumber(row.actualEpsResult),
+    epsEstimate: asNumber(row.estimatedEpsAvg),
+  }));
 }
 
 function mapYahooFinancialStatements(
