@@ -16,8 +16,10 @@
 - `bun run check` — lint + format check + typecheck
 - `bun run test` — vitest (watch: `bun run test:watch`)
 - `bun run ci` — check + test + build
-- `bun run cf:deploy` — deploy via Alchemy (`cf:dev`, `cf:deploy:prod`,
-  `cf:destroy` also available)
+- `mise run deploy` — deploy the current checkout locally through Alchemy core.
+- `mise run status` / `mise run logs` / `mise run backup` / `mise run rollback`.
+- `bun run cf:dev` — developer local bindings; remote prod operations require the
+  deliberate cutover procedure in `docs/deployment.md`.
 
 ## Conventions
 
@@ -47,3 +49,41 @@ Use this to explore APIs, find usage examples, and understand implementation
 details when the documentation isn't enough.
 
 <!-- effect-solutions:end -->
+
+## Desktop deployment
+
+Read [docs/deployment.md](docs/deployment.md) before hosting changes or deployment.
+Production uses Alchemy/workerd locally with Cloudflare bindings, supervised by
+mise/Pitchfork and exposed through the shared Bursa-owned Cloudflare Tunnel.
+Use `mise run deploy` (local host stack, stage desktop); do not apply the remote
+prod stack. Run one launcher against production storage. Secrets and binding
+data live outside Git under `~/Servers/apps/bursa`. Push does not deploy;
+deploy does not fetch. Preserve dirty hosting changes before updating checkout.
+Retained remote resources are stale checkpoints; moving back requires current
+data transfer and workflow reconciliation. See the runbook for backups/rollback.
+
+## Work tracking
+
+Open work lives in the Obsidian vault tracker at
+`~/Work/ofrades/notes/bursa/issues/` — one markdown file per issue, with status,
+priority, dependencies and blockers in its frontmatter. Claim an issue before
+editing it, work one at a time, and hand implementation off through `review`;
+owner review is not an agent completion claim. The operating conventions are in
+[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), and the human guide
+is the vault's `bursa/bursa.md`.
+
+GitHub Issues is enabled on this repository but is not the tracker; do not open
+issues there.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the Obsidian vault at `~/Work/ofrades/notes/bursa/issues/`. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage roles are tracker status values (`needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`). See
+`docs/agents/triage-labels.md`.
