@@ -137,4 +137,5 @@ Deploy requires the existing credentials listed in `.env.example`—do not repla
 Open work is tracked in BB Tasks under the **BUR** project:
 `bb tasks list --project BUR`. See
 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md). The Obsidian vault
-tracker was retired on 2026-11-10; its files are frozen history.
+tracker was removed on 2026-11-10; its files are preserved in the notes git
+history.
