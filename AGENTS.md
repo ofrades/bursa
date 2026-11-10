@@ -64,26 +64,30 @@ data transfer and workflow reconciliation. See the runbook for backups/rollback.
 
 ## Work tracking
 
-Open work lives in the Obsidian vault tracker at
-`~/Work/ofrades/notes/bursa/issues/` — one markdown file per issue, with status,
-priority, dependencies and blockers in its frontmatter. Claim an issue before
-editing it, work one at a time, and hand implementation off through `review`;
-owner review is not an agent completion claim. The operating conventions are in
-[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), and the human guide
-is the vault's `bursa/bursa.md`.
+Open work lives in BB Tasks under the **BUR** project: `bb tasks list --project
+BUR`. Claim a task before editing (`bb tasks update BUR-1 --status in_progress`
+and `bb tasks attach BUR-1`), work one at a time, and hand implementation off
+through `in_review`; owner review is not an agent completion claim. The
+operating conventions are in
+[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+
+The Obsidian vault tracker at `~/Work/ofrades/notes/bursa/issues/` was retired
+on 2026-11-10; its open issues were imported into BB Tasks and the markdown files
+are frozen history. Do not edit them.
 
 GitHub Issues is enabled on this repository but is not the tracker; do not open
-issues there.
+issues there. If someone files one, create a BB task and close the GitHub issue
+with a pointer.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues live in the Obsidian vault at `~/Work/ofrades/notes/bursa/issues/`. See
+Open work lives in BB Tasks under the BUR project. See
 `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Triage roles are tracker status values (`needs-triage`, `needs-info`,
+Triage roles are BB Tasks labels (`needs-triage`, `needs-info`,
 `ready-for-agent`, `ready-for-human`, `wontfix`). See
 `docs/agents/triage-labels.md`.
