@@ -131,3 +131,10 @@ Deployment: `bun run cf:deploy:prod` applies the reliability migration and publi
 `https://bursa.mohshoo.com/screen`; then run the first corrected snapshot as admin.
 Deploy requires the existing credentials listed in `.env.example`—do not replace
 `AUTH_SECRET` merely to satisfy a deployment configuration error.
+
+## Work tracking
+
+Open work is tracked in BB Tasks under the **BUR** project:
+`bb tasks list --project BUR`. See
+[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md). The Obsidian vault
+tracker was retired on 2026-11-10; its files are frozen history.
