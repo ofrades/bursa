@@ -64,20 +64,17 @@ data transfer and workflow reconciliation. See the runbook for backups/rollback.
 
 ## Work tracking
 
-Open work lives in BB Tasks under the **BUR** project: `bb tasks list --project
-BUR`. Claim a task before editing (`bb tasks update BUR-1 --status in_progress`
-and `bb tasks attach BUR-1`), work one at a time, and hand implementation off
-through `in_review`; owner review is not an agent completion claim. The
-operating conventions are in
+Open work lives in the Home Repo tracker under the **BUR** project:
+`home-tasks list --project BUR`. Claim a task before editing
+(`home-tasks update BUR-12 --status in_progress`), work one at a time, and
+hand implementation off through `in_review`; owner review is not an agent
+completion claim. The operating conventions are in
 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
 
-The Obsidian vault tracker at `~/Work/ofrades/notes/bursa/issues/` was removed
-on 2026-11-10; its open issues were imported into BB Tasks and the markdown files
-are preserved in the notes git history.
-
-GitHub Issues is enabled on this repository but is not the tracker; do not open
-issues there. If someone files one, create a BB task and close the GitHub issue
-with a pointer.
+The Obsidian vault tracker and BB Tasks are retired; the Home Repo tracker is
+the source of truth. GitHub Issues is not the tracker; do not open issues there.
+If someone files one, create a `home-tasks` task and close the GitHub issue
+with a pointer to `docs/agents/issue-tracker.md`.
 
 ## Agent skills
 

@@ -1,41 +1,41 @@
-# Issue tracker: BB Tasks
+# Issue tracker: Home Repo tracker
 
-Issues for this repository live in BB Tasks under the **BUR** project. BB Tasks
-is the single source of truth for open work: status, priority, labels, comments,
-attachments and attached threads.
+Issues for this repository live in the Home Repo tracker under the **BUR**
+project. The tracker is the `home-tasks` CLI (source: `~/Work/tracker`); BB
+Tasks and the old Obsidian vault are retired.
 
-- List the board: `bb tasks list --project BUR`
-- Read a task: `bb tasks show BUR-1 --json`
+- List the board: `home-tasks list --project BUR`
+- Read a task: `home-tasks show BUR-1 --json`
 - Task keys (`BUR-1`) are permanent handles; cite them in repository documents.
 
 GitHub Issues is enabled on this repository but is **not** the tracker. Do not
-open issues there; if one arrives from outside, create a BB task and close the
-GitHub issue with a pointer to this file.
+open issues there; if one arrives from outside, create a `home-tasks` task and
+close the GitHub issue with a pointer to this file.
 
-## Removed vault tracker
+## History
 
-The Obsidian vault tracker at `~/Work/ofrades/notes/bursa/issues/` was removed
-on 2026-11-10. Its open issues were imported into BB Tasks (BUR). The markdown
-files are preserved in the notes git history. The vault's `bursa/bursa.md` is
-now only a BB Tasks pointer. Imported tasks keep a `**Legacy issue:** #N` footer
-and a `<!-- vault-issue: bursa/N -->` marker so old issue numbers stay
-resolvable.
+The Obsidian vault tracker was retired on 2026-11-10; its open issues moved to
+BB Tasks, then the tracker data was imported into the Home Repo tracker on
+2026-11-16. The markdown files remain in the notes git history.
 
 ## Commands
 
-| Operation          | Command                                                                                                                                   |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Create             | `bb tasks create --project BUR --title "..." --description-file /tmp/task.md --priority <urgent\|high\|medium\|low\|none> --label <name>` |
-| Claim              | `bb tasks update BUR-1 --status in_progress` and `bb tasks attach BUR-1`                                                                  |
-| Comment            | `bb tasks comment BUR-1 --body "..."`                                                                                                     |
-| Hand off to review | comment the handover, then `bb tasks update BUR-1 --status in_review` and `bb tasks detach BUR-1`                                         |
-| Close              | `bb tasks update BUR-1 --status done` (or `canceled`)                                                                                     |
-| Parent / subtask   | `bb tasks update BUR-2 --parent BUR-1`                                                                                                    |
-| Attach evidence    | `bb tasks attachment add BUR-1 --file <path>`                                                                                             |
+| Operation          | Command                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| List               | `home-tasks list --project BUR`                                                                                                        |
+| Show               | `home-tasks show BUR-1 --json`                                                                                                         |
+| Create             | `home-tasks create --project BUR --title "..." --description-file /tmp/task.md --priority <urgent\|high\|medium\|low\|none> --label <name>` |
+| Claim              | `home-tasks update BUR-1 --status in_progress`                                                                                         |
+| Comment            | `home-tasks comment BUR-1 --body "..."`                                                                                                |
+| Hand off to review | comment the handover, then `home-tasks update BUR-1 --status in_review`                                                                |
+| Close              | `home-tasks update BUR-1 --status done` (or `canceled`)                                                                                |
+| Parent / subtask   | `home-tasks update BUR-2 --parent BUR-1`                                                                                          |
+| Attach evidence    | `home-tasks attach BUR-1 --file <path>`                                                                                                |
+| Board              | `home-tasks board --project BUR`                                                                                                       |
 
 ## Status vocabulary
 
-| BB status     | Meaning                                              |
+| Status        | Meaning                                              |
 | ------------- | ---------------------------------------------------- |
 | `backlog`     | Accepted or untriaged; not scheduled                 |
 | `todo`        | Ready to start, by an agent or a human               |
@@ -52,14 +52,14 @@ has the full mapping.
 
 ## Conventions
 
-- **Claim before editing.** Set `in_progress`, attach the thread, and re-read the
-  task before touching a file. Work one task at a time.
+- **Claim before editing.** Set `in_progress`, then re-read the task before
+  touching a file. Work one task at a time.
 - **Keep WIP small:** at most two tasks `in_progress` and two `in_review` in the
   project.
 - **Dependencies:** list blocking task keys in a `## Dependencies` section of the
-  description (`- Depends on BUR-1`). Start only when those tasks are `done` or
-  `canceled`. Use `--parent` for a real subtask relationship.
-- **Evidence:** a repository path (`docs/…`), never a vault link.
+  description (`- Depends on BUR-1`). Start only when those tasks are `done`
+  or `canceled`. Use `--parent` for a real subtask relationship.
+- **Evidence:** a repository path (`docs/...`), never a local notes path.
 - **Handover:** a few lines plus commit hashes in a comment, then `in_review`.
   The worker does not accept its own work.
 - **Closing:** the reviewer sets `done`; `wontfix` and `archived` become
