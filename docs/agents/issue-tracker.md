@@ -14,9 +14,8 @@ close the GitHub issue with a pointer to this file.
 
 ## History
 
-The Obsidian vault tracker was retired on 2026-11-10; its open issues moved to
-BB Tasks, then the tracker data was imported into the Home Repo tracker on
-2026-11-16. The markdown files remain in the notes git history.
+The Obsidian vault tracker was retired on 2026-11-10 and BB Tasks on
+2026-11-16; the markdown files remain in the notes git history.
 
 ## Commands
 

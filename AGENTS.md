@@ -80,11 +80,11 @@ with a pointer to `docs/agents/issue-tracker.md`.
 
 ### Issue tracker
 
-Open work lives in BB Tasks under the BUR project. See
-`docs/agents/issue-tracker.md`.
+Open work lives in the Home Repo tracker under the BUR project:
+`home-tasks list --project BUR`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Triage roles are BB Tasks labels (`needs-triage`, `needs-info`,
+Triage roles are `home-tasks` labels (`needs-triage`, `needs-info`,
 `ready-for-agent`, `ready-for-human`, `wontfix`). See
 `docs/agents/triage-labels.md`.
